@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/envelope-v2.json",
+  "title": "Rigorix Audit Envelope v2",
+  "description": "DRAFT v0 — grounded in rigorix-oss engine/src/audit/domain/envelope.rs (2026-09-06). NOT yet authoritative: completion (delta map vs enterprise audit_ingestion model) is contract-sync milestone 1. Additive fields may be absent in pre-feature envelopes.",
+  "type": "object",
+  "required": [
+    "execution_id", "timestamp", "template_id", "planning_hash",
+    "total_tokens", "duration_ms", "events"
+  ],
+  "properties": {
+    "execution_id": { "type": "string", "format": "uuid", "description": "Globally unique execution identifier (UUID v4)." },
+    "timestamp": { "type": "string", "format": "date-time", "description": "Execution completion time (ISO 8601 / UTC)." },
+    "template_id": { "type": "string", "description": "Template that generated the execution plan." },
+    "planning_hash": { "type": "string", "description": "Hash of the planning prompt — replay reproducibility." },
+    "source": { "type": ["string", "null"], "description": "Source environment, e.g. rigorix_action / rigorix_cli." },
+    "repository": { "type": ["string", "null"], "description": "Repository the execution ran against, e.g. my-org/my-repo." },
+    "author": { "type": ["string", "null"], "description": "User or bot that triggered the execution." },
+    "identity": {
+      "$ref": "#/$defs/identityRef",
+      "description": "Attributed human identity (ADR-012). REDACTED summary — never the raw token."
+    },
+    "total_tokens": { "type": "integer", "minimum": 0, "description": "LLM tokens consumed (cost/ROI analytics)." },
+    "duration_ms": { "type": "integer", "minimum": 0, "description": "Wall-clock duration of the execution." },
+    "git_commit": { "type": ["string", "null"], "description": "Repo commit at execution time (provenance)." },
+    "git_branch": { "type": ["string", "null"], "description": "Repo branch at execution time (provenance)." },
+    "model_version": { "type": ["string", "null"], "description": "LLM model used for planning, e.g. claude-sonnet-4-20250514." },
+    "planning_prompt": { "type": ["string", "null"], "description": "Prompt text — opt-in, privacy-sensitive." },
+    "file_paths": { "type": "array", "items": { "type": "string" }, "description": "Files changed/created (provenance)." },
+    "events": {
+      "type": "array",
+      "description": "Ordered execution events (node events incl. sequence_rule_matched, tool_executed...).",
+      "items": { "$ref": "#/$defs/executionEventRef" }
+    },
+    "scoring_results": {
+      "type": "object",
+      "additionalProperties": { "type": "object" },
+      "description": "Scored-evaluation node results keyed by node_id."
+    },
+    "signature": { "type": ["string", "null"], "description": "HMAC signature over the envelope body — integrity verification." },
+    "evidence_degraded": { "type": "boolean", "default": false, "description": "True = produced WITHOUT HMAC (explicit unsigned marker, GAP-M-12). Distinguishes intentionally-unsigned from tampered." },
+    "approval_events": {
+      "type": "array", "items": { "$ref": "#/$defs/approvalRecordRef" },
+      "description": "Signed approval decisions in approval order (ADR-011 R3)."
+    },
+    "scope_violations": {
+      "type": "array", "items": { "$ref": "#/$defs/scopeViolationRef" },
+      "description": "Post-execution scope violations — non-blocking evidence (ADR-011 R5)."
+    },
+    "sequence_policy_findings": {
+      "type": "array", "items": { "$ref": "#/$defs/sequencePolicyFindingRef" },
+      "description": "Sequence-policy decisions recorded during the run (R6): matched rules, promoted steps, dispatch-boundary denies. Redacted summaries."
+    },
+    "decision_context": {
+      "type": ["object", "null"],
+      "description": "Reference + summary of the decision context shown to the approver (field present in OSS; shape TBD in delta map)."
+    }
+  },
+  "$defs": {
+    "identityRef": {
+      "type": "object",
+      "required": ["subject", "issuer", "source"],
+      "properties": {
+        "subject": { "type": "string", "description": "Human's unique identifier at the IdP." },
+        "issuer": { "type": "string", "description": "Who vouches for the subject." },
+        "source": { "enum": ["idp_token", "local_principal", "unverified"], "description": "How identity was established (degradation marker preserved)." },
+        "authority": { "type": ["string", "null"], "description": "Roles/authority presented (captured fact, not judgment)." },
+        "expires_at": { "type": ["string", "null"], "format": "date-time", "description": "Claim expiry; null = no expiry." }
+      }
+    },
+    "executionEventRef": {
+      "type": "object",
+      "required": ["event_type", "summary", "occurred_at", "status"],
+      "properties": {
+        "event_type": { "type": "string", "description": "Machine-readable type, e.g. task_completed, tool_executed, sequence_rule_matched." },
+        "summary": { "type": "string", "description": "Human-readable summary for audit review." },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "correlation_id": { "type": ["string", "null"], "format": "uuid", "description": "Correlation across services." },
+        "status": { "enum": ["success", "failure"], "description": "EventStatus — success or failure." },
+        "payload": { "type": ["object", "null"], "description": "Event-specific details: per-node output, tool usage, budget warnings, errors..." }
+      }
+    },
+    "approvalRecordRef": {
+      "type": "object",
+      "description": "Signed approval decision (ADR-011). Exact shape TBD in delta map (approver_id / authority / decision_context / binding evidence)."
+    },
+    "scopeViolationRef": {
+      "type": "object",
+      "description": "Non-blocking scope violation (ADR-011 R5). Shape TBD."
+    },
+    "sequencePolicyFindingRef": {
+      "type": "object",
+      "description": "Redacted sequence-policy finding (R6): rule id, decision (promote/deny), matched history. Full payloads opt-in, never leave the local store."
+    }
+  }
+}
