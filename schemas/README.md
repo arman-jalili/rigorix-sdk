@@ -1,22 +1,35 @@
-# schemas/ — Rigorix canonical contracts
+# rigorix-sdk schemas — single source of truth
 
-Single source of truth for every payload that crosses the Rigorix boundary. Both
-implementation repos (rigorix-oss, rigorix-enterprise) and every language SDK read from
-here. Drift is a CI failure.
+Contract-first schemas for Rigorix audit, identity, and policy surfaces.
+Grounded in rigorix-oss Rust types (code is truth) and reconciled with
+rigorix-enterprise consumers via contract-sync milestone 1 (delta maps).
+Contract changes are DECISIONS (see AGENTS.md + docs/strategy-freeze).
 
-## Status (2026-09-06)
+## Catalog
 
-- `envelope.json` — **draft v0** grounded in OSS `AuditEnvelope` (see delta notes); not
-  yet authoritative — completion is contract-sync milestone 1.
-- `policy.json` — pending (design in `../docs/contract-sync-2026-09-06.md`).
-- `claims.json` — pending.
-- `api/` — native `rigorix.*` method catalog: draft sketch only.
-- `fixtures/` — real conference-demo envelopes + exported bundle + claim samples (to add).
+| Schema | Status | Grounds (code is truth) | Notes |
+|---|---|---|---|
+| `envelope.json` | **v1** (2026-09-07) | rigorix-oss `engine/src/audit/domain/envelope.rs`, `identity/domain/claim.rs` | Full reconciliation vs v0 draft: EventStatus serde-exact values (Success/Failure/Skipped/Cancelled — no rename_all), `decision_context_ref` corrected (string ref, not object), all `$defs` completed. Canonicalization contract for HMAC documented in the schema description. |
+| `claims.json` | **v1** (2026-09-07) | rigorix-oss `engine/src/identity/domain/claim.rs` | IdentityClaim (full, root) + IdentityRef (redacted, `$defs`) — serde-stable, Options always serialized as null (no skips on IdentityClaim). Raw JWT claim sets are an extension slot (enterprise delta map). |
+| `policy.json` | **v1** (2026-09-07) | rigorix-oss `engine/src/sequence_policy/domain/rule.rs` + `config.rs`, `configuration/domain/config.rs` | SequenceRule/StepPredicate/ParamPredicate/HistoryPredicate/RuleAction semantics; SafetyCaps + root-config surface for cross-tool alignment. Enterprise policy-bundle exports must emit rule semantics in this shape. |
+| `api/method-catalog.md` | sketch | rigorix.* JSON-RPC catalog (strategy D-3) | Pre-ADR-008; not yet authoritative. |
 
-## Field-name truth
+## Conformance fixtures (milestone 1)
 
-Field names in these drafts are taken from OSS Rust structs (`serde` field names). If a
-draft contradicts the code, **the code is truth** — file the delta, don't "fix" the draft
-by guess. Additive fields use `skip_serializing_if`/serde-default semantics; absent =
-absent in pre-feature envelopes (that's a feature, not a bug — see
-`evidence_degraded`/GAP-M-12).
+`fixtures/` is the home for real run artifacts (signed envelopes produced by
+real engine runs with fixed keys) — produced by the rigorix-oss conformance
+session (F-20260907-01), verified against `envelope.json` and byte-exact
+HMAC-verifiable by `rigorix-verifier` from any language.
+
+## Verifier
+
+`../rust/rigorix-verifier` — protocol-only Rust crate (no rigorix-engine dep):
+HMAC-SHA256 integrity over the documented canonical form + JSON Schema
+conformance. Frozen struct copies of the envelope contract.
+
+## Validation
+
+```bash
+# schemas are valid JSON; verifier tests exercise schema + HMAC semantics
+cd rust && cargo test
+```

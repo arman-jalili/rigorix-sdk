@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/claims.json",
+  "title": "Rigorix Identity Claims v1",
+  "description": "v1 (2026-09-07) — grounded in rigorix-oss engine/src/identity/domain/claim.rs (code is truth, contract frozen: serde-stable field names, round-trip preserves every field). Root validates the FULL attributed claim (IdentityClaim) — the output of claim verification on local surfaces (run author, approval service, MCP auth, enterprise JWKS verification). $defs.identityRef is the REDACTED form carried in audit envelopes (never token_ref/auth_method/raw token). IdentitySource serializes snake_case (idp_token | local_principal | unverified) — degradation is a first-class state, never a silent fallback. All Option fields are always serialized (no skip_serializing_if on IdentityClaim): absent values are null, never omitted keys. Raw IdP/JWT claim sets are the INPUT to verification and are not schema-bound here (extension slot: enterprise delta map).",
+  "$ref": "#/$defs/identityClaim",
+  "$defs": {
+    "identityClaim": {
+      "type": "object",
+      "description": "Full attributed, time-bound claim — evidence of who was PRESENTED as authorizing, not proof of who the person is.",
+      "required": ["subject", "issuer", "authority", "source", "auth_method", "issued_at", "expires_at", "token_ref"],
+      "properties": {
+        "subject": { "type": "string", "description": "The human's unique identifier at the IdP (e.g. \"user@org\" or `sub`)." },
+        "issuer": { "type": "string", "description": "Who vouches for the subject (IdP issuer URL, or \"local\")." },
+        "authority": { "type": ["string", "null"], "description": "Roles/authority presented (captured fact, not judgment)." },
+        "source": { "enum": ["idp_token", "local_principal", "unverified"], "description": "How identity was established. Unverified = explicit degradation (IdP unreachable / no credential), never a silent fallback." },
+        "auth_method": { "type": ["string", "null"], "description": "Auth method from the token, e.g. device_code, client_credentials." },
+        "issued_at": { "type": "string", "format": "date-time", "description": "When the claim was issued." },
+        "expires_at": { "type": ["string", "null"], "format": "date-time", "description": "When the claim expires. null = no expiry." },
+        "token_ref": { "type": ["string", "null"], "description": "Reference to the raw token for off-band verification. NEVER the raw token value itself (SpanPrivacy) — a store key/id reference." }
+      },
+      "additionalProperties": false
+    },
+    "identityRef": {
+      "type": "object",
+      "description": "REDACTED claim summary (IdentityRef::from_claim) — deliberately copies only summary fields; token_ref, auth_method and the raw token are never carried. This is the shape inside the audit envelope identity block (see envelope.json $defs.identityRef).",
+      "required": ["subject", "issuer", "source"],
+      "properties": {
+        "subject": { "type": "string" },
+        "issuer": { "type": "string" },
+        "source": { "enum": ["idp_token", "local_principal", "unverified"] },
+        "authority": { "type": ["string", "null"], "description": "Always present when serialized by the engine (no serde skip); null when absent." },
+        "expires_at": { "type": ["string", "null"], "format": "date-time" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

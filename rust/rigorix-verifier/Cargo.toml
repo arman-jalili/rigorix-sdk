@@ -1,0 +1,20 @@
+[package]
+name = "rigorix-verifier"
+description = "Protocol-only envelope verifier for Rigorix audit envelopes — HMAC integrity + JSON Schema conformance. No rigorix-engine dependency (frozen struct copies per the SDK contract-freeze)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+uuid = { version = "1", features = ["serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+jsonschema = "0.26"
+thiserror = "2"
+
+[dev-dependencies]

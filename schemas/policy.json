@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/policy.json",
+  "title": "Rigorix Policy & Configuration Model v1",
+  "description": "v1 (2026-09-07) — grounded in rigorix-oss engine code (code is truth): sequence-policy rules from engine/src/sequence_policy/domain/rule.rs + config.rs (SequenceRule, StepPredicate, ParamPredicate, HistoryPredicate, RuleAction, SequencePolicyConfig, SafetyCaps) and the root rigorix.toml surface from engine/src/configuration/domain/config.rs (permission_mode, audit HMAC knobs). Root validates the OPERATOR-authored sequence-policy file (`[sequence_policy]` with `[[rules]]`, as consumed from .rigorix/sequence-policy.toml). The root config surface (rigorix.toml) is represented at $defs.rootConfigSurface for cross-tool alignment — permission_mode is a runtime-validated string (engine: Option<String>); known values documented. Enterprise policy_engine bundles must emit rule semantics in this shape (id/action/window/history/step predicates) — extension slots (approval policy, scope roles) are enterprise-only and land in the delta map.",
+  "type": "object",
+  "required": ["fail_closed", "rules"],
+  "properties": {
+    "fail_closed": {
+      "type": "boolean",
+      "description": "Fail closed on config errors at plan time. Default true — a corrupt rule file must refuse the plan, never silently degrade."
+    },
+    "rules": {
+      "type": "array",
+      "description": "Ordered rule set (empty → no sequence gating).",
+      "items": { "$ref": "#/$defs/sequenceRule" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sequenceRule": {
+      "type": "object",
+      "required": ["id", "name", "description", "steps"],
+      "description": "One operator-authored sequence rule. Match requires steps[i] to appear before steps[i+1] in the evaluated ordered step list.",
+      "properties": {
+        "id": { "type": "string", "description": "Stable identifier, e.g. \"registration-remove-then-reassign\"." },
+        "name": { "type": "string", "description": "Human-readable rule name." },
+        "description": { "type": "string", "description": "Why the rule exists (surfaced to approvers / audit summaries)." },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/stepPredicate" },
+          "description": "Ordered step predicates."
+        },
+        "window": { "type": ["integer", "null"], "minimum": 1, "description": "Max index gap between first and last matched step. Absent = adjacent pair (gap 1)." },
+        "action": { "enum": ["promote", "deny"], "description": "Action on match (serde lowercase). Default promote." },
+        "history": { "$ref": "#/$defs/historyPredicate", "description": "R7: optional cross-run predicate — fires only when the within-run steps match AND the signed execution history shows a prior action by the same principal within the window. Absent = pre-R7 within-run behavior." }
+      },
+      "additionalProperties": false
+    },
+    "stepPredicate": {
+      "type": "object",
+      "required": ["tool"],
+      "description": "Matches a tool name (exact or glob) plus optional parameter predicates.",
+      "properties": {
+        "tool": { "type": "string", "description": "Tool name — exact or glob, e.g. \"registration_remove\", \"registration_*\"." },
+        "params": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/paramPredicate" },
+          "description": "Optional parameter predicates; empty means any parameters. Default empty."
+        }
+      },
+      "additionalProperties": false
+    },
+    "paramPredicate": {
+      "type": "object",
+      "required": ["pointer", "kind", "value"],
+      "description": "JSON pointer into the step's parameter object plus a value predicate.",
+      "properties": {
+        "pointer": { "type": "string", "description": "JSON pointer into step parameters, e.g. \"/event_id\"." },
+        "kind": { "enum": ["exact", "glob", "regex"], "description": "How value is compared (serde lowercase)." },
+        "value": { "type": "string", "description": "Expected value string." }
+      },
+      "additionalProperties": false
+    },
+    "historyPredicate": {
+      "type": "object",
+      "required": ["prior_node", "same_principal", "window_secs"],
+      "description": "R7 cross-run predicate: a prior, already-completed run in the signed audit trail contained a conflicting action by the same principal, minutes apart.",
+      "properties": {
+        "prior_node": { "type": "string", "description": "Glob over prior executed node names, e.g. \"remove_attendance\" or \"remove_*\"." },
+        "same_principal": { "type": "boolean", "description": "true → only history actions whose principal equals the current run's principal satisfy the predicate. Current run with no principal → predicate cannot match (never a false denial)." },
+        "window_secs": { "type": "integer", "minimum": 1, "description": "Look-back window (seconds) over the signed history." }
+      },
+      "additionalProperties": false
+    },
+    "safetyCaps": {
+      "type": "object",
+      "description": "Engine safety caps bounding the rule engine (SequencePolicyConfig validation). Defaults: 100 rules / 8 step predicates / window 5 / 8 regex predicates / 604800s history look-back.",
+      "properties": {
+        "max_rules_per_file": { "type": "integer", "minimum": 1 },
+        "max_steps_per_rule": { "type": "integer", "minimum": 1 },
+        "max_window": { "type": "integer", "minimum": 1 },
+        "max_regex_predicates_per_file": { "type": "integer", "minimum": 1 },
+        "max_history_window_secs": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "rootConfigSurface": {
+      "type": "object",
+      "description": "rigorix.toml knobs that affect policy/enforcement/audit (engine/src/configuration/domain/config.rs). NOT exhaustive — additive-extensible; unknown keys ignored. Enterprise policy_engine alignment uses this surface for cross-tool identity (permission_mode semantics live in each runtime's enforcement layer).",
+      "properties": {
+        "permission_mode": { "type": ["string", "null"], "description": "Runtime-validated string; documented value: \"workspace_write\". Enforcement-layer interpretation differs OSS vs enterprise (delta map)." },
+        "enforcement": { "type": ["string", "null"], "description": "Enforcement preset name (EnforcementPreset)." },
+        "audit_hmac_key": { "type": ["string", "null"], "description": "HMAC key signing each local envelope. Never commit live values." },
+        "audit_backend_url": { "type": ["string", "null"] },
+        "audit_backend_key": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    }
+  }
+}

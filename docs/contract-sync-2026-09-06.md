@@ -82,3 +82,28 @@ expiry; JWKS) and scope them to teams/roles.
 - [ ] `log.md` reconciled (05/06/07 closed; 01–04 tracked in this milestone)
 
 Then: catalog design → servers → SDKs.
+
+## Progress log
+
+- **2026-09-07 (commit `d7f4e3e`)** — milestone-1 sync-by-doing round 2:
+  - `schemas/envelope.json` **v0 → v1** full reconciliation vs
+    `engine/src/audit/domain/envelope.rs` + `identity/domain/claim.rs`.
+    Drift fixed: EventStatus serde values (v0 wrongly said lowercase
+    success/failure; code emits `Success|Failure|Skipped|Cancelled` — no
+    rename_all), `decision_context` field renamed to `decision_context_ref`
+    (`Option<String>`, was object), placeholder `$defs`
+    (approvalRecordRef/scopeViolationRef/sequencePolicyFindingRef) and vague
+    `scoring_results` completed from their structs. HMAC canonicalization
+    contract documented (engine `compute_signature`: SHA-256-HMAC over
+    `to_string(envelope with signature=None)`).
+  - `schemas/claims.json` **v1** — IdentityClaim (root) + IdentityRef
+    ($defs) grounded in `identity/domain/claim.rs`; all Option fields
+    required-but-nullable (engine has no skips on IdentityClaim).
+  - `schemas/policy.json` **v1** — sequence-policy rule model (SequenceRule,
+    StepPredicate, ParamPredicate, HistoryPredicate incl. R7, RuleAction,
+    SafetyCaps) + root-config surface.
+  - `rust/rigorix-verifier` — protocol-only verifier crate (8 tests: sign/
+    verify roundtrip, tamper, GAP-M-12 unsigned policy, wrong key, canonical
+    stability, schema conformance, casing rejection). No rigorix-engine dep.
+  - Next: real-engine signed fixtures (F-20260907-01, rigorix-oss); delta map
+    + additive storage (F-20260907-03, rigorix-enterprise).
