@@ -1,0 +1,32 @@
+{
+  "execution_id": "8c1d5eac-8935-4960-82cf-199df61d2539",
+  "timestamp": "2026-09-08T10:53:34.275052607Z",
+  "template_id": "conference-registration",
+  "planning_hash": "274f5bcc379aac58d1396434ab45ae48941977de9601ec608d84a1ebe47c88b1",
+  "source": "rigorix_action",
+  "repository": "arman-jalili/conference-demo",
+  "author": "user@org",
+  "total_tokens": 3200,
+  "duration_ms": 48200,
+  "git_commit": "1f6a4c9e2b8d4f0a3c5e7b9d1a2c4e6f8a0b2d4c6",
+  "git_branch": "main",
+  "model_version": "claude-sonnet-4-20250514",
+  "planning_prompt": null,
+  "file_paths": [
+    "data/registrations.json"
+  ],
+  "events": [
+    {
+      "event_type": "tool_executed",
+      "summary": "add jeff to conf-2026",
+      "occurred_at": "2026-09-08T10:53:34.274838765Z",
+      "correlation_id": "68b4e035-50ec-449b-a81e-ef3ef312ab24",
+      "status": "Success",
+      "payload": {
+        "tool": "add_attendance"
+      }
+    }
+  ],
+  "signature": "8862dd8b9b59470d4bbb1dddb59c586907ad0532fd8f54838dca9130171a3c8b",
+  "evidence_degraded": false
+}
