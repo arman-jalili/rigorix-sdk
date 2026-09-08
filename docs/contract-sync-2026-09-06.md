@@ -107,3 +107,18 @@ Then: catalog design → servers → SDKs.
     stability, schema conformance, casing rejection). No rigorix-engine dep.
   - Next: real-engine signed fixtures (F-20260907-01, rigorix-oss); delta map
     + additive storage (F-20260907-03, rigorix-enterprise).
+
+- **2026-09-08 (this PR)** — F-20260907-01 rigorix-oss conformance round:
+  - `schemas/fixtures/envelope/*.json` — 5 REAL engine-signed envelopes from
+    actual rigorix-oss runs (fixed test-only key `fixture-hmac-key-2026`) +
+    README documenting the key. Regeneration path documented.
+  - **Canonicalization drift found + fixed (both repos):** serde emits
+    `HashMap` keys in per-process hash-random iteration order, so
+    `canonical_bytes()` was unstable and `verify_signature` failed even
+    in-crate once a map-typed field (`scoring_results` / `dimensions`) had >1
+    entry. Map-typed envelope fields now serialize with sorted keys
+    (identical `serialize_with` helper in rigorix-oss envelope.rs and this
+    verifier's frozen copies) — JSON shape unchanged, canonical bytes
+    reproducible anywhere. `schemas/envelope.json` description updated.
+  - rigorix-verifier fixture test: all committed engine fixtures verify
+    byte-exact + validate vs envelope.json v1 (9 tests green).
