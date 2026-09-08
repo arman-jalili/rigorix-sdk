@@ -22,6 +22,30 @@ use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
+/// Deterministic map serialization (mirrors rigorix-oss envelope.rs).
+///
+/// Envelope maps MUST serialize byte-identically on every process for the
+/// HMAC canonical form to be reproducible. `std::collections::HashMap`
+/// iteration order is hash-randomized per process, so maps are emitted with
+/// sorted keys (JSON object key order is not semantic — shape unchanged).
+mod sorted_map {
+    use serde::Serialize;
+    use std::collections::BTreeMap;
+
+    pub fn serialize<S, K, V>(
+        value: &std::collections::HashMap<K, V>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+        K: Ord + serde::Serialize,
+        V: serde::Serialize,
+    {
+        let ordered: BTreeMap<&K, &V> = value.iter().collect();
+        ordered.serialize(serializer)
+    }
+}
+
 /// JSON Schema conformance failure.
 #[derive(Debug, thiserror::Error)]
 pub enum VerifyError {
@@ -67,7 +91,11 @@ pub struct AuditEnvelope {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub file_paths: Vec<String>,
     pub events: Vec<ExecutionEventRef>,
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        serialize_with = "sorted_map::serialize"
+    )]
     pub scoring_results: HashMap<String, ScoringResultRef>,
     pub signature: Option<String>,
     #[serde(default)]
@@ -152,6 +180,7 @@ pub struct SequencePolicyFindingRef {
 pub struct ScoringResultRef {
     pub passed: bool,
     pub backend: String,
+    #[serde(serialize_with = "sorted_map::serialize")]
     pub dimensions: HashMap<String, ScoreDimensionRef>,
     pub duration_ms: u64,
 }
@@ -355,5 +384,42 @@ mod tests {
         v["events"][0]["status"] = serde_json::json!("success");
         let err = validate_schema(&v.to_string()).unwrap_err();
         assert!(matches!(err, VerifyError::Schema(_)));
+    }
+
+    // ─── Real engine fixture corpus (F-20260907-01) ────────────────────────
+    //
+    // Envelopes in schemas/fixtures/envelope/*.json are produced by REAL
+    // rigorix-oss engine runs (fixed test key fixture-hmac-key-2026, see the
+    // README there). Verifying them byte-exact proves canonicalization parity
+    // between the engine and this independent verifier — the Strategy A
+    // claim that the HMAC trail is checkable anywhere.
+    #[test]
+    fn engine_signed_fixtures_verify_byte_exact() {
+        let key = "fixture-hmac-key-2026";
+        let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../schemas/fixtures/envelope");
+        let mut found = 0;
+        let entries = std::fs::read_dir(&fixtures_dir)
+            .unwrap_or_else(|e| panic!("read {}: {e}", fixtures_dir.display()));
+        for entry in entries {
+            let path = entry.expect("dir entry").path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let json = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+            // Independent verifier accepts the engine's signature byte-exact.
+            verify_signature(&json, key)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            // And the envelope conforms to the SDK schema.
+            validate_schema(&json)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            found += 1;
+        }
+        assert!(
+            found >= 3,
+            "expected ≥3 committed engine fixtures, found {found} in {}",
+            fixtures_dir.display()
+        );
     }
 }

@@ -1,0 +1,78 @@
+{
+  "execution_id": "db8a0f55-e865-487d-b94d-4a2da911af50",
+  "timestamp": "2026-09-08T10:53:34.276134129Z",
+  "template_id": "conference-registration",
+  "planning_hash": "274f5bcc379aac58d1396434ab45ae48941977de9601ec608d84a1ebe47c88b1",
+  "source": "rigorix_action",
+  "repository": "arman-jalili/conference-demo",
+  "author": "user@org",
+  "total_tokens": 3200,
+  "duration_ms": 48200,
+  "git_commit": "1f6a4c9e2b8d4f0a3c5e7b9d1a2c4e6f8a0b2d4c6",
+  "git_branch": "main",
+  "model_version": "claude-sonnet-4-20250514",
+  "planning_prompt": null,
+  "file_paths": [
+    "data/registrations.json"
+  ],
+  "events": [
+    {
+      "event_type": "sequence_rule_matched",
+      "summary": "remove-then-reassign matched",
+      "occurred_at": "2026-09-08T10:53:34.276111527Z",
+      "correlation_id": null,
+      "status": "Skipped",
+      "payload": {
+        "action": "promote",
+        "later_step": "registration_add",
+        "matched_indices": [
+          0,
+          3
+        ],
+        "rule_id": "no-remove-then-reassign",
+        "summary": "step 3 promoted for human approval"
+      }
+    },
+    {
+      "event_type": "sequence_policy_denied",
+      "summary": "dispatch denied by rule",
+      "occurred_at": "2026-09-08T10:53:34.276115965Z",
+      "correlation_id": null,
+      "status": "Failure",
+      "payload": {
+        "action": "deny",
+        "later_step": "run_command",
+        "matched_indices": [
+          0,
+          2
+        ],
+        "rule_id": "no-remove-then-reassign",
+        "summary": "composed remove→add denied before dispatch"
+      }
+    }
+  ],
+  "signature": "20a504dfef48eb7821b8b87c36aec639732488ef58b050e68c086dafaf0f36f4",
+  "evidence_degraded": false,
+  "sequence_policy_findings": [
+    {
+      "rule_id": "no-remove-then-reassign",
+      "action": "promote",
+      "later_step": "registration_add",
+      "matched_indices": [
+        0,
+        3
+      ],
+      "summary": "step 3 promoted for human approval"
+    },
+    {
+      "rule_id": "no-remove-then-reassign",
+      "action": "deny",
+      "later_step": "run_command",
+      "matched_indices": [
+        0,
+        2
+      ],
+      "summary": "composed remove→add denied before dispatch"
+    }
+  ]
+}
