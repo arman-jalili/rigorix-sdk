@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/api/errors-v1.json",
+  "title": "Rigorix Native API — error model v1",
+  "description": "JSON-RPC 2.0 error objects for the native rigorix.* API (ADR-0001 D6). `data.type` is the stable machine identifier; `message` is human text and may change. `denied_by_sequence` MUST carry data.rule_id and data.step when known.",
+  "type": "object",
+  "required": ["code", "message"],
+  "properties": {
+    "code": { "type": "integer" },
+    "message": { "type": "string" },
+    "data": {
+      "type": "object",
+      "properties": {
+        "type": { "$ref": "#/$defs/errorType" },
+        "rule_id": { "type": "string", "description": "Sequence rule id for denied_by_sequence (R2/R7…)." },
+        "step": { "type": "string", "description": "Step refused by policy, when known." },
+        "details": {},
+        "retryable": { "type": "boolean" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "errorType": {
+      "enum": [
+        "parse_error",
+        "invalid_request",
+        "method_not_found",
+        "invalid_params",
+        "internal_error",
+        "not_authenticated",
+        "insufficient_scope",
+        "denied_by_sequence",
+        "policy_violation",
+        "approval_required",
+        "identity_required",
+        "budget_exhausted",
+        "timeout",
+        "api_error",
+        "not_enabled"
+      ]
+    },
+    "errorCode": {
+      "type": "object",
+      "required": ["type", "code"],
+      "properties": {
+        "type": { "$ref": "#/$defs/errorType" },
+        "code": { "type": "integer" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "x-error-codes": {
+    "parse_error": -32700,
+    "invalid_request": -32600,
+    "method_not_found": -32601,
+    "invalid_params": -32602,
+    "internal_error": -32603,
+    "not_authenticated": -32001,
+    "insufficient_scope": -32002,
+    "denied_by_sequence": -32010,
+    "policy_violation": -32010,
+    "approval_required": -32011,
+    "identity_required": -32012,
+    "budget_exhausted": -32020,
+    "timeout": -32021,
+    "api_error": -32030,
+    "not_enabled": -32031
+  }
+}

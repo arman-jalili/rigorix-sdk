@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/api/catalog.schema.json",
+  "title": "Rigorix Native API — catalog document schema",
+  "description": "Shape of catalog.json (the frozen rigorix.* method catalog, ADR-0001). catalog.json is DATA; this document describes it. params/result schemas live in catalog.json $defs.",
+  "type": "object",
+  "required": ["apiVersion", "jsonrpc", "transport", "authLevels", "methods", "$defs"],
+  "properties": {
+    "apiVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "jsonrpc": { "const": "2.0" },
+    "transport": {
+      "type": "object",
+      "required": ["kind", "endpoint", "contentType"],
+      "properties": {
+        "kind": { "const": "http-jsonrpc-2.0" },
+        "endpoint": { "const": "/rpc" },
+        "contentType": { "const": "application/json" },
+        "batch": { "type": "boolean" },
+        "push": {
+          "type": "object",
+          "required": ["kind", "endpoint", "events"],
+          "properties": {
+            "kind": { "const": "sse" },
+            "endpoint": { "const": "/events" },
+            "events": {
+              "type": "array",
+              "items": { "enum": ["approval_required", "run_progress", "policy_changed"] }
+            }
+          },
+          "additionalProperties": false
+        },
+        "errorModel": { "const": "errors.json" }
+      },
+      "additionalProperties": false
+    },
+    "authLevels": {
+      "type": "object",
+      "required": ["public", "session", "admin"],
+      "properties": {
+        "public": { "type": "string" },
+        "session": { "type": "string" },
+        "admin": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "methods": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "kind", "since", "stability", "auth", "params", "result"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^rigorix\\.[a-zA-Z.]+$" },
+          "kind": { "enum": ["query", "command"] },
+          "since": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+          "stability": { "enum": ["frozen", "draft", "deprecated"] },
+          "auth": { "enum": ["public", "session", "admin"] },
+          "mcpTool": { "type": ["string", "null"] },
+          "description": { "type": "string" },
+          "params": { "$ref": "#/$defs/schemaRef" },
+          "result": { "$ref": "#/$defs/schemaRef" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "$defs": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "object" }
+    }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "schemaRef": {
+      "type": "object",
+      "required": ["$ref"],
+      "properties": { "$ref": { "type": "string", "pattern": "^#/\\$defs/.+" } },
+      "additionalProperties": false
+    }
+  }
+}

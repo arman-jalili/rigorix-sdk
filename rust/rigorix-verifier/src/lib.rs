@@ -432,7 +432,13 @@ mod tests {
     #[test]
     fn all_schemas_compile() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas");
-        for name in ["envelope.json", "claims.json", "policy.json"] {
+        for name in [
+            "envelope.json",
+            "claims.json",
+            "policy.json",
+            "api/catalog.schema.json",
+            "api/errors.json",
+        ] {
             let path = dir.join(name);
             let text = std::fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
@@ -441,5 +447,114 @@ mod tests {
             jsonschema::validator_for(&schema)
                 .unwrap_or_else(|e| panic!("{}: not a valid schema: {e}", path.display()));
         }
+    }
+
+    // ─── Native API catalog integrity (ADR-0001) ──────────────────────────
+    //
+    // The frozen catalog is a contract consumers build against. Guard its
+    // internal consistency: unique method names, known auth/kind/stability,
+    // semver `since`, and every params/result `$ref` resolving into `$defs`.
+    #[test]
+    fn catalog_integrity() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/catalog.json");
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let catalog: serde_json::Value = serde_json::from_str(&text).expect("catalog parses");
+
+        // The catalog is DATA — validate it against its own schema document.
+        let schema_path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/catalog.schema.json");
+        let schema_text = std::fs::read_to_string(&schema_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", schema_path.display()));
+        let schema: serde_json::Value = serde_json::from_str(&schema_text).expect("schema parses");
+        let compiled = jsonschema::validator_for(&schema).expect("catalog schema compiles");
+        let errors: Vec<String> = compiled
+            .iter_errors(&catalog)
+            .map(|e| e.to_string())
+            .collect();
+        assert!(errors.is_empty(), "catalog violates its schema: {errors:?}");
+
+        let api_version = catalog["apiVersion"].as_str().expect("apiVersion");
+        assert!(
+            semver_ok(api_version),
+            "apiVersion must be semver, got {api_version}"
+        );
+        assert_eq!(catalog["jsonrpc"], "2.0");
+
+        let defs = catalog["$defs"].as_object().expect("$defs object");
+        let methods = catalog["methods"].as_array().expect("methods array");
+        assert!(
+            methods.len() >= 19,
+            "catalog should list the frozen surface"
+        );
+
+        let mut seen = std::collections::HashSet::new();
+        for m in methods {
+            let name = m["name"].as_str().expect("method name");
+            assert!(name.starts_with("rigorix."), "bad namespace: {name}");
+            assert!(seen.insert(name.to_string()), "duplicate method: {name}");
+
+            assert!(
+                matches!(m["kind"].as_str(), Some("query" | "command")),
+                "{name}: bad kind"
+            );
+            assert!(
+                matches!(m["auth"].as_str(), Some("public" | "session" | "admin")),
+                "{name}: bad auth level"
+            );
+            assert!(
+                matches!(
+                    m["stability"].as_str(),
+                    Some("frozen" | "draft" | "deprecated")
+                ),
+                "{name}: bad stability"
+            );
+            let since = m["since"].as_str().expect("since");
+            assert!(semver_ok(since), "{name}: since not semver: {since}");
+
+            for slot in ["params", "result"] {
+                let reference = m[slot]["$ref"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{name}: missing {slot}.$ref"));
+                let key = reference.rsplit('/').next().unwrap_or_default();
+                assert!(
+                    defs.contains_key(key),
+                    "{name}: {slot} $ref '{reference}' does not resolve in $defs"
+                );
+            }
+        }
+    }
+
+    // The error taxonomy and its code mapping must stay in sync: every
+    // `data.type` has a code and vice versa (ADR-0001 D6).
+    #[test]
+    fn error_taxonomy_codes_consistent() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/errors.json");
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let errors: serde_json::Value = serde_json::from_str(&text).expect("errors parses");
+
+        let types: Vec<&str> = errors["$defs"]["errorType"]["enum"]
+            .as_array()
+            .expect("errorType enum")
+            .iter()
+            .map(|v| v.as_str().expect("string"))
+            .collect();
+        let codes = errors["x-error-codes"].as_object().expect("x-error-codes");
+
+        for t in &types {
+            assert!(codes.contains_key(*t), "error type '{t}' has no code");
+        }
+        for key in codes.keys() {
+            assert!(
+                types.contains(&key.as_str()),
+                "code mapping '{key}' is not a declared error type"
+            );
+        }
+    }
+
+    fn semver_ok(s: &str) -> bool {
+        let parts: Vec<&str> = s.split('.').collect();
+        parts.len() == 3 && parts.iter().all(|p| p.parse::<u64>().is_ok())
     }
 }

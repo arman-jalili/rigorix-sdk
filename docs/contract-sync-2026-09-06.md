@@ -122,3 +122,26 @@ Then: catalog design → servers → SDKs.
     reproducible anywhere. `schemas/envelope.json` description updated.
   - rigorix-verifier fixture test: all committed engine fixtures verify
     byte-exact + validate vs envelope.json v1 (9 tests green).
+
+- **2026-09-19 — catalog freeze (ADR-0001, PR `feat/catalog-freeze`):**
+  Contract-sync milestone 1 opened the gate for catalog design. The
+  `schemas/api/method-catalog.md` sketch is now realized and **frozen**:
+  - `docs/adr/ADR-0001-native-api-catalog.md` — the decisions: JSON-RPC 2.0
+    over `POST /rpc`, dot-separated lowerCamelCase `rigorix.*` names, additive-
+    only versioning, three auth levels, the **identity invariant** (caller-
+    supplied identity is display-only — authorization is the attested session),
+    the error taxonomy, the SSE push channel, and the MCP adapter table.
+  - `schemas/api/catalog.json` — the catalog **data**: 19 methods, each with
+    kind/auth/since/stability + params/result `$ref`s into its `$defs`,
+    grounded in rigorix-oss MCP tool descriptors + `*/application/dto`.
+  - `schemas/api/catalog.schema.json` — JSON Schema for the catalog document.
+  - `schemas/api/errors.json` — the JSON-RPC error model (`data.type` stable;
+    `denied_by_sequence` carries `rule_id` + `step`).
+  - `schemas/README.md` — resolved the envelope revision ambiguity: the schema
+    is **envelope format v2** (`$id` `envelope-v2.json`); "v1" in the prose was
+    the schema-document revision. Consumers key on `$id`.
+  - `rigorix-verifier`: `catalog_integrity` (schema-conformance + unique names +
+    resolvable refs) and `error_taxonomy_codes_consistent` — 12 tests green;
+    SDK CI added (fmt · clippy · test).
+  - **Next:** `rigorix-server` (OSS reference host) + enterprise execution API
+    build against this surface; SDK clients are thin typed clients + verifier.

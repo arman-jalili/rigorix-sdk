@@ -41,7 +41,9 @@ jobs:
       - name: Test (verifier + fixtures + schema lint)
         # Covers: HMAC sign/verify roundtrip, tamper detection, unsigned-must-
         # be-degraded, wrong-key failure, canonical stability, envelope schema
-        # conformance, and the committed REAL engine fixtures verified
-        # byte-exact (schemas/fixtures/envelope/*.json) plus `all_schemas_compile`
-        # (envelope/claims/policy are valid draft 2020-12 schemas).
+        # conformance, the committed REAL engine fixtures verified byte-exact
+        # (schemas/fixtures/envelope/*.json), `all_schemas_compile` (envelope/
+        # claims/policy/catalog.schema/errors are valid draft 2020-12 schemas),
+        # the native-API `catalog_integrity` check and `error_taxonomy_codes_
+        # consistent` (ADR-0001).
         run: cargo test --workspace
