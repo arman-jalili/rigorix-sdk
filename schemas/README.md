@@ -9,10 +9,13 @@ Contract changes are DECISIONS (see AGENTS.md + docs/strategy-freeze).
 
 | Schema | Status | Grounds (code is truth) | Notes |
 |---|---|---|---|
-| `envelope.json` | **v1** (2026-09-07) | rigorix-oss `engine/src/audit/domain/envelope.rs`, `identity/domain/claim.rs` | Full reconciliation vs v0 draft: EventStatus serde-exact values (Success/Failure/Skipped/Cancelled — no rename_all), `decision_context_ref` corrected (string ref, not object), all `$defs` completed. Canonicalization contract for HMAC documented in the schema description. |
+| `envelope.json` | **format v2 / schema rev 1** (2026-09-07, freeze 2026-09-19) | rigorix-oss `engine/src/audit/domain/envelope.rs`, `identity/domain/claim.rs` | Envelope **format v2** (`$id` `envelope-v2.json`) — carries the additive approval/identity/sequence-policy blocks. Full reconciliation vs v0 draft: EventStatus serde-exact values (Success/Failure/Skipped/Cancelled — no rename_all), `decision_context_ref` corrected (string ref, not object), all `$defs` completed. Canonicalization contract for HMAC documented in the schema description. Consumers key on `$id`. |
 | `claims.json` | **v1** (2026-09-07) | rigorix-oss `engine/src/identity/domain/claim.rs` | IdentityClaim (full, root) + IdentityRef (redacted, `$defs`) — serde-stable, Options always serialized as null (no skips on IdentityClaim). Raw JWT claim sets are an extension slot (enterprise delta map). |
 | `policy.json` | **v1** (2026-09-07) | rigorix-oss `engine/src/sequence_policy/domain/rule.rs` + `config.rs`, `configuration/domain/config.rs` | SequenceRule/StepPredicate/ParamPredicate/HistoryPredicate/RuleAction semantics; SafetyCaps + root-config surface for cross-tool alignment. Enterprise policy-bundle exports must emit rule semantics in this shape. |
-| `api/method-catalog.md` | sketch | rigorix.* JSON-RPC catalog (strategy D-3) | Pre-ADR-008; not yet authoritative. |
+| `api/catalog.json` | **v1** (2026-09-19, FROZEN) | rigorix-sdk `docs/adr/ADR-0001-native-api-catalog.md`; rigorix-oss MCP tool descriptors + `*/application/dto` | Frozen `rigorix.*` JSON-RPC catalog: 19 methods (name/kind/auth/params+result refs, MCP adapter mapping). Additive-only within `apiVersion` major. |
+| `api/catalog.schema.json` | **v1** (2026-09-19, FROZEN) | ADR-0001 | JSON Schema describing the `catalog.json` data document. |
+| `api/errors.json` | **v1** (2026-09-19, FROZEN) | ADR-0001 D6; rigorix-oss `EngineFacadeError`/`ProxyError` categories | JSON-RPC error model. Stable machine id in `data.type`; `denied_by_sequence` carries `rule_id` + `step`. |
+| `api/method-catalog.md` | sketch (2026-09-06, historical) | — | Pre-freeze sketch. **Superseded by `api/catalog.json` + ADR-0001**; kept as history. |
 
 ## Conformance fixtures (milestone 1)
 
