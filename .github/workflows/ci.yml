@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verifier:
+    name: 🔐 rigorix-verifier (fmt · clippy · test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # The Rust workspace lives under rust/ (schemas/ is language-neutral,
+    # consumed by engine conformance in rigorix-oss and by the SDK clients).
+    defaults:
+      run:
+        working-directory: rust
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Lint (clippy, warnings denied)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test (verifier + fixtures + schema lint)
+        # Covers: HMAC sign/verify roundtrip, tamper detection, unsigned-must-
+        # be-degraded, wrong-key failure, canonical stability, envelope schema
+        # conformance, and the committed REAL engine fixtures verified
+        # byte-exact (schemas/fixtures/envelope/*.json) plus `all_schemas_compile`
+        # (envelope/claims/policy are valid draft 2020-12 schemas).
+        run: cargo test --workspace

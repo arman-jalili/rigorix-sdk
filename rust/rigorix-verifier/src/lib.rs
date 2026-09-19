@@ -245,8 +245,8 @@ pub fn validate_schema(json: &str) -> VerifyResult<()> {
         .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", schema_path.display())))?;
     let schema = serde_json::from_str(&schema_text)?;
     let instance: serde_json::Value = serde_json::from_str(json)?;
-    let compiled = jsonschema::validator_for(&schema)
-        .map_err(|e| VerifyError::Schema(e.to_string()))?;
+    let compiled =
+        jsonschema::validator_for(&schema).map_err(|e| VerifyError::Schema(e.to_string()))?;
     let errors: Vec<String> = compiled
         .iter_errors(&instance)
         .map(|e| e.to_string())
@@ -268,12 +268,15 @@ fn schema_path(file: &str) -> VerifyResult<std::path::PathBuf> {
             p.display()
         )));
     }
-    let p = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas").join(file);
+    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../schemas")
+        .join(file);
     if p.exists() {
         Ok(p)
     } else {
         Err(VerifyError::SchemaRead(format!(
-            "schema not found at {} — set RIGORIX_SDK_SCHEMAS", p.display()
+            "schema not found at {} — set RIGORIX_SDK_SCHEMAS",
+            p.display()
         )))
     }
 }
@@ -283,7 +286,10 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.bytes()
+        .zip(b.bytes())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
 }
 
 #[cfg(test)]
@@ -330,8 +336,7 @@ mod tests {
 
     #[test]
     fn tampering_detected() {
-        let mut v: serde_json::Value =
-            serde_json::from_str(&signed_envelope()).unwrap();
+        let mut v: serde_json::Value = serde_json::from_str(&signed_envelope()).unwrap();
         v["total_tokens"] = serde_json::json!(9999); // tamper
         let err = verify_signature(&v.to_string(), KEY).unwrap_err();
         assert!(matches!(err, VerifyError::SignatureMismatch { .. }));
@@ -346,8 +351,7 @@ mod tests {
 
     #[test]
     fn unsigned_marked_degraded_is_ok() {
-        let mut v: serde_json::Value =
-            serde_json::from_str(&minimal_envelope()).unwrap();
+        let mut v: serde_json::Value = serde_json::from_str(&minimal_envelope()).unwrap();
         v["evidence_degraded"] = serde_json::json!(true);
         assert!(verify_signature(&v.to_string(), KEY).is_ok());
     }
@@ -379,8 +383,7 @@ mod tests {
     fn schema_rejects_wrong_status_case() {
         // v1 schema requires serde-exact capitalized EventStatus; lowercase
         // `success` must fail schema validation.
-        let mut v: serde_json::Value =
-            serde_json::from_str(&minimal_envelope()).unwrap();
+        let mut v: serde_json::Value = serde_json::from_str(&minimal_envelope()).unwrap();
         v["events"][0]["status"] = serde_json::json!("success");
         let err = validate_schema(&v.to_string()).unwrap_err();
         assert!(matches!(err, VerifyError::Schema(_)));
@@ -396,8 +399,8 @@ mod tests {
     #[test]
     fn engine_signed_fixtures_verify_byte_exact() {
         let key = "fixture-hmac-key-2026";
-        let fixtures_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../schemas/fixtures/envelope");
+        let fixtures_dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/fixtures/envelope");
         let mut found = 0;
         let entries = std::fs::read_dir(&fixtures_dir)
             .unwrap_or_else(|e| panic!("read {}: {e}", fixtures_dir.display()));
@@ -409,11 +412,9 @@ mod tests {
             let json = std::fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
             // Independent verifier accepts the engine's signature byte-exact.
-            verify_signature(&json, key)
-                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            verify_signature(&json, key).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             // And the envelope conforms to the SDK schema.
-            validate_schema(&json)
-                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            validate_schema(&json).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
             found += 1;
         }
         assert!(
@@ -421,5 +422,24 @@ mod tests {
             "expected ≥3 committed engine fixtures, found {found} in {}",
             fixtures_dir.display()
         );
+    }
+
+    // ─── Schema lint (SDK contract surface) ───────────────────────────────
+    //
+    // Every top-level contract schema must be a well-formed JSON Schema
+    // (draft 2020-12) that compiles cleanly. This is the SDK's own guard that
+    // the published contract surface never ships a broken schema.
+    #[test]
+    fn all_schemas_compile() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas");
+        for name in ["envelope.json", "claims.json", "policy.json"] {
+            let path = dir.join(name);
+            let text = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+            let schema: serde_json::Value =
+                serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            jsonschema::validator_for(&schema)
+                .unwrap_or_else(|e| panic!("{}: not a valid schema: {e}", path.display()));
+        }
     }
 }
