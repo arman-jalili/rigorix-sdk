@@ -2,141 +2,429 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rigorix.dev/schemas/envelope-v2.json",
   "title": "Rigorix Audit Envelope v2",
-  "description": "v1 (2026-09-07) — reconciled byte-for-byte with rigorix-oss engine/src/audit/domain/envelope.rs + identity/domain/claim.rs (code is truth). Fixes vs v0 draft: EventStatus enum values now match serde output (Success|Failure|Skipped|Cancelled — no rename_all on the Rust enum); decision_context field corrected to decision_context_ref (Option<String>); $defs.approvalRecordRef/scopeViolationRef/sequencePolicyFindingRef/scoringResults completed from their structs. Canonicalization contract for HMAC (engine compute_signature): SHA-256-HMAC over serde_json::to_string(envelope with signature=None) — struct field order as declared, nulls for non-skipped Options, empty vectors/maps and None options omitted where skip_serializing_if is set. Map-typed fields (scoring_results, and each scoring result's dimensions) serialize with SORTED keys (deterministic — serde HashMap iteration order is randomized per process, which would make canonical bytes irreproducible); any independent verifier MUST reproduce this byte-exact form.",
+  "description": "v1 (2026-09-07) \u2014 reconciled byte-for-byte with rigorix-oss engine/src/audit/domain/envelope.rs + identity/domain/claim.rs (code is truth). Fixes vs v0 draft: EventStatus enum values now match serde output (Success|Failure|Skipped|Cancelled \u2014 no rename_all on the Rust enum); decision_context field corrected to decision_context_ref (Option<String>); $defs.approvalRecordRef/scopeViolationRef/sequencePolicyFindingRef/scoringResults completed from their structs. Canonicalization contract for HMAC (engine compute_signature): SHA-256-HMAC over serde_json::to_string(envelope with signature=None) \u2014 struct field order as declared, nulls for non-skipped Options, empty vectors/maps and None options omitted where skip_serializing_if is set. Map-typed fields (scoring_results, and each scoring result's dimensions) serialize with SORTED keys (deterministic \u2014 serde HashMap iteration order is randomized per process, which would make canonical bytes irreproducible); any independent verifier MUST reproduce this byte-exact form.",
   "type": "object",
   "required": [
-    "execution_id", "timestamp", "template_id", "planning_hash",
-    "total_tokens", "duration_ms", "events"
+    "execution_id",
+    "timestamp",
+    "template_id",
+    "planning_hash",
+    "total_tokens",
+    "duration_ms",
+    "events"
   ],
   "properties": {
-    "execution_id": { "type": "string", "format": "uuid", "description": "Globally unique execution identifier (UUID v4)." },
-    "timestamp": { "type": "string", "format": "date-time", "description": "Execution completion time (RFC 3339, UTC)." },
-    "template_id": { "type": "string", "description": "Template that generated the execution plan." },
-    "planning_hash": { "type": "string", "description": "Hash of the planning prompt — replay reproducibility." },
-    "source": { "type": ["string", "null"], "description": "Source environment, e.g. rigorix_action / rigorix_cli." },
-    "repository": { "type": ["string", "null"], "description": "Repository the execution ran against, e.g. my-org/my-repo." },
-    "author": { "type": ["string", "null"], "description": "User or bot that triggered the execution." },
+    "execution_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Globally unique execution identifier (UUID v4)."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Execution completion time (RFC 3339, UTC)."
+    },
+    "template_id": {
+      "type": "string",
+      "description": "Template that generated the execution plan."
+    },
+    "planning_hash": {
+      "type": "string",
+      "description": "Hash of the planning prompt \u2014 replay reproducibility."
+    },
+    "source": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Source environment, e.g. rigorix_action / rigorix_cli."
+    },
+    "repository": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Repository the execution ran against, e.g. my-org/my-repo."
+    },
+    "author": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "User or bot that triggered the execution."
+    },
     "identity": {
       "$ref": "#/$defs/identityRef",
-      "description": "Attributed human identity (ADR-012). REDACTED summary (IdentityRef::from_claim) — token_ref/auth_method/raw token never carried. Absent in pre-identity envelopes (serde skip when None)."
+      "description": "Attributed human identity (ADR-012). REDACTED summary (IdentityRef::from_claim) \u2014 token_ref/auth_method/raw token never carried. Absent in pre-identity envelopes (serde skip when None)."
     },
-    "total_tokens": { "type": "integer", "minimum": 0, "description": "LLM tokens consumed (cost/ROI analytics)." },
-    "duration_ms": { "type": "integer", "minimum": 0, "description": "Wall-clock duration of the execution." },
-    "git_commit": { "type": ["string", "null"], "description": "Repo commit at execution time (provenance)." },
-    "git_branch": { "type": ["string", "null"], "description": "Repo branch at execution time (provenance)." },
-    "model_version": { "type": ["string", "null"], "description": "LLM model used for planning." },
-    "planning_prompt": { "type": ["string", "null"], "description": "Prompt text — opt-in, privacy-sensitive." },
-    "file_paths": { "type": "array", "items": { "type": "string" }, "description": "Files changed/created (provenance). Omitted when empty." },
+    "effect_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "R8/ADR-014: domain-supplied canonical effect identity for this run, recorded as a one-way keyed hash \u2014 never raw parameters. Additive and serde-defaulted (omitted when absent); an envelope without it never matches an effect-keyed history rule. Entity resolution happens outside rigorix. Serialized in declared struct position when present."
+    },
+    "total_tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "LLM tokens consumed (cost/ROI analytics)."
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Wall-clock duration of the execution."
+    },
+    "git_commit": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Repo commit at execution time (provenance)."
+    },
+    "git_branch": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Repo branch at execution time (provenance)."
+    },
+    "model_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "LLM model used for planning."
+    },
+    "planning_prompt": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Prompt text \u2014 opt-in, privacy-sensitive."
+    },
+    "file_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Files changed/created (provenance). Omitted when empty."
+    },
     "events": {
       "type": "array",
-      "description": "Ordered execution events — node events incl. sequence_rule_matched / tool_executed.",
-      "items": { "$ref": "#/$defs/executionEventRef" }
+      "description": "Ordered execution events \u2014 node events incl. sequence_rule_matched / tool_executed.",
+      "items": {
+        "$ref": "#/$defs/executionEventRef"
+      }
     },
     "scoring_results": {
       "type": "object",
-      "additionalProperties": { "$ref": "#/$defs/scoringResultRef" },
+      "additionalProperties": {
+        "$ref": "#/$defs/scoringResultRef"
+      },
       "description": "Scored-evaluation node results keyed by node_id. Omitted when empty."
     },
-    "signature": { "type": ["string", "null"], "description": "HMAC-SHA256 hex over the canonical form (signature field nulled). null = not configured." },
-    "evidence_degraded": { "type": "boolean", "default": false, "description": "True = produced WITHOUT HMAC (explicit unsigned marker, GAP-M-12). Distinguishes intentionally-unsigned from tampered." },
+    "signature": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "HMAC-SHA256 hex over the canonical form (signature field nulled). null = not configured."
+    },
+    "evidence_degraded": {
+      "type": "boolean",
+      "default": false,
+      "description": "True = produced WITHOUT HMAC (explicit unsigned marker, GAP-M-12). Distinguishes intentionally-unsigned from tampered."
+    },
     "approval_events": {
-      "type": "array", "items": { "$ref": "#/$defs/approvalRecordRef" },
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/approvalRecordRef"
+      },
       "description": "Signed approval decisions in approval order (ADR-011 R3). Omitted when empty."
     },
     "scope_violations": {
-      "type": "array", "items": { "$ref": "#/$defs/scopeViolationRef" },
-      "description": "Post-execution scope violations — non-blocking evidence (ADR-011 R5). Omitted when empty."
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/scopeViolationRef"
+      },
+      "description": "Post-execution scope violations \u2014 non-blocking evidence (ADR-011 R5). Omitted when empty."
     },
     "sequence_policy_findings": {
-      "type": "array", "items": { "$ref": "#/$defs/sequencePolicyFindingRef" },
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sequencePolicyFindingRef"
+      },
       "description": "Sequence-policy decisions recorded during the run (R6): matched rules, promoted steps, dispatch-boundary denies. Redacted summaries (SpanPrivacy). Omitted when empty."
     },
-    "decision_context_ref": { "type": ["string", "null"], "description": "Reference to the decision context shown to the approver (R4 privacy pattern — full payload opt-in, stored locally). Omitted when None." }
+    "decision_context_ref": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Reference to the decision context shown to the approver (R4 privacy pattern \u2014 full payload opt-in, stored locally). Omitted when None."
+    }
   },
   "$defs": {
     "identityRef": {
       "type": "object",
-      "required": ["subject", "issuer", "source"],
-      "description": "Redacted claim summary from IdentityClaim (identity/domain/claim.rs). authority/expires_at are Options — always present as null when None (no serde skip).",
+      "required": [
+        "subject",
+        "issuer",
+        "source"
+      ],
+      "description": "Redacted claim summary from IdentityClaim (identity/domain/claim.rs). authority/expires_at are Options \u2014 always present as null when None (no serde skip).",
       "properties": {
-        "subject": { "type": "string", "description": "Human's unique identifier at the IdP." },
-        "issuer": { "type": "string", "description": "Who vouches for the subject (IdP issuer URL, or \"local\")." },
-        "source": { "enum": ["idp_token", "local_principal", "unverified"], "description": "IdentitySource (serde snake_case). Degradation is explicit, never a silent fallback." },
-        "authority": { "type": ["string", "null"], "description": "Roles/authority presented (captured fact, not judgment)." },
-        "expires_at": { "type": ["string", "null"], "format": "date-time", "description": "Claim expiry; null = no expiry." }
+        "subject": {
+          "type": "string",
+          "description": "Human's unique identifier at the IdP."
+        },
+        "issuer": {
+          "type": "string",
+          "description": "Who vouches for the subject (IdP issuer URL, or \"local\")."
+        },
+        "source": {
+          "enum": [
+            "idp_token",
+            "local_principal",
+            "unverified"
+          ],
+          "description": "IdentitySource (serde snake_case). Degradation is explicit, never a silent fallback."
+        },
+        "authority": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Roles/authority presented (captured fact, not judgment)."
+        },
+        "expires_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time",
+          "description": "Claim expiry; null = no expiry."
+        }
       }
     },
     "executionEventRef": {
       "type": "object",
-      "required": ["event_type", "summary", "occurred_at", "status"],
+      "required": [
+        "event_type",
+        "summary",
+        "occurred_at",
+        "status"
+      ],
       "properties": {
-        "event_type": { "type": "string", "description": "Machine-readable type, e.g. task_completed, tool_executed, sequence_rule_matched." },
-        "summary": { "type": "string", "description": "Human-readable summary for audit review." },
-        "occurred_at": { "type": "string", "format": "date-time" },
-        "correlation_id": { "type": ["string", "null"], "format": "uuid", "description": "Correlation across services. Omitted when None (serde skip)." },
-        "status": { "enum": ["Success", "Failure", "Skipped", "Cancelled"], "description": "EventStatus serde output — NO rename_all on the Rust enum; values are capitalized as declared." },
-        "payload": { "type": ["object", "null"], "description": "Event-specific details: per-node output, tool usage, budget warnings, errors. Omitted when None." }
+        "event_type": {
+          "type": "string",
+          "description": "Machine-readable type, e.g. task_completed, tool_executed, sequence_rule_matched."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable summary for audit review."
+        },
+        "occurred_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "correlation_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uuid",
+          "description": "Correlation across services. Omitted when None (serde skip)."
+        },
+        "status": {
+          "enum": [
+            "Success",
+            "Failure",
+            "Skipped",
+            "Cancelled"
+          ],
+          "description": "EventStatus serde output \u2014 NO rename_all on the Rust enum; values are capitalized as declared."
+        },
+        "payload": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Event-specific details: per-node output, tool usage, budget warnings, errors. Omitted when None."
+        }
       }
     },
     "approvalRecordRef": {
       "type": "object",
-      "description": "Signed approval decision (ADR-011 R3). Summary fields only — full record lives in the local store.",
-      "required": ["node_id", "step_name", "intent_hash", "approver_id", "decided_at"],
+      "description": "Signed approval decision (ADR-011 R3). Summary fields only \u2014 full record lives in the local store.",
+      "required": [
+        "node_id",
+        "step_name",
+        "intent_hash",
+        "approver_id",
+        "decided_at"
+      ],
       "properties": {
-        "node_id": { "type": "string", "format": "uuid", "description": "Node id that was approved." },
-        "step_name": { "type": "string", "description": "Human step name." },
-        "intent_hash": { "type": "string", "description": "Intent hash the approval is bound to." },
-        "approver_id": { "type": "string", "description": "Identity subject who approved (captured fact)." },
-        "authority": { "type": ["string", "null"], "description": "Role / policy id (captured fact)." },
-        "decided_at": { "type": "string", "format": "date-time", "description": "When the human approved." }
+        "node_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Node id that was approved."
+        },
+        "step_name": {
+          "type": "string",
+          "description": "Human step name."
+        },
+        "intent_hash": {
+          "type": "string",
+          "description": "Intent hash the approval is bound to."
+        },
+        "approver_id": {
+          "type": "string",
+          "description": "Identity subject who approved (captured fact)."
+        },
+        "authority": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Role / policy id (captured fact)."
+        },
+        "decided_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the human approved."
+        }
       }
     },
     "scopeViolationRef": {
       "type": "object",
       "description": "Non-blocking scope violation (ADR-011 R5).",
-      "required": ["node_id", "step_name", "out_of_scope", "detected_at"],
+      "required": [
+        "node_id",
+        "step_name",
+        "out_of_scope",
+        "detected_at"
+      ],
       "properties": {
-        "node_id": { "type": "string", "format": "uuid", "description": "Node id whose execution produced the violation." },
-        "step_name": { "type": "string", "description": "Human step name." },
-        "out_of_scope": { "type": "array", "items": { "type": "string" }, "description": "Effects outside the declared scope (from the git-diff oracle)." },
-        "detected_at": { "type": "string", "format": "date-time" }
+        "node_id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "Node id whose execution produced the violation."
+        },
+        "step_name": {
+          "type": "string",
+          "description": "Human step name."
+        },
+        "out_of_scope": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Effects outside the declared scope (from the git-diff oracle)."
+        },
+        "detected_at": {
+          "type": "string",
+          "format": "date-time"
+        }
       }
     },
     "sequencePolicyFindingRef": {
       "type": "object",
-      "description": "Redacted sequence-policy finding (R6). Summary only — rule id, action, concrete matched step indices, redacted decision summary (parameter values never included).",
-      "required": ["rule_id", "action", "later_step", "matched_indices", "summary"],
+      "description": "Redacted sequence-policy finding (R6). Summary only \u2014 rule id, action, concrete matched step indices, redacted decision summary (parameter values never included).",
+      "required": [
+        "rule_id",
+        "action",
+        "later_step",
+        "matched_indices",
+        "summary"
+      ],
       "properties": {
-        "rule_id": { "type": "string", "description": "Stable id of the rule that matched." },
-        "action": { "enum": ["promote", "deny"], "description": "Action taken: promote (later step paused for a human) or deny (step denied before dispatch)." },
-        "later_step": { "type": "string", "description": "Name of the later matched step — the step the rule gated." },
-        "matched_indices": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Indices (into the evaluated ordered step list) of the matched steps." },
-        "summary": { "type": "string", "description": "Redacted decision summary (parameter values never included)." }
+        "rule_id": {
+          "type": "string",
+          "description": "Stable id of the rule that matched."
+        },
+        "action": {
+          "enum": [
+            "promote",
+            "deny"
+          ],
+          "description": "Action taken: promote (later step paused for a human) or deny (step denied before dispatch)."
+        },
+        "later_step": {
+          "type": "string",
+          "description": "Name of the later matched step \u2014 the step the rule gated."
+        },
+        "matched_indices": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Indices (into the evaluated ordered step list) of the matched steps."
+        },
+        "summary": {
+          "type": "string",
+          "description": "Redacted decision summary (parameter values never included)."
+        }
       }
     },
     "scoringResultRef": {
       "type": "object",
-      "description": "Pass/fail status, backend metadata, dimension scores — not the full raw response.",
-      "required": ["passed", "backend", "dimensions", "duration_ms"],
+      "description": "Pass/fail status, backend metadata, dimension scores \u2014 not the full raw response.",
+      "required": [
+        "passed",
+        "backend",
+        "dimensions",
+        "duration_ms"
+      ],
       "properties": {
-        "passed": { "type": "boolean", "description": "Whether all scoring dimensions passed." },
-        "backend": { "type": "string", "description": "Name of the scoring backend that produced this result." },
+        "passed": {
+          "type": "boolean",
+          "description": "Whether all scoring dimensions passed."
+        },
+        "backend": {
+          "type": "string",
+          "description": "Name of the scoring backend that produced this result."
+        },
         "dimensions": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/scoreDimensionRef" },
-          "description": "Dimension name → score dimension reference."
+          "additionalProperties": {
+            "$ref": "#/$defs/scoreDimensionRef"
+          },
+          "description": "Dimension name \u2192 score dimension reference."
         },
-        "duration_ms": { "type": "integer", "minimum": 0 }
+        "duration_ms": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "scoreDimensionRef": {
       "type": "object",
-      "required": ["score", "max", "label", "passed"],
+      "required": [
+        "score",
+        "max",
+        "label",
+        "passed"
+      ],
       "properties": {
-        "score": { "type": "number", "minimum": 0, "maximum": 1, "description": "Achieved score (0.0–1.0)." },
-        "max": { "type": "number", "description": "Maximum possible score." },
-        "label": { "type": "string", "description": "Human-readable label for this dimension." },
-        "passed": { "type": "boolean" }
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Achieved score (0.0\u20131.0)."
+        },
+        "max": {
+          "type": "number",
+          "description": "Maximum possible score."
+        },
+        "label": {
+          "type": "string",
+          "description": "Human-readable label for this dimension."
+        },
+        "passed": {
+          "type": "boolean"
+        }
       }
     }
   }
