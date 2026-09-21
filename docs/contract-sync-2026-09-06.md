@@ -145,3 +145,21 @@ Then: catalog design → servers → SDKs.
     SDK CI added (fmt · clippy · test).
   - **Next:** `rigorix-server` (OSS reference host) + enterprise execution API
     build against this surface; SDK clients are thin typed clients + verifier.
+
+- **2026-09-19 — ADR-014 effect-identity (additive schema changes):**
+  Sequence-policy now expresses the requester-variation class (each step allowed,
+  effect identical) without importing domain semantics into the matcher.
+  - `schemas/policy.json`: `paramPredicate.kind` gains **`equals_step`** with an
+    optional **`step`** (index of an earlier matched step); `value` is now
+    optional (defaults ""). `historyPredicate` gains **`effect_key`** (bool,
+    default false).
+  - `schemas/envelope.json`: gains additive **`effect_key`** (string|null,
+    omitted when absent) — a one-way keyed hash, never raw parameters.
+  - Engine (rigorix-oss, same PR): `ParamMatchKind::EqualsStep`, relational
+    matching over earlier matched steps, `HistoryPredicate.effect_key`, envelope
+    field + `HistoryAction.effect_key`, reserved step-parameter pointer
+    `/effect_key`, load-time fail-closed validation. Engine 2033 tests green
+    (8 new AC tests), conformance green.
+  - Both changes are additive and serde-defaulted — existing envelopes/rules
+    validate unchanged; an envelope without an effect key never matches an
+    effect-keyed rule (GAP-M-12 posture).
