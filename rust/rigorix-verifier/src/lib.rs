@@ -82,6 +82,12 @@ pub struct AuditEnvelope {
     pub author: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<IdentityRef>,
+    /// ADR-014: domain-supplied canonical effect key (one-way keyed hash).
+    /// Serde-defaulted, omitted when absent — canonical bytes unchanged for
+    /// effect-less envelopes. MUST stay in the engine's struct position
+    /// (after `identity`, before `total_tokens`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_key: Option<String>,
     pub total_tokens: u32,
     pub duration_ms: u64,
     pub git_commit: Option<String>,

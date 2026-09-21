@@ -25,10 +25,11 @@ keys held in the engine configuration.
 | `envelope-rich-signed.json` | Rich: identity + approval_events + scope_violations + sequence_policy_findings + scoring_results + decision_context_ref |
 | `envelope-sequence-denied-signed.json` | Dispatch-boundary deny recorded (`sequence_policy_denied`) |
 | `envelope-rich-pre-identity.json` | Rich additive blocks without the identity block (pre-identity shape) |
+| `envelope-effect-key-signed.json` | ADR-014: run-level `effect_key` (one-way keyed hash) recorded — effect-keyed history input |
 
-Each file validates against `schemas/envelope.json` v1 and its HMAC verifies
-byte-exact with `rigorix-verifier::verify_signature` under the key above —
-proving canonicalization parity between the engine and the independent
+Each file validates against `schemas/envelope.json` (format v2) and its HMAC
+verifies byte-exact with `rigorix-verifier::verify_signature` under the key
+above — proving canonicalization parity between the engine and the independent
 verifier (Strategy A: the HMAC trail is checkable anywhere).
 
 ## Regenerate
