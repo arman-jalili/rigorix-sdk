@@ -34,6 +34,14 @@ LANG_SCRIPT="${ROOT}/languages/${LANG}/${SELF}"
 
 if [ -f "$LANG_SCRIPT" ]; then
     if [ "$PROJECT_DIR" != "." ]; then cd "$PROJECT_DIR"; fi
+    # Single-crate workspace (rigorix-sdk: rust/ holds the Cargo workspace,
+    # rigorix-verifier/ holds the crate): the language validators expect the
+    # crate root (src/ + Cargo.toml). If the manifest dir has no src/, run
+    # from the first member crate that does.
+    if [ ! -d src ]; then
+        CRATE_SRC="$(find . -maxdepth 2 -type d -name src 2>/dev/null | head -1)"
+        [ -n "$CRATE_SRC" ] && cd "$(dirname "$CRATE_SRC")"
+    fi
     exec bash "$LANG_SCRIPT" "$@"
 else
     echo "No validator for language: ${LANG} (looked for ${LANG_SCRIPT})"
