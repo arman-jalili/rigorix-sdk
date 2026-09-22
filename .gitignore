@@ -7,3 +7,7 @@ __pycache__/
 *.class
 .gitignore.tmp
 .DS_Store
+
+# Guardian runtime state (mutated by the guardian extension each session)
+guardian-sessions.json
+.pi/.guardian-kanban.json
