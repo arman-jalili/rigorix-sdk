@@ -246,7 +246,12 @@ pub fn verify_signature(json: &str, key: &str) -> VerifyResult<()> {
 /// The schema path resolves from `RIGORIX_SDK_SCHEMAS` env (CI/local override)
 /// or defaults to `../../schemas` relative to this crate.
 pub fn validate_schema(json: &str) -> VerifyResult<()> {
-    let schema_path = schema_path("envelope.json")?;
+    validate_schema_file("envelope.json", json)
+}
+
+/// Validate any JSON instance against a named SDK schema file.
+fn validate_schema_file(file: &str, json: &str) -> VerifyResult<()> {
+    let schema_path = schema_path(file)?;
     let schema_text = std::fs::read_to_string(&schema_path)
         .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", schema_path.display())))?;
     let schema = serde_json::from_str(&schema_text)?;
@@ -393,6 +398,82 @@ mod tests {
         v["events"][0]["status"] = serde_json::json!("success");
         let err = validate_schema(&v.to_string()).unwrap_err();
         assert!(matches!(err, VerifyError::Schema(_)));
+    }
+
+    // ─── ADR-015 operator step-requirements (R9) ──────────────────────────
+    //
+    // Grounded in rigorix-oss `sequence_policy/domain/requirement.rs` +
+    // `audit/domain/envelope.rs` (code is truth).
+    #[test]
+    fn policy_schema_round_trips_step_requirement() {
+        let policy = serde_json::json!({
+            "fail_closed": true,
+            "rules": [],
+            "requirements": [{
+                "id": "payout-guard",
+                "name": "Payout commands must be attested and carry effect data",
+                "description": "d",
+                "match": {
+                    "tool": "run_command",
+                    "params": [{
+                        "pointer": "/command",
+                        "kind": "glob",
+                        "value": "*execute_payout.sh*"
+                    }]
+                },
+                "require_identity": true,
+                "require_params": ["/beneficiary", "/effect_key"],
+                "action": "deny"
+            }]
+        });
+        assert!(validate_schema_file("policy.json", &policy.to_string()).is_ok());
+
+        // `action` is serde-defaulted — a requirement may omit it.
+        let mut defaulted = policy.clone();
+        defaulted["requirements"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("action");
+        assert!(validate_schema_file("policy.json", &defaulted.to_string()).is_ok());
+
+        // `name` has NO serde default on StepRequirement — it is required.
+        let mut missing_name = policy.clone();
+        missing_name["requirements"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("name");
+        assert!(validate_schema_file("policy.json", &missing_name.to_string()).is_err());
+
+        // require_params entries are JSON pointers — must start with '/'.
+        let mut bad_pointer = policy.clone();
+        bad_pointer["requirements"][0]["require_params"] = serde_json::json!(["beneficiary"]);
+        assert!(validate_schema_file("policy.json", &bad_pointer.to_string()).is_err());
+    }
+
+    #[test]
+    fn envelope_schema_accepts_requirement_findings() {
+        let mut v: serde_json::Value = serde_json::from_str(&minimal_envelope()).unwrap();
+        v["requirement_findings"] = serde_json::json!([{
+            "requirement_id": "payout-guard",
+            "step": "pay",
+            "action": "deny",
+            "unmet": ["identity", "/beneficiary"],
+            "summary": "operator requirement 'payout-guard' denied step 'pay'"
+        }]);
+        assert!(validate_schema(&v.to_string()).is_ok());
+
+        // `unmet` is required on RequirementFindingRef.
+        let mut bad = v.clone();
+        bad["requirement_findings"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("unmet");
+        assert!(validate_schema(&bad.to_string()).is_err());
+
+        // Action is the lowercase serde set — `DENY` is not a valid value.
+        let mut wrong_action = v.clone();
+        wrong_action["requirement_findings"][0]["action"] = serde_json::json!("DENY");
+        assert!(validate_schema(&wrong_action.to_string()).is_err());
     }
 
     // ─── Real engine fixture corpus (F-20260907-01) ────────────────────────
