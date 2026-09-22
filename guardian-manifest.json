@@ -51,7 +51,7 @@
     ".pi/context/project.md": {
       "category": "framework",
       "originalHash": "sha256:18071e64550029b9a30e55a61aa984fb9d27b289a872dc2cb4ac96b1070689c1",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/context/patterns.md": {
       "category": "user",
@@ -356,7 +356,7 @@
     ".pi/scripts/validate-operations.sh": {
       "category": "generated",
       "originalHash": "sha256:4fb994c9056b90f565fe536633795586da3197a2a2b8f745baea9af8db4440d5",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/create-feature-branch.sh": {
       "category": "framework",
@@ -366,7 +366,7 @@
     ".pi/scripts/validate-architecture.sh": {
       "category": "generated",
       "originalHash": "sha256:241df1a4517e0a04aff9cfc4efddbdcb4b3859e65bd35cb8c558a172dfe7cf4d",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/validate-ubiquitous-language.sh": {
       "category": "framework",
@@ -486,7 +486,7 @@
     ".pi/scripts/validate-runtime-wiring.sh": {
       "category": "framework",
       "originalHash": "sha256:14e685d69a89a1ae01f9dc796efa2f304dd1998d9f97af442f2ed9f7bb777fdb",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/fetch-issues.sh": {
       "category": "framework",
@@ -571,12 +571,12 @@
     ".pi/scripts/validate-security.sh": {
       "category": "generated",
       "originalHash": "sha256:0a9453d133e9b8e86cd767cec2f130bd6dc74db93d2169d2e43858af81438630",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/validate-canonical.sh": {
       "category": "generated",
       "originalHash": "sha256:66d2e6887f040d7179e811f79f8c9f367066c6fd6a100c462ddb330556d54228",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/generate-architecture.sh": {
       "category": "framework",
@@ -596,17 +596,17 @@
     ".pi/scripts/validate-ci.sh": {
       "category": "generated",
       "originalHash": "sha256:0845077547d9875bdd36db5684ece2d60e281727132b1b3bacee6924f615e520",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/validate-integration.sh": {
       "category": "generated",
       "originalHash": "sha256:01c0dc34f6a94dcb46428049e4a090c89756c67755f0f16068dcfcb0b4df2ea0",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/validate-tests.sh": {
       "category": "generated",
       "originalHash": "sha256:ff7840a569b1571782ae8c4174a6b871345c6a354c65ff4ca5784b898ba15466",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/git/close-epic.sh": {
       "category": "framework",
@@ -1114,25 +1114,25 @@
     "projectName": "rigorix-sdk",
     "projectVersion": "0.1.0",
     "language": "rust",
-    "repository": "araman-jalili/rigorix-sdk",
+    "repository": "arman-jalili/rigorix-sdk",
     "repoTool": "gh",
     "groupId": "com.rigorix-sdk",
-    "buildCommand": "cargo build",
-    "testCommand": "cargo test --all",
-    "lintCommand": "cargo clippy -- -D warnings",
-    "formatCommand": "cargo fmt",
-    "formatCheckCommand": "cargo fmt --check",
-    "securityAuditCommand": "cargo audit",
+    "buildCommand": "cargo build --manifest-path rust/Cargo.toml",
+    "testCommand": "cargo test --manifest-path rust/Cargo.toml --workspace",
+    "lintCommand": "cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings",
+    "formatCommand": "cargo fmt --manifest-path rust/Cargo.toml",
+    "formatCheckCommand": "cargo fmt --manifest-path rust/Cargo.toml --check",
+    "securityAuditCommand": "cargo audit --file rust/Cargo.lock",
     "errorHandlingPattern": "Result<T, E> pattern",
     "tracingPattern": "tracing crate with structured spans",
     "cancellationPattern": "CancellationToken pattern",
     "atomicWritePattern": "tempfile + rename pattern",
-    "keyFile1": "src/index.ts",
-    "keyFile1Purpose": "Main entry point",
-    "keyFile2": "src/lib/core.ts",
-    "keyFile2Purpose": "Core library functions",
-    "domainDescription": ""
+    "keyFile1": "schemas/envelope.json",
+    "keyFile1Purpose": "Audit-envelope contract (format v2) \u2014 canonical HMAC shape",
+    "keyFile2": "rust/rigorix-verifier/src/lib.rs",
+    "keyFile2Purpose": "Protocol-only HMAC + schema verifier (no engine dependency)",
+    "domainDescription": "Contract source of truth for Rigorix: JSON Schemas for the audit envelope, identity claims, policy model, and the frozen native API catalog, plus a protocol-only Rust verifier and a real engine-signed fixture corpus."
   },
   "scaffoldedAt": "2026-09-22T16:34:01.433Z",
-  "lastUpdatedAt": "2026-09-22T16:34:01.676Z"
+  "lastUpdatedAt": "2026-09-22T16:59:48.000Z"
 }

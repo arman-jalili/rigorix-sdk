@@ -1,65 +1,98 @@
 # Project Context
 
 > Single source of truth for project-specific knowledge. All agents load this ONCE.
-> **This is a template** — replace placeholders with actual values during `guardian init`.
 
 ## Project Overview
 
-- **Name:** {{PROJECT_NAME}}
-- **Version:** {{PROJECT_VERSION}}
-- **Language:** rust
-- **Type:** {{PROJECT_TYPE}}
-- **Repository:** araman-jalili/rigorix-sdk
+- **Name:** rigorix-sdk
+- **Version:** 0.1.0
+- **Language:** Rust (the verifier crate); `schemas/` is language-neutral
+- **Type:** Contract + protocol library (not an application)
+- **Repository:** arman-jalili/rigorix-sdk
+
+## What this repo is
+
+The **contract source of truth** for Rigorix, plus a protocol-only Rust verifier:
+
+- `schemas/` — JSON Schemas for the audit envelope, identity claims, policy
+  model, and the frozen native API catalog (`schemas/api/catalog.json`,
+  ADR-0001). Grounded in rigorix-oss Rust types — **code is truth**; a draft
+  that contradicts the code is fixed from the code, never invented.
+- `rust/rigorix-verifier` — verifies an envelope's HMAC-SHA256 byte-exact and
+  validates it against the schema. **No `rigorix-engine` dependency** (frozen
+  struct copies), so any language/runtime can check a trail independently.
+- `schemas/fixtures/envelope/` — REAL engine-signed envelopes as the
+  conformance corpus (fixed test-only key), exercised by the verifier.
+- `docs/` — strategy freezes, contract-sync deltas, ADRs.
+
+There is **no `src/` crate and no application** here; the workspace is
+`rust/Cargo.toml` (members: `rigorix-verifier`).
 
 ## Core Principles
 
-1. **Template-driven** - Workflows in templates, not dynamic generation
-2. **DAG-based** - Task nodes with dependencies, topological execution
-3. **Minimal LLM** - LLM = planning tool only
-4. **Bounded autonomy** - Hard caps on dynamic behavior
-5. **Bounded retries** - Max 3 retries with exponential backoff + jitter (±25%)
-6. **Risk-gated** - Safe=auto, Medium=confirm, Dangerous=dry-run
-7. **Pre-validated** - Validator catches errors BEFORE execution
-8. **Auditable** - Planning decisions tracked and diffable
+1. **Code is truth** — schemas mirror rigorix-oss structs (serde field names).
+2. **Contract changes are decisions** — a schema edit goes through the drift CI
+   story in rigorix-oss and gets a delta note here; never a silent edit.
+3. **Additive and serde-defaulted** — new fields are optional; an artifact
+   without them stays valid.
+4. **Protocol-only** — the verifier never imports the engine; it is the
+   independent check.
+5. **Governed flows only** — SDK clients expose governed flows; embedded
+   execution stays Rust-only via `rigorix-engine`.
+6. **Auditable** — every change is diffable and carries a reference.
 
 ## Architecture
 
 ### Structure
 
 ```
-{{PROJECT_NAME}}/
-├── src/                 # Source code
-├── tests/               # Test files
-├── docs/                # Documentation
-└── .pi/                 # Agent framework
+rigorix-sdk/
+├── schemas/                 # JSON Schemas (contract source of truth)
+│   ├── envelope.json        # audit envelope (format v2)
+│   ├── claims.json          # identity claims
+│   ├── policy.json          # sequence/requirement/approval policy
+│   ├── api/catalog.json     # frozen rigorix.* method catalog (ADR-0001)
+│   └── fixtures/envelope/   # real engine-signed fixture corpus
+├── rust/                    # Cargo workspace (the verifier lives here)
+│   └── rigorix-verifier/
+├── docs/                    # strategy freezes, contract-sync, ADRs
+└── .pi/                     # agent framework
 ```
 
 ### Key Patterns
 
-- **Error handling:** {{ERROR_HANDLING_PATTERN}}
-- **Tracing:** {{TRACING_PATTERN}}
-- **Cancellation:** {{CANCELLATION_PATTERN}}
-- **Atomic writes:** {{ATOMIC_WRITE_PATTERN}}
+- **Error handling:** `Result<T, E>` with `thiserror` (`VerifyError`).
+- **Schema loading:** `schemas/` resolved via `RIGORIX_SDK_SCHEMAS` or the
+  default `../../schemas` relative to the crate.
+- **Frozen copies:** the verifier re-declares the envelope structs rather than
+  depending on the engine; add a field in the **same struct position** as the
+  engine and keep it serde-defaulted.
+- **Canonicalization:** HMAC over `serde_json::to_vec` of the envelope with
+  `signature = None`; map-typed fields sorted for reproducibility.
 
 ## Quality Gates
 
 ### Before Commit
 ```bash
-{{BUILD_COMMAND}} && {{FORMAT_COMMAND}}
+cargo fmt --manifest-path rust/Cargo.toml
 ```
 
 ### Before Push
 ```bash
-{{TEST_COMMAND}} && {{LINT_COMMAND}}
+cargo test --manifest-path rust/Cargo.toml --workspace
+cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
 ```
 
 ### Before Merge
 ```bash
-{{TEST_COMMAND}}
-{{LINT_COMMAND}}
-{{FORMAT_CHECK_COMMAND}}
-{{SECURITY_AUDIT_COMMAND}}
+cargo test --manifest-path rust/Cargo.toml --workspace
+cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
+cargo fmt --manifest-path rust/Cargo.toml --check
+cargo audit --file rust/Cargo.lock
 ```
+
+> The Guardian dispatchers under `.pi/scripts/validate-*.sh` detect the Rust
+> workspace under `rust/` and `cd` there before running these.
 
 ## Scope Classification
 
@@ -74,15 +107,18 @@
 
 | File | Purpose |
 |------|---------|
-| docs/ARCHITECTURE.md | Architecture specification |
-| {{KEY_FILE_1}} | {{KEY_FILE_1_PURPOSE}} |
-| {{KEY_FILE_2}} | {{KEY_FILE_2_PURPOSE}} |
+| schemas/envelope.json | Audit-envelope contract (format v2) — canonical HMAC shape |
+| schemas/policy.json | Sequence / step-requirement / approval policy model |
+| schemas/api/catalog.json | Frozen `rigorix.*` native API catalog (ADR-0001) |
+| rust/rigorix-verifier/src/lib.rs | Protocol-only HMAC + schema verifier |
+| schemas/fixtures/envelope/ | Real engine-signed conformance corpus |
+| docs/adr/ADR-0001-native-api-catalog.md | The frozen native API catalog decision |
 
 ## Commands
 
 | Command | Purpose |
 |---------|---------|
-| `{{BUILD_COMMAND}}` | Build project |
-| `{{TEST_COMMAND}}` | Run tests |
-| `{{LINT_COMMAND}}` | Lint check |
-| `{{SECURITY_AUDIT_COMMAND}}` | Security audit |
+| `cargo build --manifest-path rust/Cargo.toml` | Build the workspace |
+| `cargo test --manifest-path rust/Cargo.toml --workspace` | Run tests |
+| `cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings` | Lint |
+| `cargo audit --file rust/Cargo.lock` | Security audit |
