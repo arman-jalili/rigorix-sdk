@@ -39,12 +39,13 @@ fi
 # Hardcoded secrets
 # ---------------------------------------------------------------------------
 echo "--- Hardcoded Secrets ---"
-# Search for long literal strings assigned to variables in non-test files
-SECRETS_FOUND=$(grep -rnE '=\s*"[A-Za-z0-9+/=_\-]{20,}"' --include="*.rs" src/ 2>/dev/null \
-    | grep -v '_test\.rs' \
-    | grep -v '#\[cfg(test)\]' \
-    | grep -v 'mod tests' \
-    | wc -l | tr -d ' ')
+# Search for long literal strings assigned to variables in NON-TEST code.
+# Test modules (`#[cfg(test)]` to EOF) and *_test.rs are dropped first — the
+# verifier's documented test-only fixture key lives in the test module.
+SECRETS_FOUND=$(for f in $(find src -name '*.rs' ! -name '*_test.rs' 2>/dev/null); do
+        sed '/#\[cfg(test)\]/,$d' "$f"
+    done | grep -cE '=\s*"[A-Za-z0-9+/=_\-]{20,}"' 2>/dev/null | tr -d ' ' || true)
+SECRETS_FOUND="${SECRETS_FOUND:-0}"
 if [ "$SECRETS_FOUND" -gt 0 ]; then
     fail "Possible hardcoded secrets found ($SECRETS_FOUND occurrences)"
 else

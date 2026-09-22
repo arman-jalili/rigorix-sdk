@@ -7,6 +7,10 @@
 //! ref from `identity/domain/claim.rs` (contract freeze: do not edit them to
 //! match engine internals; edit them only when the SDK schemas change).
 //!
+//! @canonical schemas/envelope.json (Rigorix Audit Envelope v2) — the contract
+//! this verifier checks against; the frozen structs below mirror rigorix-oss
+//! `engine/src/audit/domain/envelope.rs`.
+//!
 //! Canonicalization contract (must reproduce the engine byte-exact):
 //! HMAC-SHA256 over `serde_json::to_string(envelope with signature = None)`.
 //! Struct field order is declaration order; Options with `skip_serializing_if`

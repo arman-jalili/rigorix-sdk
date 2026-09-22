@@ -526,7 +526,7 @@
     ".pi/scripts/languages/rust/validate-architecture.sh": {
       "category": "framework",
       "originalHash": "sha256:bde99e5c9735c306c6fa9b5286f56ff695f164608e559f08c95578fdc4f630b5",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/languages/rust/check_model_judgment.sh": {
       "category": "framework",
@@ -536,7 +536,7 @@
     ".pi/scripts/languages/rust/validate-security.sh": {
       "category": "framework",
       "originalHash": "sha256:4aae6dc07ce65b800685600603af9e8bb9078fb8c543455b9d2aaefbc984f9e0",
-      "status": "unchanged"
+      "status": "modified"
     },
     ".pi/scripts/languages/rust/validate-canonical.sh": {
       "category": "framework",
