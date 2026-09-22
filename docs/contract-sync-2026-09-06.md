@@ -163,3 +163,33 @@ Then: catalog design → servers → SDKs.
   - Both changes are additive and serde-defaulted — existing envelopes/rules
     validate unchanged; an envelope without an effect key never matches an
     effect-keyed rule (GAP-M-12 posture).
+
+- **2026-09-22 — ADR-015 operator step-requirements (additive schema changes):**
+  The policy/config surface gains operator-owned single-step obligations that the
+  agent-authored plan cannot suppress. Reconciled from rigorix-oss ADR-015 +
+  issue #884 code (code is truth): `engine/src/sequence_policy/domain/requirement.rs`
+  (`StepRequirement` / `RequirementAction` / `RequirementFinding`),
+  `sequence_policy/domain/config.rs` (`SequencePolicyConfig.requirements` + R9
+  SafetyCaps), `audit/domain/envelope.rs` (`requirement_findings[]` +
+  `RequirementFindingRef`).
+  - `schemas/policy.json`: new `$defs.requirementAction` (lowercase
+    `deny`/`promote`, default `deny`) + `$defs.stepRequirement`; additive root
+    `requirements` array (serde field on `SequencePolicyConfig`); `$defs.safetyCaps`
+    gains `max_requirements_per_file` (100) + `max_required_params_per_requirement`
+    (16).
+  - `schemas/envelope.json`: additive root `requirement_findings[]`
+    (serde-defaulted, `skip_serializing_if = Vec::is_empty`, declared struct
+    position between `sequence_policy_findings` and `decision_context_ref`) +
+    `$defs.requirementFindingRef` (`requirement_id`/`step`/`action`/`unmet`/`summary`).
+    Pointer **names** may be recorded; parameter **values** never are (SpanPrivacy).
+  - **Drift fixed from code (issue #5 draft contradicted the engine struct):**
+    the draft listed `stepRequirement.name` as optional and `action` as required.
+    The engine has `name: String` with **no serde default** (required) and
+    `#[serde(default)] action: RequirementAction` (optional, defaults `deny`).
+    Schema follows the code (required `id`/`name`/`match`).
+  - `rust/rigorix-verifier`: focused schema-conformance tests for a requirement-bearing
+    policy config and a `requirement_findings` envelope; no frozen-struct change —
+    no committed fixture carries `requirement_findings` yet (adding one is the
+    follow-up that requires the frozen copy to grow the field).
+  - Both changes additive and serde-defaulted — existing envelopes/rules validate
+    unchanged; `requirements: []` is the status quo (no gating).
