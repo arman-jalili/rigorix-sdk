@@ -1,0 +1,18 @@
+{
+  "id": 2,
+  "event": "approval_required",
+  "data": {
+    "event_type": "approval_recorded",
+    "summary": "Approval recorded for step 'migrate-prod' by alice — run may resume",
+    "occurred_at": "2026-09-24T15:21:10.007Z",
+    "status": "Success",
+    "correlation_id": "0f5c2d7a-9b41-4e6a-8f2b-1c3d5e7a9b0c",
+    "payload": {
+      "execution_id": "0f5c2d7a-9b41-4e6a-8f2b-1c3d5e7a9b0c",
+      "node_id": "6b1e0a2c-3d4f-4a5b-8c6d-7e8f9a0b1c2d",
+      "step_name": "migrate-prod",
+      "intent_hash": "9f2c1d4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d",
+      "approver_id": "alice@example.com"
+    }
+  }
+}

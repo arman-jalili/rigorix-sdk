@@ -1,0 +1,17 @@
+{
+  "id": 1,
+  "event": "run_progress",
+  "data": {
+    "event_type": "node_completed",
+    "summary": "Node 'fetch-invoices' completed in 128 ms",
+    "occurred_at": "2026-09-24T15:20:01.482Z",
+    "status": "Success",
+    "correlation_id": "0f5c2d7a-9b41-4e6a-8f2b-1c3d5e7a9b0c",
+    "payload": {
+      "execution_id": "0f5c2d7a-9b41-4e6a-8f2b-1c3d5e7a9b0c",
+      "node_id": "n2",
+      "node_name": "fetch-invoices",
+      "duration_ms": 128
+    }
+  }
+}
