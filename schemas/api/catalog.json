@@ -1,6 +1,7 @@
 {
   "apiVersion": "1.0.0",
   "jsonrpc": "2.0",
+  "description": "The single, CLOSED `rigorix.*` namespace (ADR-0001 D3). A server implements a SUBSET of these methods and MUST NOT extend the namespace: an undeclared `rigorix.*` method is contract drift. `rigorix-verifier::verify_catalog_subset` is the guard; new methods are added here (a contract change), never server-side.",
   "transport": {
     "kind": "http-jsonrpc-2.0",
     "endpoint": "/rpc",
@@ -262,6 +263,21 @@
       },
       "result": {
         "$ref": "#/$defs/authLogoutResult"
+      }
+    },
+    {
+      "name": "rigorix.auth.verify",
+      "kind": "query",
+      "since": "1.0.0",
+      "stability": "frozen",
+      "auth": "session",
+      "mcpTool": null,
+      "description": "Verify an OSS-attested claim against the organization's JWKS and return the verified identity claim (enterprise Execution API; fail-closed).",
+      "params": {
+        "$ref": "#/$defs/authVerifyParams"
+      },
+      "result": {
+        "$ref": "#/$defs/authVerifyResult"
       }
     },
     {
@@ -1656,6 +1672,92 @@
       "properties": {
         "status": {
           "const": "logged_out"
+        }
+      },
+      "additionalProperties": false
+    },
+    "identityClaim": {
+      "type": "object",
+      "description": "Full attributed identity claim (mirrors ../claims.json `$defs.identityClaim`) returned by `rigorix.auth.verify`. Nullable fields serialize as null; `token_ref` is a store reference, never the raw token (SpanPrivacy).",
+      "required": [
+        "subject",
+        "issuer",
+        "authority",
+        "source",
+        "auth_method",
+        "issued_at",
+        "expires_at",
+        "token_ref"
+      ],
+      "properties": {
+        "subject": {
+          "type": "string"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "authority": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "enum": [
+            "idp_token",
+            "local_principal",
+            "unverified"
+          ]
+        },
+        "auth_method": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date-time"
+        },
+        "token_ref": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "authVerifyParams": {
+      "type": "object",
+      "description": "`rigorix.auth.verify` params — the OSS-issued attestation to verify against the organization's JWKS.",
+      "required": [
+        "attestation"
+      ],
+      "properties": {
+        "attestation": {
+          "type": "string",
+          "description": "The OSS-attested claim/token to verify via JWKS. Never echoed back."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authVerifyResult": {
+      "type": "object",
+      "description": "Result of org-side JWKS verification of an OSS-attested claim. `claim` is the shared identityClaim (full, attributed — never a raw token).",
+      "required": [
+        "claim"
+      ],
+      "properties": {
+        "claim": {
+          "$ref": "#/$defs/identityClaim"
         }
       },
       "additionalProperties": false

@@ -8,6 +8,10 @@
   "properties": {
     "apiVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
     "jsonrpc": { "const": "2.0" },
+    "description": {
+      "type": "string",
+      "description": "Closed-namespace rule (ADR-0001 D3): a server implements a subset, never an extension."
+    },
     "transport": {
       "type": "object",
       "required": ["kind", "endpoint", "contentType"],
