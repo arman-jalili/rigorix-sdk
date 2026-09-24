@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/api/ledger-receipt-v1.json",
+  "title": "Rigorix Ledger Receipt v1",
+  "description": "ADR-016 anchor-signed ledger receipt: the anchor's durable acknowledgement that it verified and appended an envelope at a given per-producer sequence. Clients verify the Ed25519 `sig` with the anchor's PUBLIC key — the agent host cannot forge it (HMAC stays the local cache mechanism and is not an authority signal). No policy/matcher/verdict lives in the anchor.",
+  "type": "object",
+  "required": ["ledger_id", "envelope_hash", "sequence", "recorded_at", "sig"],
+  "properties": {
+    "ledger_id": {
+      "type": "string",
+      "description": "Anchor ledger identifier (one logical append-only ledger per producer/tenant)."
+    },
+    "envelope_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 (hex) of the recorded envelope's canonical bytes (`signature` nulled) — the SAME value a successor stores in `prev_hash`. One canonical form, no second dialect."
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "The per-producer sequence the anchor assigned/verified for the recorded envelope."
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the anchor durably recorded the envelope."
+    },
+    "sig": {
+      "type": "string",
+      "description": "Ed25519 signature (hex, 64 bytes) over the canonical receipt bytes (`sig` set to null)."
+    }
+  },
+  "additionalProperties": false,
+  "x-signing": {
+    "algorithm": "ed25519",
+    "canonicalization": "serde_json::to_string(receipt with `sig` = null) — UTF-8 bytes; no map fields, so field/declaration order is stable.",
+    "publicKey": "32-byte Ed25519 public key, hex. The verifier takes it out-of-band; it is never carried in the artifact."
+  }
+}

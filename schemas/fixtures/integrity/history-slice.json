@@ -1,0 +1,23 @@
+{
+  "scope": "local",
+  "since": "2026-09-24T19:39:30.656809Z",
+  "actions": [
+    {
+      "node": "fetch_invoices",
+      "principal": "alice@corp",
+      "at": "2026-09-24T19:39:30.656683Z"
+    },
+    {
+      "node": "migrate_prod",
+      "principal": "alice@corp",
+      "at": "2026-09-24T19:39:30.656957Z"
+    },
+    {
+      "node": "deploy_prod",
+      "principal": "alice@corp",
+      "at": "2026-09-24T19:39:30.657109Z"
+    }
+  ],
+  "head_hash": "3a5099eb462b5eb83b5d1444981d40f98a3935f4fa1bca7e59ef79c7d9cebaef",
+  "sig": "476c839e07a0c9bdf1d3e37612432ad3ce5f5cf3a6dbf90c61fa8be16ebd6ec47112b71d5c86a62b3a52113b49fb6be775d41ce94bffb28ba74d07fe5482dc08"
+}

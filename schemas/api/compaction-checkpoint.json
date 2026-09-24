@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/api/compaction-checkpoint-v1.json",
+  "title": "Rigorix Compaction Checkpoint v1",
+  "description": "ADR-016 anchor-signed compaction checkpoint: the proof that a contiguous range of a producer's chain was deliberately erased (GDPR / retention). A verifier accepts a chain gap IF AND ONLY IF it is covered by a checkpoint whose `prior_head`/`new_head` are the hashes bracketing the gap and whose `sequence_from..sequence_to` is exactly the missing range; an uncovered gap is a failure. Deletion becomes a recorded, provable compaction rather than a silent absence.",
+  "type": "object",
+  "required": ["sequence_from", "sequence_to", "reason", "prior_head", "new_head", "sig"],
+  "properties": {
+    "sequence_from": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "First erased sequence (inclusive)."
+    },
+    "sequence_to": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Last erased sequence (inclusive). Must be >= `sequence_from`."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why the range was compacted (e.g. `gdpr-erasure`, `retention`)."
+    },
+    "prior_head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "`envelope_hash` of the envelope immediately BEFORE the erased range — the hash the first erased successor would have stored in `prev_hash`."
+    },
+    "new_head": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "`envelope_hash` of the envelope immediately AFTER the erased range. The successor after the gap stores this as its `prev_hash`, linking across the gap."
+    },
+    "sig": {
+      "type": "string",
+      "description": "Ed25519 signature (hex, 64 bytes) over the canonical checkpoint bytes (`sig` set to null)."
+    }
+  },
+  "additionalProperties": false,
+  "x-signing": {
+    "algorithm": "ed25519",
+    "canonicalization": "serde_json::to_string(checkpoint with `sig` = null) — UTF-8 bytes; no map fields.",
+    "publicKey": "32-byte Ed25519 public key, hex; supplied out-of-band."
+  }
+}

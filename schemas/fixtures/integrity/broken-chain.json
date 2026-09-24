@@ -1,0 +1,67 @@
+[
+  {
+    "execution_id": "089146d6-4772-48f8-97ae-7faed03da6a0",
+    "timestamp": "2026-09-24T19:39:30.656809Z",
+    "template_id": "attendance",
+    "planning_hash": "b433c38a9eb158de2e6c48efb07b1163e299190b710d3089828be81e3011eac5",
+    "source": "rigorix_cli",
+    "repository": null,
+    "author": "alice@corp",
+    "total_tokens": 0,
+    "duration_ms": 10,
+    "git_commit": null,
+    "git_branch": null,
+    "model_version": null,
+    "planning_prompt": null,
+    "events": [
+      {
+        "event_type": "node_completed",
+        "summary": "fetch_invoices completed",
+        "occurred_at": "2026-09-24T19:39:30.656683Z",
+        "correlation_id": null,
+        "status": "Success",
+        "payload": {
+          "step_name": "fetch_invoices"
+        }
+      }
+    ],
+    "signature": "911d9238fd4caee7f5e2fc0ef45c454733cbf83bbf576b08c15263bf441c67ec",
+    "evidence_degraded": false,
+    "producer_id": "local",
+    "sequence": 0,
+    "history_integrity": "local_unanchored"
+  },
+  {
+    "execution_id": "5566b0e9-880e-4aee-845c-41f960c75a60",
+    "timestamp": "2026-09-24T19:39:30.657166Z",
+    "template_id": "attendance",
+    "planning_hash": "b433c38a9eb158de2e6c48efb07b1163e299190b710d3089828be81e3011eac5",
+    "source": "rigorix_cli",
+    "repository": null,
+    "author": "alice@corp",
+    "total_tokens": 0,
+    "duration_ms": 10,
+    "git_commit": null,
+    "git_branch": null,
+    "model_version": null,
+    "planning_prompt": null,
+    "events": [
+      {
+        "event_type": "node_completed",
+        "summary": "deploy_prod completed",
+        "occurred_at": "2026-09-24T19:39:30.657109Z",
+        "correlation_id": null,
+        "status": "Success",
+        "payload": {
+          "step_name": "deploy_prod"
+        }
+      }
+    ],
+    "signature": "f7516ea9695d3742c7b0afecaa2b5edc2c13edb2c96d1c2a0f653e1779ef6009",
+    "evidence_degraded": false,
+    "producer_id": "local",
+    "sequence": 2,
+    "prev_hash": "1a1f99bcaf9bd4375ebde789e7bb467f3f09fc9bf7bb6424fbc5c13b0d86d195",
+    "history_integrity": "local_unanchored"
+  }
+]

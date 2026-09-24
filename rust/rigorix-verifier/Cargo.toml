@@ -15,6 +15,7 @@ hex = "0.4"
 uuid = { version = "1", features = ["serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 jsonschema = "0.26"
+ed25519-dalek = "2"
 thiserror = "2"
 
 [dev-dependencies]

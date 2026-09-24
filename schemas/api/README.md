@@ -9,6 +9,9 @@ recorded in [`docs/adr/ADR-0001-native-api-catalog.md`](../../docs/adr/ADR-0001-
 | `catalog.schema.json` | JSON Schema describing `catalog.json` (structure + ref pattern). |
 | `errors.json` | The JSON-RPC error model: stable `data.type` identifiers and their codes. |
 | `events.json` | The SSE push channel (`GET /events`): the three ADR-0001 D8 payloads as a discriminated union on the `event:` name, reusing `envelope.json` event refs. Specified by `docs/adr/ADR-0002-sse-push-channel.md`. |
+| `ledger-receipt.json` | ADR-016 anchor-signed ledger receipt (`ledger_id`, `envelope_hash`, `sequence`, `recorded_at`, Ed25519 `sig`). |
+| `history-slice.json` | ADR-016 anchor-signed history projection (`scope`, `since`, `actions[]`, `head_hash`, Ed25519 `sig`) the guard consumes in `anchored` mode. |
+| `compaction-checkpoint.json` | ADR-016 anchor-signed compaction proof (`sequence_from`, `sequence_to`, `reason`, `prior_head`, `new_head`, Ed25519 `sig`); a verifier accepts a chain gap iff covered by a valid checkpoint. |
 | `method-catalog.md` | The 2026-09-06 pre-freeze sketch (historical; superseded by `catalog.json`). |
 
 ## Rules
