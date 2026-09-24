@@ -9,7 +9,7 @@ Architecture-first: every change traces back to canonical architecture docs.
 
 1. Ensure `git init` has been run and `.gitignore` is in place (Guardian scaffolds a comprehensive `.gitignore`)
 2. Fill in project context in `.pi/agent/AGENTS.md` (replace `[bracketed]` placeholders)
-3. Run `npx guardian-framework generate` to create `.agents/`, `.claude/`, etc.
+3. Run `npx guardian-framework generate` to regenerate tool exports (pi skills under `.pi/skills/`, plus `.claude/` etc. for other tools)
 
 > **Multi-techstack repos:** If your repository has both backend and frontend (e.g., Java + TypeScript), run `guardian-framework init` in each directory with the same repository URL. Each gets its own `.pi/`, manifest, build config, and CI pipeline. Scope CI path triggers to avoid collisions (`backend/**`, `frontend/**`).
 
