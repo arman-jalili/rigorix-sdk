@@ -193,3 +193,33 @@ Then: catalog design → servers → SDKs.
     follow-up that requires the frozen copy to grow the field).
   - Both changes additive and serde-defaulted — existing envelopes/rules validate
     unchanged; `requirements: []` is the status quo (no gating).
+
+- **2026-09-24 — ADR-0002 SSE push channel (formal spec, additive contract):**
+  ADR-0001 D8 fixed the push transport + event-name set but deferred reconnect /
+  `Last-Event-ID` semantics and the exact payloads to the servers. ADR-0002
+  freezes them before C2/C3 diverge, grounded in the landed OSS reference host
+  (`rigorix-oss/server/src/events.rs`, #894) and the engine event enum
+  (`engine/src/event_system/domain/event.rs`).
+  - `docs/adr/ADR-0002-sse-push-channel.md` — endpoint + SSE framing, monotonic
+    u64 `id`, `Last-Event-ID` header/query replay, bounded ring + gap→resync via
+    `rigorix.audit.read`, ordering, bounded backpressure, `session` auth +
+    per-session scoping (D5 identity invariant), poll fallback, and the normative
+    engine `ExecutionEvent` → SSE-name mapping table (24 variants; 5 host-telemetry
+    variants explicitly not pushed — none silently dropped).
+  - `schemas/api/events.json` — new frozen schema: the three payloads as a `oneOf`
+    discriminated union on the SSE `event:` name; `data` `$ref`s
+    `envelope.json#/$defs/executionEventRef` (**reuse, no second envelope dialect**)
+    and mirrors the OSS `ServerEvent { id, event, data }`. `x-engine-event-mapping`
+    carries the mapping table machine-readably.
+  - `schemas/fixtures/events/*.json` — one committed fixture per event, each
+    validated against `api/events.json` by `rigorix-verifier`.
+  - `schemas/api/catalog.json` `transport.push` gains `schema: "api/events.json"`
+    (+ `catalog.schema.json`); `catalog_integrity` now resolves the ref and checks
+    `push.events` equals the schema discriminants.
+  - `rust/rigorix-verifier`: cross-file `$ref` resolution (envelope registered under
+    its `$id`, offline, no network); `api/events.json` added to `all_schemas_compile`;
+    new `events_fixtures_validate` + `events_mapping_complete` — 16 tests green.
+  - **Drift fixed from code (issue #10 draft):** the engine enum has 24 variants
+    (the stale `event.rs` doc comment says 11); the 5 audit/telemetry variants are
+    not run-lifecycle push and are marked not-pushed.
+  - Additive only: a new SSE event name is still a contract change (ADR-0001 D3).

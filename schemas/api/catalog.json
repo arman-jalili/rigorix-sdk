@@ -9,6 +9,7 @@
     "push": {
       "kind": "sse",
       "endpoint": "/events",
+      "schema": "api/events.json",
       "events": [
         "approval_required",
         "run_progress",

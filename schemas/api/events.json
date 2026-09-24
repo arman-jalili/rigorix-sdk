@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/api/events-v1.json",
+  "title": "Rigorix Native API — SSE push events v1",
+  "description": "The three ADR-0001 D8 server-push events on `GET /events` (SSE), frozen before either server is built (ADR-0002, SDK-C1). The logical event is a discriminated union on the SSE `event:` name; each `data` payload REUSES `envelope.json` `$defs.executionEventRef` (event_type / summary / occurred_at / status / payload) — there is no second envelope dialect. The wire framing (`id:` / `event:` / `data:` lines, keep-alive comments) is specified in docs/adr/ADR-0002-sse-push-channel.md; this schema models the reconstructed logical event (what the OSS `rigorix-server` publishes as `ServerEvent` and a client applies to the stream).",
+  "oneOf": [
+    { "$ref": "#/$defs/approvalRequired" },
+    { "$ref": "#/$defs/runProgress" },
+    { "$ref": "#/$defs/policyChanged" }
+  ],
+  "x-engine-event-mapping": {
+    "planning_started": "run_progress",
+    "planning_completed": "run_progress",
+    "node_started": "run_progress",
+    "node_completed": "run_progress",
+    "node_failed": "run_progress",
+    "node_retrying": "run_progress",
+    "tool_executed": "run_progress",
+    "execution_completed": "run_progress",
+    "execution_failed": "run_progress",
+    "execution_cancelled": "run_progress",
+    "budget_warning": "run_progress",
+    "approval_recorded": "approval_required",
+    "intent_mismatch_detected": "approval_required",
+    "sequence_rule_matched": "policy_changed",
+    "sequence_policy_denied": "policy_changed",
+    "sequence_policy_config_error": "policy_changed",
+    "requirement_unmet": "policy_changed",
+    "requirement_promoted": "policy_changed",
+    "scope_violation_recorded": "policy_changed",
+    "audit_envelope_delivered": null,
+    "audit_envelope_queued": null,
+    "audit_envelope_dropped": null,
+    "audit_envelope_created": null,
+    "circuit_breaker_state_changed": null
+  },
+  "$defs": {
+    "envelopeEventRef": {
+      "$comment": "Reuse, don't redefine — the envelope event-ref shape lives in envelope.json.",
+      "$ref": "https://rigorix.dev/schemas/envelope-v2.json#/$defs/executionEventRef"
+    },
+    "eventEnvelope": {
+      "type": "object",
+      "title": "SSE server event",
+      "description": "The logical event a client reconstructs from one SSE frame: the stream `id`, the `event:` name, and the envelope event-ref `data` payload. Mirrors `rigorix-server`'s `ServerEvent { id, event, data }` (server/src/events.rs).",
+      "required": ["id", "event", "data"],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "SSE `id:`. Monotonic u64 assigned per stream at publish time, starting at 1. Used for Last-Event-ID replay and gap detection (a first replayed id greater than last+1 means the requested id fell out of the replay window — resync via rigorix.audit.read)."
+        },
+        "event": {
+          "type": "string",
+          "description": "The SSE `event:` name — one of the three frozen ADR-0001 D8 names. Additive-only within the apiVersion major; a new name is a contract change."
+        },
+        "data": { "$ref": "#/$defs/envelopeEventRef" }
+      },
+      "additionalProperties": false
+    },
+    "approvalRequired": {
+      "title": "approval_required",
+      "description": "A run paused for human approval, scoped to the attested session. `data.event_type` is an approval-lifecycle engine event (`approval_recorded` or `intent_mismatch_detected`, the latter re-requesting approval after the intent changed). The pending pause itself is server state (the run result's `pending_approval_steps`), so `data.payload` may carry the step identity; parameter values are never pushed (SpanPrivacy).",
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        { "properties": { "event": { "const": "approval_required" } } }
+      ]
+    },
+    "runProgress": {
+      "title": "run_progress",
+      "description": "Progress on a running execution. `data.event_type` is a run-lifecycle engine event from the mapping table (planning / node / tool / completion / budget warning).",
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        { "properties": { "event": { "const": "run_progress" } } }
+      ]
+    },
+    "policyChanged": {
+      "title": "policy_changed",
+      "description": "Policy/sequence evidence for the session: a sequence rule matched, a dispatch was denied, a requirement was unmet/promoted, a scope violation was recorded, or a policy-bundle version changed. `data.event_type` is one of the policy engine events from the mapping table.",
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        { "properties": { "event": { "const": "policy_changed" } } }
+      ]
+    }
+  }
+}

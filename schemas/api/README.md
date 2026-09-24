@@ -8,6 +8,7 @@ recorded in [`docs/adr/ADR-0001-native-api-catalog.md`](../../docs/adr/ADR-0001-
 | `catalog.json` | The frozen method catalog **data**: names, kind, auth level, params/result schema refs (`$defs`), MCP adapter mapping. |
 | `catalog.schema.json` | JSON Schema describing `catalog.json` (structure + ref pattern). |
 | `errors.json` | The JSON-RPC error model: stable `data.type` identifiers and their codes. |
+| `events.json` | The SSE push channel (`GET /events`): the three ADR-0001 D8 payloads as a discriminated union on the `event:` name, reusing `envelope.json` event refs. Specified by `docs/adr/ADR-0002-sse-push-channel.md`. |
 | `method-catalog.md` | The 2026-09-06 pre-freeze sketch (historical; superseded by `catalog.json`). |
 
 ## Rules
@@ -27,7 +28,9 @@ recorded in [`docs/adr/ADR-0001-native-api-catalog.md`](../../docs/adr/ADR-0001-
 5. **Code is truth.** Result/param shapes are projections of rigorix-oss DTOs
    (`mcp/src/*/application/dto`); the canonical signed artifact remains
    [`../envelope.json`](../envelope.json), claims [`../claims.json`](../claims.json),
-   policy [`../policy.json`](../policy.json).
+   policy [`../policy.json`](../policy.json). Push payloads reuse
+   `envelope.json` event refs — never a second envelope dialect
+   ([`events.json`](events.json), ADR-0002).
 
 ## Adding a method
 

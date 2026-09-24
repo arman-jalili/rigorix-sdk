@@ -1,0 +1,19 @@
+{
+  "id": 3,
+  "event": "policy_changed",
+  "data": {
+    "event_type": "sequence_rule_matched",
+    "summary": "Rule 'no-deploy-after-migrate' promoted step 'deploy-prod' for approval",
+    "occurred_at": "2026-09-24T15:19:58.310Z",
+    "status": "Success",
+    "correlation_id": "0f5c2d7a-9b41-4e6a-8f2b-1c3d5e7a9b0c",
+    "payload": {
+      "execution_id": "0f5c2d7a-9b41-4e6a-8f2b-1c3d5e7a9b0c",
+      "rule_id": "no-deploy-after-migrate",
+      "action": "promote",
+      "later_step": "deploy-prod",
+      "matched_indices": [1, 2],
+      "summary": "migrate-prod followed by deploy-prod within the same plan"
+    }
+  }
+}

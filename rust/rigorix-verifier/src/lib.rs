@@ -260,8 +260,7 @@ fn validate_schema_file(file: &str, json: &str) -> VerifyResult<()> {
         .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", schema_path.display())))?;
     let schema = serde_json::from_str(&schema_text)?;
     let instance: serde_json::Value = serde_json::from_str(json)?;
-    let compiled =
-        jsonschema::validator_for(&schema).map_err(|e| VerifyError::Schema(e.to_string()))?;
+    let compiled = build_validator(file, &schema)?;
     let errors: Vec<String> = compiled
         .iter_errors(&instance)
         .map(|e| e.to_string())
@@ -294,6 +293,30 @@ fn schema_path(file: &str) -> VerifyResult<std::path::PathBuf> {
             p.display()
         )))
     }
+}
+
+/// The `$id` of the canonical envelope schema — the only cross-file `$ref`
+/// target on the contract surface (`api/events.json` → `envelope.json`).
+const ENVELOPE_SCHEMA_ID: &str = "https://rigorix.dev/schemas/envelope-v2.json";
+
+/// Build a JSON Schema validator, registering sibling contract schemas so
+/// cross-file `$ref`s (e.g. `events.json` → `envelope.json`) resolve offline.
+fn build_validator(file: &str, schema: &serde_json::Value) -> VerifyResult<jsonschema::Validator> {
+    // The envelope schema is the only external `$ref` target today. Register it
+    // under its `$id` unless we are compiling the envelope itself.
+    if file == "envelope.json" {
+        return jsonschema::validator_for(schema).map_err(|e| VerifyError::Schema(e.to_string()));
+    }
+    let envelope_path = schema_path("envelope.json")?;
+    let envelope_text = std::fs::read_to_string(&envelope_path)
+        .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", envelope_path.display())))?;
+    let envelope: serde_json::Value = serde_json::from_str(&envelope_text)?;
+    let resource = jsonschema::Resource::from_contents(envelope)
+        .map_err(|e| VerifyError::Schema(e.to_string()))?;
+    jsonschema::options()
+        .with_resource(ENVELOPE_SCHEMA_ID, resource)
+        .build(schema)
+        .map_err(|e| VerifyError::Schema(e.to_string()))
 }
 
 /// Constant-time comparison for hex signatures.
@@ -529,15 +552,104 @@ mod tests {
             "policy.json",
             "api/catalog.schema.json",
             "api/errors.json",
+            "api/events.json",
         ] {
             let path = dir.join(name);
             let text = std::fs::read_to_string(&path)
                 .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
             let schema: serde_json::Value =
                 serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-            jsonschema::validator_for(&schema)
+            build_validator(name, &schema)
                 .unwrap_or_else(|e| panic!("{}: not a valid schema: {e}", path.display()));
         }
+    }
+
+    // ─── SSE push events (ADR-0002 / SDK-C1) ────────────────────────────
+    //
+    // The committed event fixtures must validate against `api/events.json`
+    // (which `$ref`s the envelope event-ref shape — no second dialect), and
+    // the engine→SSE mapping table must stay complete: every engine
+    // `ExecutionEvent` variant is either assigned to one of the three frozen
+    // SSE names or explicitly marked not-pushed (`null`). SDK-C1 acceptance
+    // criteria 2 and 4.
+    #[test]
+    fn events_fixtures_validate() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/fixtures/events");
+        let entries =
+            std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read {}: {e}", dir.display()));
+        let mut found = 0;
+        for entry in entries {
+            let path = entry.expect("dir entry").path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let json = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+            validate_schema_file("api/events.json", &json)
+                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            found += 1;
+        }
+        assert!(
+            found >= 3,
+            "expected ≥3 committed SSE event fixtures, found {found} in {}",
+            dir.display()
+        );
+    }
+
+    #[test]
+    fn events_mapping_complete() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/events.json");
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let events: serde_json::Value = serde_json::from_str(&text).expect("events parses");
+
+        // 24 `ExecutionEvent` variants live in
+        // `engine/src/event_system/domain/event.rs::event_type_name()`.
+        let mapping = events["x-engine-event-mapping"]
+            .as_object()
+            .expect("x-engine-event-mapping object");
+        assert_eq!(
+            mapping.len(),
+            24,
+            "engine→SSE mapping must cover all 24 engine event variants"
+        );
+
+        let frozen = ["approval_required", "run_progress", "policy_changed"];
+        for (event_type, target) in mapping {
+            match target.as_str() {
+                Some(name) => assert!(
+                    frozen.contains(&name),
+                    "{event_type} maps to unknown SSE event {name}"
+                ),
+                None => assert!(target.is_null(), "{event_type}: bad mapping value"),
+            }
+        }
+        for name in frozen {
+            assert!(
+                mapping.values().any(|v| v.as_str() == Some(name)),
+                "SSE event {name} has no engine event assigned"
+            );
+        }
+
+        // The `oneOf` discriminant consts must equal the frozen event-name set.
+        let mut consts: Vec<String> = Vec::new();
+        for variant in events["oneOf"].as_array().expect("events oneOf") {
+            let key = variant["$ref"]
+                .as_str()
+                .expect("variant $ref")
+                .rsplit('/')
+                .next()
+                .expect("$defs key");
+            for part in events["$defs"][key]["allOf"].as_array().expect("allOf") {
+                if let Some(c) = part["properties"]["event"]["const"].as_str() {
+                    consts.push(c.to_string());
+                }
+            }
+        }
+        consts.sort();
+        let mut expected: Vec<String> = frozen.iter().map(|s| s.to_string()).collect();
+        expected.sort();
+        assert_eq!(consts, expected, "oneOf discriminant set drifted");
     }
 
     // ─── Native API catalog integrity (ADR-0001) ──────────────────────────
@@ -614,6 +726,52 @@ mod tests {
                 );
             }
         }
+
+        // The push channel must reference the frozen events schema, and the
+        // advertised event-name set must match that schema's discriminants
+        // (ADR-0002 / SDK-C1).
+        let push = &catalog["transport"]["push"];
+        assert_eq!(push["kind"], "sse", "push kind");
+        assert_eq!(push["endpoint"], "/events", "push endpoint");
+        let push_schema = push["schema"].as_str().expect("transport.push.schema");
+        let push_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../schemas")
+            .join(push_schema);
+        let push_text = std::fs::read_to_string(&push_path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", push_path.display()));
+        let push_events: serde_json::Value =
+            serde_json::from_str(&push_text).expect("events schema parses");
+        build_validator(push_schema, &push_events)
+            .unwrap_or_else(|e| panic!("{}: {e}", push_path.display()));
+        let mut declared: Vec<&str> = push["events"]
+            .as_array()
+            .expect("push.events")
+            .iter()
+            .map(|v| v.as_str().expect("event name"))
+            .collect();
+        declared.sort_unstable();
+        let mut known: Vec<&str> = Vec::new();
+        for variant in push_events["oneOf"].as_array().expect("events oneOf") {
+            let key = variant["$ref"]
+                .as_str()
+                .expect("variant $ref")
+                .rsplit('/')
+                .next()
+                .expect("$defs key");
+            for part in push_events["$defs"][key]["allOf"]
+                .as_array()
+                .expect("allOf")
+            {
+                if let Some(c) = part["properties"]["event"]["const"].as_str() {
+                    known.push(c);
+                }
+            }
+        }
+        known.sort_unstable();
+        assert_eq!(
+            declared, known,
+            "catalog transport.push.events must match events.json discriminants"
+        );
     }
 
     // The error taxonomy and its code mapping must stay in sync: every
