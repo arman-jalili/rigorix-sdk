@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/api/history-slice-v1.json",
+  "title": "Rigorix History Slice v1",
+  "description": "ADR-016 anchor-signed history projection: the narrow, verifiable read the cross-run guard consumes in `anchored` mode. The engine's `ExecutionHistory` port returns this projection after the anchor's Ed25519 `sig` verifies; a forged slice is rejected and consequential runs fail closed. Actions mirror the engine `HistoryAction` (never parameter values — SpanPrivacy).",
+  "type": "object",
+  "required": ["scope", "since", "actions", "head_hash", "sig"],
+  "properties": {
+    "scope": {
+      "type": "string",
+      "description": "The producer/scope the slice covers (e.g. the envelope `producer_id`)."
+    },
+    "since": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Lower bound (inclusive) for the actions included in the slice."
+    },
+    "actions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/historyAction" },
+      "description": "Prior executed actions (newest or oldest order is anchor-defined; ordering is not part of the trust claim)."
+    },
+    "head_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "`envelope_hash` of the latest envelope covered by the slice — the chain head the anchor attests to."
+    },
+    "sig": {
+      "type": "string",
+      "description": "Ed25519 signature (hex, 64 bytes) over the canonical slice bytes (`sig` set to null)."
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "historyAction": {
+      "type": "object",
+      "description": "A prior executed action projected from the signed trail (mirrors rigorix-oss `HistoryAction`). Parameter values never appear.",
+      "required": ["node", "principal", "at"],
+      "properties": {
+        "node": {
+          "type": "string",
+          "description": "Executed node's stable template identifier."
+        },
+        "principal": {
+          "type": ["string", "null"],
+          "description": "Principal that triggered the prior run. Null when the prior run recorded neither author nor attested identity."
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the action completed."
+        },
+        "effect_key": {
+          "type": ["string", "null"],
+          "description": "R8/ADR-014 one-way keyed effect hash; null/absent for effect-less runs (which never satisfy an effect-keyed predicate)."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "x-signing": {
+    "algorithm": "ed25519",
+    "canonicalization": "serde_json::to_string(slice with `sig` = null) — UTF-8 bytes; no map fields.",
+    "publicKey": "32-byte Ed25519 public key, hex; supplied out-of-band."
+  }
+}

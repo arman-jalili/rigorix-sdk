@@ -1,0 +1,7 @@
+{
+  "ledger_id": "local-ledger",
+  "envelope_hash": "3a5099eb462b5eb83b5d1444981d40f98a3935f4fa1bca7e59ef79c7d9cebaef",
+  "sequence": 2,
+  "recorded_at": "2026-09-24T19:39:30.657166Z",
+  "sig": "82cf5d0e816547380938f927f7facf011c1d489112ce46a0a04a5884fa6809dc5c9a153d65b4e50aaa26bbadde2ef067d791217cc452a722dc585944dc997e02"
+}

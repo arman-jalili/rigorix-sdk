@@ -21,7 +21,7 @@ Issues are grouped by:
 |---|----|----------|-----------|----------------|
 | 10 | SDK-C1 | high | `docs/adr` + `schemas/api` + `schemas/fixtures/events` + verifier | **Yes** — self-contained spec; engine `ExecutionEvent` + OSS `server/src/events.rs` exist as code truth |
 | 11 | SDK-C4 | medium | `rust/rigorix-client` + `typescript/` | Yes, but large; lists C1 as an optional dependency for event-stream parity |
-| 12 | SDK-AUDIT-A | high | `schemas/envelope.json` + `schemas/api` + verifier | **No — BLOCKED** |
+| 12 | SDK-AUDIT-A | high | `schemas/envelope.json` + `schemas/api` + `schemas/fixtures/integrity` + verifier | **Yes** — ADR-016 Phase A landed (`rigorix-oss` #902, `83e904ad`): engine struct now carries the chain fields |
 
 ---
 
@@ -39,18 +39,18 @@ Issues are grouped by:
 
 ---
 
-## Group: Blocked (do not start)
+## Group: Audit integrity (single) — unblocked 2026-09-24
 
-**Issue:** #12 SDK-AUDIT-A — Envelope integrity contract
+**Branch:** `issue/12`
+**Issue:** 1
+- #12 SDK-AUDIT-A: Envelope integrity contract — chain fields + receipt /
+  history-slice / compaction schemas + verifier chain support
 
-**Blocker:** ADR-016 is Accepted in rigorix-oss, but the engine
-`AuditEnvelope` struct does **not** yet carry `producer_id` / `sequence` /
-`prev_hash` / `history_integrity` (verified: `grep` over
-`rigorix-oss/engine/src` returns zero hits). Per `AGENTS.md` rule 1
-("Code is truth") the SDK schemas must mirror the engine struct; implementing
-now would invent field names. The issue's own dependency list names
-"OSS Phase A (engine is code truth — the struct gains the fields)". Re-triage
-when that lands.
+**Previously blocked:** ADR-016 Phase A has now landed in `rigorix-oss`
+(`83e904ad`, #902) — `AuditEnvelope` carries `producer_id` / `sequence` /
+`prev_hash` / `history_integrity` / **`history_policy`**. Per `AGENTS.md` rule 1
+the schemas mirror the engine struct field-for-field, and the verifier's frozen
+copy now does too.
 
 ---
 

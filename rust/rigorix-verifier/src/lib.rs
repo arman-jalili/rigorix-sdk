@@ -22,9 +22,10 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 /// Deterministic map serialization (mirrors rigorix-oss envelope.rs).
 ///
@@ -67,6 +68,10 @@ pub enum VerifyError {
     UnsignedNotDegraded,
     #[error("HMAC key error: {0}")]
     HmacKey(String),
+    #[error("audit chain broken: {detail}")]
+    ChainBroken { detail: String },
+    #[error("invalid Ed25519 anchor signature: {0}")]
+    AnchorSignature(String),
 }
 
 pub type VerifyResult<T> = Result<T, VerifyError>;
@@ -110,14 +115,56 @@ pub struct AuditEnvelope {
     pub signature: Option<String>,
     #[serde(default)]
     pub evidence_degraded: bool,
+    /// ADR-016 / GAP-A-30 (Phase A): the chain this envelope belongs to.
+    /// Additive and serde-defaulted; `None` in legacy (pre-chain) envelopes.
+    /// MUST stay in the engine's struct position (after `evidence_degraded`,
+    /// before `approval_events`) or canonical bytes diverge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub producer_id: Option<String>,
+    /// ADR-016: monotonic per-producer sequence (genesis 0). Serde-defaulted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sequence: Option<u64>,
+    /// ADR-016: SHA-256 of the predecessor's canonical bytes (`signature`
+    /// nulled — the SAME form the HMAC signs). `None` for genesis/legacy.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prev_hash: Option<String>,
+    /// ADR-016: which integrity regime produced this evidence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_integrity: Option<HistoryIntegrity>,
+    /// ADR-016: the recorded `allow_unanchored` opt-in, when present. Adds to
+    /// the signed bytes, so the regime is auditable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub history_policy: Option<HistoryPolicy>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub approval_events: Vec<ApprovalRecordRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scope_violations: Vec<ScopeViolationRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sequence_policy_findings: Vec<SequencePolicyFindingRef>,
+    /// R9/ADR-015 operator step-requirement findings. MUST stay after
+    /// `sequence_policy_findings` and before `decision_context_ref`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requirement_findings: Vec<RequirementFindingRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_context_ref: Option<String>,
+}
+
+/// ADR-016: which integrity regime produced an envelope's evidence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryIntegrity {
+    /// Local cache only — tamper-evident, not anchor-authenticated.
+    LocalUnanchored,
+    /// Anchor-authenticated evidence (Phase C).
+    Anchored,
+}
+
+/// ADR-016: a recorded history-policy opt-in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryPolicy {
+    /// Accept best-effort evaluation over `local_unanchored` history.
+    AllowUnanchored,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -186,6 +233,17 @@ pub struct SequencePolicyFindingRef {
     pub summary: String,
 }
 
+/// R9/ADR-015 redacted operator step-requirement finding (mirrors the engine
+/// `RequirementFindingRef`). Parameter VALUES never appear (SpanPrivacy).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequirementFindingRef {
+    pub requirement_id: String,
+    pub step: String,
+    pub action: String,
+    pub unmet: Vec<String>,
+    pub summary: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScoringResultRef {
     pub passed: bool,
@@ -208,9 +266,312 @@ pub struct ScoreDimensionRef {
 /// Compute the canonical envelope bytes: parse, null the signature, serialize
 /// exactly as the engine's `compute_signature` does.
 pub fn canonical_bytes(json: &str) -> VerifyResult<Vec<u8>> {
-    let mut envelope: AuditEnvelope = serde_json::from_str(json)?;
-    envelope.signature = None;
-    Ok(serde_json::to_vec(&envelope)?)
+    let envelope: AuditEnvelope = serde_json::from_str(json)?;
+    canonical_bytes_of(&envelope)
+}
+
+/// Canonical bytes of a parsed envelope (`signature` nulled, sorted maps) —
+/// ADR-016: the SAME bytes define the HMAC signature, `prev_hash`, ledger
+/// `envelope_hash`, and checkpoint `prior_head`/`new_head` (one form).
+pub fn canonical_bytes_of(envelope: &AuditEnvelope) -> VerifyResult<Vec<u8>> {
+    let mut canonical = envelope.clone();
+    canonical.signature = None;
+    Ok(serde_json::to_vec(&canonical)?)
+}
+
+/// SHA-256 (hex) of an envelope's canonical bytes — the `prev_hash` value a
+/// successor stores (and the ledger `envelope_hash`).
+pub fn envelope_hash(json: &str) -> VerifyResult<String> {
+    let envelope: AuditEnvelope = serde_json::from_str(json)?;
+    envelope_hash_of(&envelope)
+}
+
+/// SHA-256 (hex) of a parsed envelope's canonical bytes.
+pub fn envelope_hash_of(envelope: &AuditEnvelope) -> VerifyResult<String> {
+    Ok(sha256_hex(&canonical_bytes_of(envelope)?))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+fn truncate8(s: &str) -> &str {
+    &s[..s.len().min(8)]
+}
+
+// ─── ADR-016: local per-producer chain ───────────────────────────────────────
+
+/// Group chained envelopes by producer and sort each chain by sequence.
+fn chains_by_producer(envelopes: &[AuditEnvelope]) -> Vec<(String, Vec<&AuditEnvelope>)> {
+    let mut by_producer: HashMap<String, Vec<&AuditEnvelope>> = HashMap::new();
+    for envelope in envelopes {
+        if let (Some(producer), Some(_)) = (envelope.producer_id.as_deref(), envelope.sequence) {
+            by_producer
+                .entry(producer.to_string())
+                .or_default()
+                .push(envelope);
+        }
+    }
+    let mut producers: Vec<String> = by_producer.keys().cloned().collect();
+    producers.sort();
+    producers
+        .into_iter()
+        .map(|producer| {
+            let mut chain = by_producer.remove(&producer).unwrap_or_default();
+            chain.sort_by_key(|e| e.sequence.expect("filtered on Some(sequence)"));
+            (producer, chain)
+        })
+        .collect()
+}
+
+/// Verify the local per-producer chain (ADR-016 Phase A), strictly — no gap is
+/// accepted. For each producer with chained envelopes:
+/// - genesis is sequence `0` with no `prev_hash` (a later start = head deletion);
+/// - sequences are contiguous and strictly increasing (missing = interior
+///   deletion; duplicate/out-of-order = insertion/reorder);
+/// - each successor's `prev_hash` equals SHA-256 of the predecessor's canonical
+///   bytes.
+///
+/// Legacy envelopes (`producer_id`/`sequence` = `None`) carry no chain claim and
+/// are grandfathered. See [`verify_chain_with_checkpoints`] to accept a range
+/// covered by a valid signed compaction checkpoint.
+pub fn verify_chain(envelopes: &[AuditEnvelope]) -> VerifyResult<()> {
+    verify_chain_with_checkpoints(envelopes, &[], "")
+}
+
+/// Verify the local per-producer chain, accepting a gap **iff** it is covered
+/// by a valid anchor-signed compaction checkpoint (ADR-016 AC 7): the
+/// checkpoint must bracket the gap with `prior_head == hash(before)` and
+/// `new_head == prev_hash(after)`, and name exactly the missing sequence range.
+/// An uncovered gap fails.
+pub fn verify_chain_with_checkpoints(
+    envelopes: &[AuditEnvelope],
+    checkpoints: &[CompactionCheckpoint],
+    anchor_public_key_hex: &str,
+) -> VerifyResult<()> {
+    // A checkpoint can only excuse a gap after its Ed25519 signature verifies.
+    for checkpoint in checkpoints {
+        verify_compaction_checkpoint(checkpoint, anchor_public_key_hex)?;
+    }
+
+    for (producer, chain) in chains_by_producer(envelopes) {
+        if chain.is_empty() {
+            continue;
+        }
+        let base = chain[0].sequence.expect("chained");
+        if base != 0 {
+            return Err(VerifyError::ChainBroken {
+                detail: format!(
+                    "producer '{producer}': chain starts at sequence {base}, not genesis 0 — \
+                     the earliest envelope(s) were deleted"
+                ),
+            });
+        }
+        if chain[0].prev_hash.is_some() {
+            return Err(VerifyError::ChainBroken {
+                detail: format!(
+                    "producer '{producer}': genesis envelope carries a prev_hash — \
+                     content was reordered into the genesis slot"
+                ),
+            });
+        }
+
+        for pair in chain.windows(2) {
+            let prev = pair[0];
+            let next = pair[1];
+            let prev_seq = prev.sequence.expect("chained");
+            let next_seq = next.sequence.expect("chained");
+            if next_seq <= prev_seq {
+                return Err(VerifyError::ChainBroken {
+                    detail: format!(
+                        "producer '{producer}': sequence not strictly increasing \
+                         ({prev_seq} -> {next_seq}) — insertion/reorder"
+                    ),
+                });
+            }
+            let prev_hash = envelope_hash_of(prev)?;
+            if next_seq == prev_seq + 1 {
+                match next.prev_hash.as_deref() {
+                    Some(actual) if actual == prev_hash => {}
+                    Some(actual) => {
+                        return Err(VerifyError::ChainBroken {
+                            detail: format!(
+                                "producer '{producer}': prev_hash mismatch at sequence \
+                                 {next_seq} (expected {}…, got {}…)",
+                                truncate8(&prev_hash),
+                                truncate8(actual),
+                            ),
+                        });
+                    }
+                    None => {
+                        return Err(VerifyError::ChainBroken {
+                            detail: format!(
+                                "producer '{producer}': missing prev_hash at sequence {next_seq}"
+                            ),
+                        });
+                    }
+                }
+                continue;
+            }
+
+            // A gap [prev_seq+1, next_seq-1] must be covered by a valid signed
+            // checkpoint that brackets it: prior_head == hash(before) and
+            // new_head == prev_hash(after) (the link over the erased range).
+            let next_link = next
+                .prev_hash
+                .as_deref()
+                .ok_or_else(|| VerifyError::ChainBroken {
+                    detail: format!(
+                        "producer '{producer}': missing prev_hash after gap at sequence {next_seq}"
+                    ),
+                })?;
+            let covered = checkpoints.iter().any(|c| {
+                c.sequence_from == prev_seq + 1
+                    && c.sequence_to == next_seq - 1
+                    && c.prior_head == prev_hash
+                    && c.new_head == next_link
+            });
+            if !covered {
+                return Err(VerifyError::ChainBroken {
+                    detail: format!(
+                        "producer '{producer}': uncovered gap sequences {}..={} \
+                         (missing envelopes with no valid compaction checkpoint)",
+                        prev_seq + 1,
+                        next_seq - 1,
+                    ),
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+// ─── ADR-016: anchor-signed artifacts (Ed25519) ──────────────────────────────
+
+/// ADR-016 anchor-signed ledger receipt.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LedgerReceipt {
+    pub ledger_id: String,
+    pub envelope_hash: String,
+    pub sequence: u64,
+    pub recorded_at: DateTime<Utc>,
+    /// `None` only while computing the signing bytes (`sig` nulled).
+    pub sig: Option<String>,
+}
+
+/// One prior action in an anchor-signed history slice (mirrors engine
+/// `HistoryAction`; parameter values never appear).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistoryActionRef {
+    pub node: String,
+    pub principal: Option<String>,
+    pub at: DateTime<Utc>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect_key: Option<String>,
+}
+
+/// ADR-016 anchor-signed history projection the guard consumes in anchored mode.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HistorySlice {
+    pub scope: String,
+    pub since: DateTime<Utc>,
+    pub actions: Vec<HistoryActionRef>,
+    pub head_hash: String,
+    pub sig: Option<String>,
+}
+
+/// ADR-016 anchor-signed compaction checkpoint.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompactionCheckpoint {
+    pub sequence_from: u64,
+    pub sequence_to: u64,
+    pub reason: String,
+    pub prior_head: String,
+    pub new_head: String,
+    pub sig: Option<String>,
+}
+
+/// Canonical signing bytes for a ledger receipt (`sig` nulled).
+pub fn ledger_receipt_signing_bytes(receipt: &LedgerReceipt) -> VerifyResult<Vec<u8>> {
+    let mut unsigned = receipt.clone();
+    unsigned.sig = None;
+    Ok(serde_json::to_vec(&unsigned)?)
+}
+
+/// Canonical signing bytes for a history slice (`sig` nulled).
+pub fn history_slice_signing_bytes(slice: &HistorySlice) -> VerifyResult<Vec<u8>> {
+    let mut unsigned = slice.clone();
+    unsigned.sig = None;
+    Ok(serde_json::to_vec(&unsigned)?)
+}
+
+/// Canonical signing bytes for a compaction checkpoint (`sig` nulled).
+pub fn compaction_checkpoint_signing_bytes(
+    checkpoint: &CompactionCheckpoint,
+) -> VerifyResult<Vec<u8>> {
+    let mut unsigned = checkpoint.clone();
+    unsigned.sig = None;
+    Ok(serde_json::to_vec(&unsigned)?)
+}
+
+fn public_key_from_hex(public_key_hex: &str) -> VerifyResult<VerifyingKey> {
+    let bytes = hex::decode(public_key_hex)
+        .map_err(|e| VerifyError::AnchorSignature(format!("public key hex: {e}")))?;
+    let arr: [u8; 32] = bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| VerifyError::AnchorSignature("public key must be 32 bytes".to_string()))?;
+    VerifyingKey::from_bytes(&arr).map_err(|e| VerifyError::AnchorSignature(e.to_string()))
+}
+
+/// Verify an Ed25519 signature (`sig_hex`, 64 bytes) over `canonical` with the
+/// anchor's public key (`public_key_hex`, 32 bytes).
+pub fn verify_ed25519(canonical: &[u8], sig_hex: &str, public_key_hex: &str) -> VerifyResult<()> {
+    let key = public_key_from_hex(public_key_hex)?;
+    let sig_bytes = hex::decode(sig_hex)
+        .map_err(|e| VerifyError::AnchorSignature(format!("signature hex: {e}")))?;
+    let arr: [u8; 64] = sig_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| VerifyError::AnchorSignature("signature must be 64 bytes".to_string()))?;
+    let signature = Signature::from_bytes(&arr);
+    key.verify(canonical, &signature)
+        .map_err(|e| VerifyError::AnchorSignature(e.to_string()))
+}
+
+/// Verify a ledger receipt's Ed25519 signature.
+pub fn verify_ledger_receipt(receipt: &LedgerReceipt, public_key_hex: &str) -> VerifyResult<()> {
+    let sig = receipt.sig.clone().unwrap_or_default();
+    verify_ed25519(
+        &ledger_receipt_signing_bytes(receipt)?,
+        &sig,
+        public_key_hex,
+    )
+}
+
+/// Verify a history slice's Ed25519 signature.
+pub fn verify_history_slice(slice: &HistorySlice, public_key_hex: &str) -> VerifyResult<()> {
+    let sig = slice.sig.clone().unwrap_or_default();
+    verify_ed25519(&history_slice_signing_bytes(slice)?, &sig, public_key_hex)
+}
+
+/// Verify a compaction checkpoint's Ed25519 signature.
+pub fn verify_compaction_checkpoint(
+    checkpoint: &CompactionCheckpoint,
+    public_key_hex: &str,
+) -> VerifyResult<()> {
+    let sig = checkpoint.sig.clone().unwrap_or_default();
+    verify_ed25519(
+        &compaction_checkpoint_signing_bytes(checkpoint)?,
+        &sig,
+        public_key_hex,
+    )
 }
 
 /// Compute the HMAC-SHA256 hex signature over the canonical form.
@@ -553,6 +914,9 @@ mod tests {
             "api/catalog.schema.json",
             "api/errors.json",
             "api/events.json",
+            "api/ledger-receipt.json",
+            "api/history-slice.json",
+            "api/compaction-checkpoint.json",
         ] {
             let path = dir.join(name);
             let text = std::fs::read_to_string(&path)
@@ -800,6 +1164,230 @@ mod tests {
                 "code mapping '{key}' is not a declared error type"
             );
         }
+    }
+
+    // ─── ADR-016 audit integrity (SDK-AUDIT-A / #12) ─────────────────────
+    //
+    // The chained fixtures are produced by the REAL rigorix-oss engine
+    // (ADR-016 Phase A, #902) with the fixed fixture key. The anchor artifacts
+    // (receipt / slice / checkpoint) have no anchor implementation yet — they
+    // are contract fixtures signed with a deterministic TEST-ONLY Ed25519 key
+    // (see `generate_anchor_fixtures`).
+    const FIXTURE_KEY: &str = "fixture-hmac-key-2026";
+    /// Deterministic TEST-ONLY Ed25519 seed (never a production key).
+    const ANCHOR_SECRET: [u8; 32] = [7u8; 32];
+
+    fn anchor_signing_key() -> ed25519_dalek::SigningKey {
+        ed25519_dalek::SigningKey::from_bytes(&ANCHOR_SECRET)
+    }
+
+    fn anchor_public_hex() -> String {
+        hex::encode(anchor_signing_key().verifying_key().to_bytes())
+    }
+
+    fn integrity_dir() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/fixtures/integrity")
+    }
+
+    fn read_envelopes(name: &str) -> Vec<AuditEnvelope> {
+        let path = integrity_dir().join(name);
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+    }
+
+    fn read_json(name: &str) -> String {
+        let path = integrity_dir().join(name);
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+    }
+
+    #[test]
+    fn integrity_chain_fixtures_verify() {
+        let envelopes = read_envelopes("chain.json");
+        assert!(envelopes.len() >= 3, "expected a >=3-envelope chain");
+
+        // Each engine-signed envelope verifies byte-exact (HMAC) + conforms to
+        // envelope.json (which now carries the ADR-016 chain fields).
+        let values: Vec<serde_json::Value> =
+            serde_json::from_str(&read_json("chain.json")).expect("chain array parses");
+        for value in &values {
+            let one = value.to_string();
+            verify_signature(&one, FIXTURE_KEY).unwrap_or_else(|e| panic!("fixture hmac: {e}"));
+            validate_schema(&one).unwrap_or_else(|e| panic!("envelope schema: {e}"));
+        }
+
+        // Chain continuity: genesis 0, contiguous, prev_hash links.
+        verify_chain(&envelopes).expect("valid chain must verify");
+        assert!(envelopes
+            .iter()
+            .all(|e| e.history_integrity == Some(HistoryIntegrity::LocalUnanchored)));
+        for pair in envelopes.windows(2) {
+            assert_eq!(
+                Some(envelope_hash_of(&pair[0]).unwrap()),
+                pair[1].prev_hash,
+                "prev_hash must be the predecessor's canonical hash"
+            );
+        }
+        assert_eq!(envelopes[0].sequence, Some(0));
+        assert!(envelopes[0].prev_hash.is_none(), "genesis has no prev_hash");
+    }
+
+    #[test]
+    fn integrity_broken_chain_is_rejected() {
+        let envelopes = read_envelopes("broken-chain.json");
+        let err = verify_chain(&envelopes).expect_err("an uncovered gap must fail");
+        assert!(matches!(err, VerifyError::ChainBroken { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn chain_detects_altered_predecessor_and_duplicate_sequence() {
+        // An altered predecessor link (prev_hash no longer matches the hash).
+        let mut envelopes = read_envelopes("chain.json");
+        envelopes[2].prev_hash = Some("0".repeat(64));
+        let err = verify_chain(&envelopes).expect_err("altered prev_hash must fail");
+        assert!(matches!(err, VerifyError::ChainBroken { .. }), "{err:?}");
+
+        // A duplicated sequence number (insertion).
+        let mut envelopes = read_envelopes("chain.json");
+        envelopes[2].sequence = Some(1);
+        let err = verify_chain(&envelopes).expect_err("duplicate sequence must fail");
+        assert!(matches!(err, VerifyError::ChainBroken { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn checkpoint_covers_broken_chain_gap() {
+        let envelopes = read_envelopes("broken-chain.json");
+        let text = read_json("compaction-checkpoint.json");
+        let checkpoint: CompactionCheckpoint = serde_json::from_str(&text).expect("checkpoint");
+
+        // Strict verification fails; the signed checkpoint covers the gap.
+        assert!(verify_chain(&envelopes).is_err());
+        verify_chain_with_checkpoints(
+            &envelopes,
+            std::slice::from_ref(&checkpoint),
+            &anchor_public_hex(),
+        )
+        .expect("a checkpoint-covered gap must verify");
+        validate_schema_file("api/compaction-checkpoint.json", &text).expect("checkpoint schema");
+
+        // A forged checkpoint (wrong new_head, re-signed with a different key)
+        // neither verifies nor covers the gap.
+        let mut forged = checkpoint.clone();
+        forged.new_head = "0".repeat(64);
+        assert!(verify_chain_with_checkpoints(
+            &envelopes,
+            std::slice::from_ref(&forged),
+            &anchor_public_hex()
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn history_slice_fixture_verifies() {
+        let text = read_json("history-slice.json");
+        let slice: HistorySlice = serde_json::from_str(&text).expect("slice parses");
+        verify_history_slice(&slice, &anchor_public_hex()).expect("anchor signature");
+        validate_schema_file("api/history-slice.json", &text).expect("history-slice schema");
+        assert!(!slice.actions.is_empty(), "slice carries prior actions");
+
+        // A forged slice (tampered action) is rejected.
+        let mut forged = slice.clone();
+        forged.actions[0].node = "forged_node".to_string();
+        assert!(verify_history_slice(&forged, &anchor_public_hex()).is_err());
+    }
+
+    #[test]
+    fn ledger_receipt_fixture_verifies() {
+        let text = read_json("ledger-receipt.json");
+        let receipt: LedgerReceipt = serde_json::from_str(&text).expect("receipt parses");
+        verify_ledger_receipt(&receipt, &anchor_public_hex()).expect("anchor signature");
+        validate_schema_file("api/ledger-receipt.json", &text).expect("ledger-receipt schema");
+
+        let mut forged = receipt.clone();
+        forged.envelope_hash = "0".repeat(64);
+        assert!(verify_ledger_receipt(&forged, &anchor_public_hex()).is_err());
+    }
+
+    /// Regenerates the three anchor-artifact fixtures. The envelope chain
+    /// fixtures are engine-produced and must NOT be regenerated here.
+    #[test]
+    #[ignore = "fixture generator — run with --ignored to regenerate anchor fixtures"]
+    fn generate_anchor_fixtures() {
+        use ed25519_dalek::Signer;
+
+        let key = anchor_signing_key();
+        let dir = integrity_dir();
+        let chain = read_envelopes("chain.json");
+        let head = chain.last().expect("chain non-empty");
+
+        // History slice over the chain's actions.
+        let mut slice = HistorySlice {
+            scope: "local".to_string(),
+            since: chain[0].timestamp,
+            actions: chain
+                .iter()
+                .flat_map(|envelope| {
+                    envelope.events.iter().filter_map(|event| {
+                        let node = event
+                            .payload
+                            .as_ref()?
+                            .get("step_name")?
+                            .as_str()?
+                            .to_string();
+                        Some(HistoryActionRef {
+                            node,
+                            principal: envelope.author.clone(),
+                            at: event.occurred_at,
+                            effect_key: envelope.effect_key.clone(),
+                        })
+                    })
+                })
+                .collect(),
+            head_hash: envelope_hash_of(head).expect("head hash"),
+            sig: None,
+        };
+        let bytes = history_slice_signing_bytes(&slice).expect("slice bytes");
+        slice.sig = Some(hex::encode(key.sign(&bytes).to_bytes()));
+        std::fs::write(
+            dir.join("history-slice.json"),
+            format!("{}\n", serde_json::to_string_pretty(&slice).unwrap()),
+        )
+        .expect("write history slice");
+
+        // Ledger receipt for the chain head.
+        let mut receipt = LedgerReceipt {
+            ledger_id: "local-ledger".to_string(),
+            envelope_hash: envelope_hash_of(head).expect("head hash"),
+            sequence: head.sequence.expect("head sequence"),
+            recorded_at: head.timestamp,
+            sig: None,
+        };
+        let bytes = ledger_receipt_signing_bytes(&receipt).expect("receipt bytes");
+        receipt.sig = Some(hex::encode(key.sign(&bytes).to_bytes()));
+        std::fs::write(
+            dir.join("ledger-receipt.json"),
+            format!("{}\n", serde_json::to_string_pretty(&receipt).unwrap()),
+        )
+        .expect("write ledger receipt");
+
+        // Compaction checkpoint covering the broken-chain gap (seq 1..=1).
+        let broken = read_envelopes("broken-chain.json");
+        let after = &broken[1];
+        let mut checkpoint = CompactionCheckpoint {
+            sequence_from: 1,
+            sequence_to: 1,
+            reason: "gdpr-erasure".to_string(),
+            prior_head: envelope_hash_of(&broken[0]).expect("prior hash"),
+            new_head: after.prev_hash.clone().expect("successor link"),
+            sig: None,
+        };
+        let bytes = compaction_checkpoint_signing_bytes(&checkpoint).expect("checkpoint bytes");
+        checkpoint.sig = Some(hex::encode(key.sign(&bytes).to_bytes()));
+        std::fs::write(
+            dir.join("compaction-checkpoint.json"),
+            format!("{}\n", serde_json::to_string_pretty(&checkpoint).unwrap()),
+        )
+        .expect("write compaction checkpoint");
     }
 
     fn semver_ok(s: &str) -> bool {

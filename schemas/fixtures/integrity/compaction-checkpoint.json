@@ -1,0 +1,8 @@
+{
+  "sequence_from": 1,
+  "sequence_to": 1,
+  "reason": "gdpr-erasure",
+  "prior_head": "28e24bbffa40a104543ac42db3fe3d599c6670eb65e492e97b522d36e45d3b6d",
+  "new_head": "1a1f99bcaf9bd4375ebde789e7bb467f3f09fc9bf7bb6424fbc5c13b0d86d195",
+  "sig": "293dcd1ec50881b9a606d62201bc2e8ed4bd3b355e2628b9ca3016dfdaa02206e202246530207d439e5648ba76edbf143c2aa5c7174893caf8ef3733b6548309"
+}
