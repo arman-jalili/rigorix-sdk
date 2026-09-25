@@ -24,7 +24,7 @@ Issues are grouped by:
 | 12 | SDK-AUDIT-A | high | envelope chain + anchor artifacts | **DONE** — PR #14 |
 | 15 | SDK-C5 | medium | catalog parity (`rigorix.auth.verify`) | **DONE** — PR #16 |
 | 18 | SDK-SCHEMAS-PUBLISH | high | `rust/rigorix-schemas` (new crate) + CI | **Yes** — packaging only |
-| 19 | SDK-VERIFIER-PUBLISH | high | `rust/rigorix-verifier` (self-contained publish) | Depends on #18 (this batch) |
+| 19 | SDK-VERIFIER-PUBLISH | high | `rust/rigorix-verifier` (self-contained publish) | **Yes** — stacked on #18 (`issue/19`); package/publish gate after `rigorix-schemas` release |
 | 20 | SDK-CATALOG-AUDIT | medium | `schemas/api/catalog.json` (audit methods) | Needs the server code as truth (verify) |
 | 21 | SDK-C6 | medium | `python/` + `typescript/` verifiers | Depends on #18 for a consumable corpus |
 
@@ -86,6 +86,19 @@ repo root stays canonical; `rust/rigorix-schemas/schemas` is a symlink that
 `cargo package` dereferences so the published crate is self-contained.
 Unblocks **#19** (publish `rigorix-verifier`) and **#21** (Python/TS verifiers,
 which consume the same corpus).
+
+---
+
+## Group: Verifier publish (single, stacked)
+
+**Branch:** `issue/19` (base `issue/18`)
+**Issue:** 1
+- #19 SDK-VERIFIER-PUBLISH: publish `rigorix-verifier` (self-contained)
+
+**Approach:** depend on `rigorix-schemas` and resolve contracts
+`RIGORIX_SDK_SCHEMAS` → embedded → error (no repo path); publish metadata +
+README + self-containment CI. The actual `cargo package`/`publish` gate
+activates once `rigorix-schemas` is on crates.io (the issue's prerequisite).
 
 ---
 
