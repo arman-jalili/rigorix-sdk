@@ -2,6 +2,10 @@ target/
 node_modules/
 typescript/dist/
 typescript-client/dist/
+typescript/_schemas/
+python/rigorix_verifier/_schemas/
+*.egg-info/
+python/build/
 __pycache__/
 *.pyc
 .venv/

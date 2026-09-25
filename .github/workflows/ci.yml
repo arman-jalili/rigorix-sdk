@@ -95,6 +95,22 @@ jobs:
         # ADR-016 chain/checkpoint + Ed25519 anchor verification.
         run: pytest -q
 
+      - name: Pack → install → smoke (wheel + sdist, no RIGORIX_SDK_SCHEMAS)
+        # SDK-C6-PACKAGING: the wheel AND sdist must carry a REAL corpus
+        # (setuptools does not follow the repo symlink), and the installed
+        # package must verify with the env override unset.
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade build
+          python -m build --outdir "$RUNNER_TEMP/pydist"
+          python -m venv "$RUNNER_TEMP/wheel-venv"
+          "$RUNNER_TEMP/wheel-venv/bin/pip" install "$RUNNER_TEMP"/pydist/*.whl
+          unset RIGORIX_SDK_SCHEMAS
+          "$RUNNER_TEMP/wheel-venv/bin/python" "$GITHUB_WORKSPACE/python/scripts/pack_smoke.py"
+          python -m venv "$RUNNER_TEMP/sdist-venv"
+          "$RUNNER_TEMP/sdist-venv/bin/pip" install "$RUNNER_TEMP"/pydist/*.tar.gz
+          "$RUNNER_TEMP/sdist-venv/bin/python" "$GITHUB_WORKSPACE/python/scripts/pack_smoke.py"
+
   typescript-verifier:
     name: 🟦 rigorix-verifier (node)
     runs-on: ubuntu-latest
@@ -120,6 +136,24 @@ jobs:
         # tsc + `node --test`: byte-exact HMAC (lossless numbers), JSON Schema,
         # ADR-016 chain/checkpoint, Ed25519 anchor verification.
         run: npm test
+
+      - name: Pack → install → smoke (no RIGORIX_SDK_SCHEMAS)
+        # SDK-C6-PACKAGING: `npm pack` must ship a REAL corpus (npm does not
+        # follow the repo symlink), and the installed tarball must verify with
+        # the env override unset.
+        run: |
+          set -euo pipefail
+          npm run build
+          npm pack --pack-destination "$RUNNER_TEMP"
+          TARBALL=$(ls "$RUNNER_TEMP"/rigorix-verifier-*.tgz | head -1)
+          WORK="$RUNNER_TEMP/ts-smoke"
+          mkdir -p "$WORK"
+          cp scripts/pack-smoke.mjs "$WORK/smoke.mjs"
+          cd "$WORK"
+          npm init -y >/dev/null
+          npm install "$TARBALL" --no-audit --no-fund >/dev/null
+          unset RIGORIX_SDK_SCHEMAS
+          node smoke.mjs
 
   typescript-client:
     name: 🟦 rigorix-client (node)

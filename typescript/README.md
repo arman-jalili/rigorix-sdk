@@ -50,11 +50,15 @@ committed engine fixtures prove byte-exact parity (`test/envelope.test.ts`).
 Resolution (mirrors the Rust verifier):
 
 1. `RIGORIX_SDK_SCHEMAS` — an explicit external corpus (CI/local override).
-2. The bundled `_schemas` directory (a symlink to the repo-root `schemas/`).
+2. The bundled `_schemas` directory.
 
-> Packaging note: pack with the `_schemas` symlink dereferenced (or point
-> `RIGORIX_SDK_SCHEMAS` at the canonical corpus) so the published package is
-> self-contained. No repo-relative fallback is used.
+The bundled copy is **generated** from the repo-root `schemas/` (the single
+source of truth) by [`scripts/bundle-schemas.mjs`](scripts/bundle-schemas.mjs):
+npm `prepack`/`build` run it before packing. It is a real directory (npm will
+**not** dereference a symlink into the tarball), never a committed duplicate;
+`test/corpus-sync.test.ts` fails if it drifts from the canonical corpus. The
+pack gate (`npm pack` → install the tarball into a clean project → verify with
+`RIGORIX_SDK_SCHEMAS` unset) runs in CI.
 
 ## Test
 

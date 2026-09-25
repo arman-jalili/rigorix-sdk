@@ -49,12 +49,17 @@ engine fixtures prove byte-exact parity (`tests/test_envelope.py`).
 Resolution (mirrors the Rust verifier):
 
 1. `RIGORIX_SDK_SCHEMAS` — an explicit external corpus (CI/local override).
-2. The bundled `rigorix_verifier/_schemas` directory (a symlink to the repo-root
-   `schemas/` in-tree).
+2. The bundled `rigorix_verifier/_schemas` directory.
 
-> Packaging note: build the wheel with the `_schemas` symlink dereferenced (or
-> point `RIGORIX_SDK_SCHEMAS` at the canonical corpus) so the published package
-> is self-contained. No repo-relative fallback is used.
+The bundled copy is **generated** from the repo-root `schemas/` (the single
+source of truth) by [`scripts/bundle_schemas.py`](scripts/bundle_schemas.py):
+the setuptools `build_py`/`sdist` hooks run it before packing, and
+[`conftest.py`](conftest.py) runs it before tests. It is a real directory
+(setuptools will **not** dereference a symlink into a wheel/sdist), never a
+committed duplicate; `tests/test_corpus_sync.py` fails if it drifts from the
+canonical corpus. The pack gate (`python -m build` → install wheel/sdist →
+verify with `RIGORIX_SDK_SCHEMAS` unset) runs in CI. Run
+`python scripts/bundle_schemas.py` manually if you need the copy outside a build.
 
 ## Test
 
