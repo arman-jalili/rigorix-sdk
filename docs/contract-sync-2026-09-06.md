@@ -297,3 +297,18 @@ Then: catalog design → servers → SDKs.
     currently asserts the OSS in-code catalog **equals** the SDK catalog; with
     the closed/subset model it should use the subset guard (the OSS server is a
     subset, not the whole namespace).
+
+- **2026-09-24 — catalog de-duplicates the identity shapes (no instance change):**
+  `schemas/api/catalog.json` inlined copies of `claims.json`'s `identityRef`
+  (pre-existing) and `identityClaim` (added by SDK-C5). Structurally identical
+  but able to drift silently. Both copies removed; the two ref sites now address
+  `claims.json` by `$id` — the same cross-file pattern as
+  `api/events.json` → `envelope.json`:
+  - `validatePlanParams.properties.identity` → `claims.json#/$defs/identityRef`
+  - `authVerifyResult.properties.claim` → `claims.json#/$defs/identityClaim`
+  - `rust/rigorix-verifier`: `build_validator` now registers `claims.json`
+    (beside `envelope.json`) so the catalog's cross-file refs resolve offline;
+    new test `catalog_references_claims_shapes_instead_of_duplicating_them`.
+    24 tests (+1 ignored).
+  - No instance shape changes: a `rigorix.auth.verify` result still carries the
+    full `IdentityClaim`.
