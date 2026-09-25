@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["rigorix-verifier"]
+members = ["rigorix-schemas", "rigorix-verifier"]
 
 [workspace.package]
 version = "0.1.0"

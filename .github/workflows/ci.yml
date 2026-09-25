@@ -45,5 +45,11 @@ jobs:
         # (schemas/fixtures/envelope/*.json), `all_schemas_compile` (envelope/
         # claims/policy/catalog.schema/errors are valid draft 2020-12 schemas),
         # the native-API `catalog_integrity` check and `error_taxonomy_codes_
-        # consistent` (ADR-0001).
+        # consistent` (ADR-0001). `rigorix-schemas` embeds the whole schemas/**
+        # corpus at build time; its sync test fails if embedded != on-disk.
         run: cargo test --workspace
+
+      - name: Package (`rigorix-schemas` must be self-contained)
+        # Verifies the packaged crate builds with its dereferenced schemas/**
+        # corpus — no path/env dependency on the repo (SDK-SCHEMAS-PUBLISH).
+        run: cargo package -p rigorix-schemas
