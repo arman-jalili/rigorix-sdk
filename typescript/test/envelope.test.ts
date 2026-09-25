@@ -74,3 +74,28 @@ test("envelope hash is stable across string and object forms", () => {
 test("corpus exposes the canonical schema text", () => {
   assert.match(schemaText("envelope.json"), /Rigorix Audit Envelope/);
 });
+
+test("anchored engine fixture binds anchor_head at the engine position", () => {
+  const path = join(schemasRoot(), "fixtures", "envelope", "envelope-anchored-signed.json");
+  const text = readFileSync(path, "utf8");
+  const data = JSON.parse(text) as any;
+  assert.equal(data.history_integrity, "anchored");
+  assert.equal(
+    data.anchor_head,
+    "3f2a9c1e7b4d5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+  );
+  assert.ok(Array.isArray(data.approval_events) && data.approval_events.length > 0);
+
+  // Byte-exact parity — the regression: the field is NOT dropped.
+  verifySignature(text, KEY);
+  validateEnvelope(data);
+
+  // The field is signed; tampering with the head is detected.
+  assert.throws(() => verifySignature({ ...data, anchor_head: "0".repeat(64) }, KEY), SignatureMismatch);
+
+  // A local_unanchored fixture carries no anchor_head and still verifies.
+  const localPath = envelopePaths().find((candidate) => candidate.includes("minimal"))!;
+  const localText = readFileSync(localPath, "utf8");
+  assert.ok(!localText.includes('"anchor_head"'));
+  verifySignature(localText, KEY);
+});

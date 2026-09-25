@@ -336,3 +336,36 @@ Then: catalog design → servers → SDKs.
     24 tests (+1 ignored).
   - No instance shape changes: a `rigorix.auth.verify` result still carries the
     full `IdentityClaim`.
+
+- **2026-09-25 — SDK-CATALOG-ANCHOR-HEAD / ADR-016 Phase C (additive schema change):**
+  rigorix-oss PR #908 (`issue/899`, **still open**) binds a new signed envelope
+  field `anchor_head` — the verified anchor ledger head a decision was decided
+  against. It was absent from the frozen contract, so all three verifiers
+  **dropped it when computing canonical bytes**: an engine-signed **anchored**
+  envelope (HMAC over bytes that include the field) recomputed by the verifier
+  over bytes that exclude it → `SignatureMismatch`. Anchored evidence — the
+  strongest mode — was not independently verifiable, the exact Strategy A
+  guarantee ADR-016 exists to provide (and `envelope.json` has no
+  `additionalProperties:false`, so schema validation silently tolerated it).
+  - `schemas/envelope.json`: additive `anchor_head` (string|null, pattern
+    `^[0-9a-f]{64}$`) placed at the engine's exact struct position — after
+    `history_policy`, **before `approval_events`** — mirroring
+    `engine/src/audit/domain/envelope.rs` (code is truth; the field is bound by
+    `envelope_factory_impl.rs::with_anchor` → `runtime.head()`).
+  - `schemas/fixtures/envelope/envelope-anchored-signed.json`: an
+    **engine-produced** anchored envelope (`history_integrity = anchored`,
+    non-null `anchor_head`, `approval_events` non-empty so the position relative
+    to them is proven), generated through the REAL anchored factory by
+    `RIGORIX_FIXTURE_OUT` + `write_anchored_signed_fixture` on `issue/899` with
+    the fixed key `fixture-hmac-key-2026`. The existing corpus was all
+    `local_unanchored`/legacy, so the anchored path had no byte-exact coverage.
+  - `rust/rigorix-verifier` (`AuditEnvelope` field at the same position + serde
+    skip-if-none), `python/rigorix_verifier/canonical.py` and
+    `typescript/src/canonical.ts` (skip-none set) gain the field; all three
+    parity tests assert the anchored fixture verifies byte-exact and that it is
+    signed/tamper-detected; legacy + `local_unanchored` fixtures still verify
+    byte-exact (skip-if-none leaves their bytes unchanged).
+  - **Cross-repo status:** the field's origin (#908) is not yet merged; the
+    contract follows the branch's code, and the fixture was generated from that
+    branch, so the SDK validates anchored evidence the moment #908 lands. When
+    it merges, no SDK change is needed (the field/position are already frozen).

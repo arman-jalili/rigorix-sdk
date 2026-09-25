@@ -140,6 +140,13 @@ pub struct AuditEnvelope {
     /// the signed bytes, so the regime is auditable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub history_policy: Option<HistoryPolicy>,
+    /// ADR-016 Phase C: the **verified** anchor ledger head this evidence was
+    /// decided against — `Some` only in `anchored` mode, bound into the signed
+    /// bytes so an auditor can prove which ledger state a decision used.
+    /// MUST stay in the engine's struct position (after `history_policy`,
+    /// before `approval_events`) or canonical bytes diverge.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor_head: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub approval_events: Vec<ApprovalRecordRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -990,6 +997,55 @@ mod tests {
             found >= 3,
             "expected ≥3 committed engine fixtures, found {found}"
         );
+    }
+
+    /// SDK #31 / ADR-016 Phase C regression: the anchored engine fixture's HMAC
+    /// reproduces ONLY when `anchor_head` sits after `history_policy` and before
+    /// `approval_events`. Before the field was declared the verifier dropped it,
+    /// so this failed with `SignatureMismatch` on authentic anchored evidence.
+    #[test]
+    fn anchored_envelope_binds_anchor_head_at_engine_position() {
+        const HEAD: &str = "3f2a9c1e7b4d5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708";
+        let json = fixture_text("envelope/envelope-anchored-signed.json");
+        let envelope: AuditEnvelope = serde_json::from_str(&json).expect("anchored fixture parses");
+        assert_eq!(envelope.history_integrity, Some(HistoryIntegrity::Anchored));
+        assert_eq!(envelope.anchor_head.as_deref(), Some(HEAD));
+        assert!(
+            !envelope.approval_events.is_empty(),
+            "fixture must carry approval_events (position proof)"
+        );
+
+        // Byte-exact parity — the regression: dropping the field breaks this.
+        verify_signature(&json, "fixture-hmac-key-2026")
+            .expect("anchored fixture verifies byte-exact");
+        validate_schema(&json).expect("anchored fixture conforms to envelope.json");
+
+        // The field is signed, in the engine's declared position.
+        let bytes = canonical_bytes_of(&envelope).expect("canonical bytes");
+        let canonical = String::from_utf8(bytes).expect("utf8");
+        let head_at = canonical
+            .find("\"anchor_head\"")
+            .expect("anchor_head is part of the signed bytes");
+        let approvals_at = canonical
+            .find("\"approval_events\"")
+            .expect("approval_events present");
+        assert!(
+            head_at < approvals_at,
+            "anchor_head must precede approval_events"
+        );
+
+        // Tampering with the head is detected (it is not ignored).
+        let tampered = json.replacen(HEAD, &"0".repeat(64), 1);
+        assert!(matches!(
+            verify_signature(&tampered, "fixture-hmac-key-2026"),
+            Err(VerifyError::SignatureMismatch { .. })
+        ));
+
+        // A legacy fixture has no anchor_head — skip-if-none keeps its bytes
+        // unchanged (Phase A regression guard).
+        let local = fixture_text("envelope/envelope-minimal-signed.json");
+        assert!(!local.contains("\"anchor_head\""));
+        verify_signature(&local, "fixture-hmac-key-2026").expect("local fixture unchanged");
     }
 
     // ─── Schema lint (SDK contract surface) ───────────────────────────────
