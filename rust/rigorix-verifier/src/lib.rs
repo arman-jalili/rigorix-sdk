@@ -613,17 +613,15 @@ pub fn verify_signature(json: &str, key: &str) -> VerifyResult<()> {
 
 /// Validate an envelope against the SDK envelope schema (`envelope.json`).
 ///
-/// The schema path resolves from `RIGORIX_SDK_SCHEMAS` env (CI/local override)
-/// or defaults to `../../schemas` relative to this crate.
+/// The schema resolves from `RIGORIX_SDK_SCHEMAS` (explicit override) or the
+/// embedded `rigorix-schemas` corpus — never from the repo layout.
 pub fn validate_schema(json: &str) -> VerifyResult<()> {
     validate_schema_file("envelope.json", json)
 }
 
 /// Validate any JSON instance against a named SDK schema file.
 fn validate_schema_file(file: &str, json: &str) -> VerifyResult<()> {
-    let schema_path = schema_path(file)?;
-    let schema_text = std::fs::read_to_string(&schema_path)
-        .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", schema_path.display())))?;
+    let schema_text = schema_text(file)?;
     let schema = serde_json::from_str(&schema_text)?;
     let instance: serde_json::Value = serde_json::from_str(json)?;
     let compiled = build_validator(file, &schema)?;
@@ -637,28 +635,33 @@ fn validate_schema_file(file: &str, json: &str) -> VerifyResult<()> {
     Ok(())
 }
 
-fn schema_path(file: &str) -> VerifyResult<std::path::PathBuf> {
+/// Resolve a contract's JSON text (SDK-VERIFIER-PUBLISH resolution order).
+///
+/// 1. `RIGORIX_SDK_SCHEMAS` — an explicit external corpus (CI/local override).
+/// 2. The embedded `rigorix-schemas` corpus — the published, self-contained path.
+///
+/// There is deliberately **no** `CARGO_MANIFEST_DIR/../../schemas` fallback: a
+/// published verifier must not depend on the repo layout.
+fn schema_text(file: &str) -> VerifyResult<String> {
     if let Ok(dir) = std::env::var("RIGORIX_SDK_SCHEMAS") {
-        let p = Path::new(&dir).join(file);
-        if p.exists() {
-            return Ok(p);
+        let path = Path::new(&dir).join(file);
+        if !path.exists() {
+            return Err(VerifyError::SchemaRead(format!(
+                "RIGORIX_SDK_SCHEMAS set but {} missing",
+                path.display()
+            )));
         }
-        return Err(VerifyError::SchemaRead(format!(
-            "RIGORIX_SDK_SCHEMAS set but {} missing",
-            p.display()
-        )));
+        return std::fs::read_to_string(&path)
+            .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", path.display())));
     }
-    let p = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../schemas")
-        .join(file);
-    if p.exists() {
-        Ok(p)
-    } else {
-        Err(VerifyError::SchemaRead(format!(
-            "schema not found at {} — set RIGORIX_SDK_SCHEMAS",
-            p.display()
-        )))
-    }
+    rigorix_schemas::schema(file)
+        .map(str::to_string)
+        .ok_or_else(|| {
+            VerifyError::SchemaRead(format!(
+                "schema `{file}` not found — set RIGORIX_SDK_SCHEMAS or use the embedded \
+             rigorix-schemas corpus"
+            ))
+        })
 }
 
 /// Verify that every method in `candidate` is declared in the frozen catalog
@@ -669,9 +672,7 @@ fn schema_path(file: &str) -> VerifyResult<std::path::PathBuf> {
 /// Server CI / conformance passes the method set it serves; an unknown
 /// `rigorix.*` name is a contract violation (SDK-C5 / #15).
 pub fn verify_catalog_subset(candidate: &[&str]) -> VerifyResult<()> {
-    let path = schema_path("api/catalog.json")?;
-    let text = std::fs::read_to_string(&path)
-        .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", path.display())))?;
+    let text = schema_text("api/catalog.json")?;
     let catalog: serde_json::Value = serde_json::from_str(&text)?;
     let declared: std::collections::HashSet<&str> = catalog["methods"]
         .as_array()
@@ -710,9 +711,7 @@ fn build_validator(file: &str, schema: &serde_json::Value) -> VerifyResult<jsons
         if file == sibling {
             continue;
         }
-        let path = schema_path(sibling)?;
-        let text = std::fs::read_to_string(&path)
-            .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", path.display())))?;
+        let text = schema_text(sibling)?;
         let value: serde_json::Value = serde_json::from_str(&text)?;
         let resource = jsonschema::Resource::from_contents(value)
             .map_err(|e| VerifyError::Schema(e.to_string()))?;
@@ -737,6 +736,61 @@ fn constant_time_eq(a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ─── Contract resolution (env override -> embedded rigorix-schemas) ───
+    //
+    // Tests must exercise the PUBLISHED resolution path: with no override they
+    // read the embedded corpus, exactly like a consumer of the packaged crate.
+
+    /// Read a fixture by path relative to `schemas/fixtures/`.
+    fn fixture_text(rel: &str) -> String {
+        if let Ok(dir) = std::env::var("RIGORIX_SDK_SCHEMAS") {
+            let path = Path::new(&dir).join("fixtures").join(rel);
+            return std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        }
+        rigorix_schemas::fixture(rel)
+            .map(str::to_string)
+            .unwrap_or_else(|| panic!("fixture `{rel}` is not embedded in rigorix-schemas"))
+    }
+
+    /// Every `.json` fixture path relative to `fixtures/<prefix>/`, sorted.
+    fn fixture_json_names(prefix: &str) -> Vec<String> {
+        if let Ok(dir) = std::env::var("RIGORIX_SDK_SCHEMAS") {
+            let root = Path::new(&dir).join("fixtures").join(prefix);
+            let mut out = Vec::new();
+            collect_json(&root, &root, &mut out);
+            out.sort();
+            return out;
+        }
+        let needle = format!("fixtures/{prefix}/");
+        let mut out: Vec<String> = rigorix_schemas::schema_names()
+            .iter()
+            .filter_map(|name| name.strip_prefix(&needle))
+            .filter(|rel| rel.ends_with(".json"))
+            .map(str::to_string)
+            .collect();
+        out.sort();
+        out
+    }
+
+    fn collect_json(root: &Path, dir: &Path, out: &mut Vec<String>) {
+        let entries =
+            std::fs::read_dir(dir).unwrap_or_else(|e| panic!("read {}: {e}", dir.display()));
+        for entry in entries {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                collect_json(root, &path, out);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                out.push(
+                    path.strip_prefix(root)
+                        .expect("under fixture root")
+                        .to_string_lossy()
+                        .replace('\\', "/"),
+                );
+            }
+        }
+    }
 
     const KEY: &str = "test-hmac-key";
 
@@ -917,28 +971,19 @@ mod tests {
     #[test]
     fn engine_signed_fixtures_verify_byte_exact() {
         let key = "fixture-hmac-key-2026";
-        let fixtures_dir =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/fixtures/envelope");
+        let names = fixture_json_names("envelope");
         let mut found = 0;
-        let entries = std::fs::read_dir(&fixtures_dir)
-            .unwrap_or_else(|e| panic!("read {}: {e}", fixtures_dir.display()));
-        for entry in entries {
-            let path = entry.expect("dir entry").path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            let json = std::fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        for name in &names {
+            let json = fixture_text(&format!("envelope/{name}"));
             // Independent verifier accepts the engine's signature byte-exact.
-            verify_signature(&json, key).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            verify_signature(&json, key).unwrap_or_else(|e| panic!("{name}: {e}"));
             // And the envelope conforms to the SDK schema.
-            validate_schema(&json).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+            validate_schema(&json).unwrap_or_else(|e| panic!("{name}: {e}"));
             found += 1;
         }
         assert!(
             found >= 3,
-            "expected ≥3 committed engine fixtures, found {found} in {}",
-            fixtures_dir.display()
+            "expected ≥3 committed engine fixtures, found {found}"
         );
     }
 
@@ -949,7 +994,6 @@ mod tests {
     // the published contract surface never ships a broken schema.
     #[test]
     fn all_schemas_compile() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas");
         for name in [
             "envelope.json",
             "claims.json",
@@ -961,13 +1005,11 @@ mod tests {
             "api/history-slice.json",
             "api/compaction-checkpoint.json",
         ] {
-            let path = dir.join(name);
-            let text = std::fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+            let text = schema_text(name).unwrap_or_else(|e| panic!("{name}: {e}"));
             let schema: serde_json::Value =
-                serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                serde_json::from_str(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
             build_validator(name, &schema)
-                .unwrap_or_else(|e| panic!("{}: not a valid schema: {e}", path.display()));
+                .unwrap_or_else(|e| panic!("{name}: not a valid schema: {e}"));
         }
     }
 
@@ -981,33 +1023,22 @@ mod tests {
     // criteria 2 and 4.
     #[test]
     fn events_fixtures_validate() {
-        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/fixtures/events");
-        let entries =
-            std::fs::read_dir(&dir).unwrap_or_else(|e| panic!("read {}: {e}", dir.display()));
         let mut found = 0;
-        for entry in entries {
-            let path = entry.expect("dir entry").path();
-            if path.extension().and_then(|e| e.to_str()) != Some("json") {
-                continue;
-            }
-            let json = std::fs::read_to_string(&path)
-                .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        for name in fixture_json_names("events") {
+            let json = fixture_text(&format!("events/{name}"));
             validate_schema_file("api/events.json", &json)
-                .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
             found += 1;
         }
         assert!(
             found >= 3,
-            "expected ≥3 committed SSE event fixtures, found {found} in {}",
-            dir.display()
+            "expected ≥3 committed SSE event fixtures, found {found}"
         );
     }
 
     #[test]
     fn events_mapping_complete() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/events.json");
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let text = schema_text("api/events.json").expect("events schema");
         let events: serde_json::Value = serde_json::from_str(&text).expect("events parses");
 
         // 24 `ExecutionEvent` variants live in
@@ -1070,8 +1101,7 @@ mod tests {
     /// `$id`-addressed refs resolve offline.
     #[test]
     fn catalog_references_claims_shapes_instead_of_duplicating_them() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/catalog.json");
-        let text = std::fs::read_to_string(&path).expect("read catalog.json");
+        let text = schema_text("api/catalog.json").expect("catalog.json");
         let catalog: serde_json::Value = serde_json::from_str(&text).expect("catalog parses");
 
         let defs = catalog["$defs"].as_object().expect("$defs object");
@@ -1101,17 +1131,14 @@ mod tests {
 
     #[test]
     fn catalog_integrity() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/catalog.json");
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let text = schema_text("api/catalog.json").expect("catalog.json");
         let catalog: serde_json::Value = serde_json::from_str(&text).expect("catalog parses");
 
         // The catalog is DATA — validate it against its own schema document.
-        let schema_path =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/catalog.schema.json");
-        let schema_text = std::fs::read_to_string(&schema_path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", schema_path.display()));
-        let schema: serde_json::Value = serde_json::from_str(&schema_text).expect("schema parses");
+        let catalog_schema_text =
+            schema_text("api/catalog.schema.json").expect("catalog.schema.json");
+        let schema: serde_json::Value =
+            serde_json::from_str(&catalog_schema_text).expect("schema parses");
         let compiled = jsonschema::validator_for(&schema).expect("catalog schema compiles");
         let errors: Vec<String> = compiled
             .iter_errors(&catalog)
@@ -1176,15 +1203,10 @@ mod tests {
         assert_eq!(push["kind"], "sse", "push kind");
         assert_eq!(push["endpoint"], "/events", "push endpoint");
         let push_schema = push["schema"].as_str().expect("transport.push.schema");
-        let push_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../schemas")
-            .join(push_schema);
-        let push_text = std::fs::read_to_string(&push_path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", push_path.display()));
+        let push_text = schema_text(push_schema).expect("push schema");
         let push_events: serde_json::Value =
             serde_json::from_str(&push_text).expect("events schema parses");
-        build_validator(push_schema, &push_events)
-            .unwrap_or_else(|e| panic!("{}: {e}", push_path.display()));
+        build_validator(push_schema, &push_events).unwrap_or_else(|e| panic!("{push_schema}: {e}"));
         let mut declared: Vec<&str> = push["events"]
             .as_array()
             .expect("push.events")
@@ -1249,9 +1271,7 @@ mod tests {
     // `data.type` has a code and vice versa (ADR-0001 D6).
     #[test]
     fn error_taxonomy_codes_consistent() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/errors.json");
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        let text = schema_text("api/errors.json").expect("errors.json");
         let errors: serde_json::Value = serde_json::from_str(&text).expect("errors parses");
 
         let types: Vec<&str> = errors["$defs"]["errorType"]["enum"]
@@ -1292,20 +1312,32 @@ mod tests {
         hex::encode(anchor_signing_key().verifying_key().to_bytes())
     }
 
+    /// Where the ignored `generate_anchor_fixtures` writes (repo checkout only).
     fn integrity_dir() -> std::path::PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/fixtures/integrity")
     }
 
+    /// Read a fixture through the published resolution path (env -> embedded).
     fn read_envelopes(name: &str) -> Vec<AuditEnvelope> {
-        let path = integrity_dir().join(name);
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
-        serde_json::from_str(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+        let text = read_json(name);
+        serde_json::from_str(&text).unwrap_or_else(|e| panic!("{name}: {e}"))
     }
 
     fn read_json(name: &str) -> String {
-        let path = integrity_dir().join(name);
-        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+        fixture_text(&format!("integrity/{name}"))
+    }
+
+    /// The standalone guarantee (SDK-VERIFIER-PUBLISH): with no
+    /// `RIGORIX_SDK_SCHEMAS`, every contract entry point resolves from the
+    /// embedded `rigorix-schemas` corpus — signature, catalog subset, chain.
+    #[test]
+    fn embedded_corpus_smoke() {
+        let json = fixture_text("envelope/envelope-minimal-signed.json");
+        verify_signature(&json, FIXTURE_KEY).expect("embedded engine fixture verifies");
+        verify_catalog_subset(&["rigorix.plan", "rigorix.auth.verify"])
+            .expect("embedded catalog contains the declared subset");
+        let chain = read_envelopes("chain.json");
+        verify_chain(&chain).expect("embedded chain verifies");
     }
 
     #[test]

@@ -968,6 +968,7 @@ dependencies = [
  "hex",
  "hmac",
  "jsonschema",
+ "rigorix-schemas",
  "serde",
  "serde_json",
  "sha2",

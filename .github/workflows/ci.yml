@@ -53,3 +53,12 @@ jobs:
         # Verifies the packaged crate builds with its dereferenced schemas/**
         # corpus — no path/env dependency on the repo (SDK-SCHEMAS-PUBLISH).
         run: cargo package -p rigorix-schemas
+
+      - name: Verifier self-containment (embedded corpus, no override)
+        # SDK-VERIFIER-PUBLISH: the verifier resolves contracts from the embedded
+        # `rigorix-schemas` corpus (env override unset). `cargo package -p
+        # rigorix-verifier` / `cargo publish --dry-run` become runnable once
+        # `rigorix-schemas` is on crates.io (publish it first — SDK-SCHEMAS-PUBLISH).
+        run: |
+          unset RIGORIX_SDK_SCHEMAS
+          cargo test -p rigorix-verifier --lib
