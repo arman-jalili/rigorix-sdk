@@ -406,44 +406,6 @@
       "type": "string",
       "format": "date-time"
     },
-    "identityRef": {
-      "type": "object",
-      "description": "Redacted attested identity (projection of ../claims.json $defs.identityRef). Never a raw token.",
-      "required": [
-        "subject",
-        "issuer",
-        "source"
-      ],
-      "properties": {
-        "subject": {
-          "type": "string"
-        },
-        "issuer": {
-          "type": "string"
-        },
-        "source": {
-          "enum": [
-            "idp_token",
-            "local_principal",
-            "unverified"
-          ]
-        },
-        "authority": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "expires_at": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        }
-      },
-      "additionalProperties": false
-    },
     "claimSummary": {
       "type": "object",
       "description": "Redacted claim summary returned by auth methods. Never contains a raw token or token_ref.",
@@ -799,7 +761,7 @@
           "$ref": "#/$defs/planTemplate"
         },
         "identity": {
-          "$ref": "#/$defs/identityRef",
+          "$ref": "https://rigorix.dev/schemas/claims.json#/$defs/identityRef",
           "description": "Server-injected attested identity; ignored if supplied by the caller (D5)."
         }
       },
@@ -1676,65 +1638,6 @@
       },
       "additionalProperties": false
     },
-    "identityClaim": {
-      "type": "object",
-      "description": "Full attributed identity claim (mirrors ../claims.json `$defs.identityClaim`) returned by `rigorix.auth.verify`. Nullable fields serialize as null; `token_ref` is a store reference, never the raw token (SpanPrivacy).",
-      "required": [
-        "subject",
-        "issuer",
-        "authority",
-        "source",
-        "auth_method",
-        "issued_at",
-        "expires_at",
-        "token_ref"
-      ],
-      "properties": {
-        "subject": {
-          "type": "string"
-        },
-        "issuer": {
-          "type": "string"
-        },
-        "authority": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source": {
-          "enum": [
-            "idp_token",
-            "local_principal",
-            "unverified"
-          ]
-        },
-        "auth_method": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "issued_at": {
-          "type": "string",
-          "format": "date-time"
-        },
-        "expires_at": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "format": "date-time"
-        },
-        "token_ref": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
     "authVerifyParams": {
       "type": "object",
       "description": "`rigorix.auth.verify` params — the OSS-issued attestation to verify against the organization's JWKS.",
@@ -1757,7 +1660,7 @@
       ],
       "properties": {
         "claim": {
-          "$ref": "#/$defs/identityClaim"
+          "$ref": "https://rigorix.dev/schemas/claims.json#/$defs/identityClaim"
         }
       },
       "additionalProperties": false

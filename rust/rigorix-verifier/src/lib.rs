@@ -687,26 +687,38 @@ pub fn verify_catalog_subset(candidate: &[&str]) -> VerifyResult<()> {
     Ok(())
 }
 
-/// The `$id` of the canonical envelope schema — the only cross-file `$ref`
-/// target on the contract surface (`api/events.json` → `envelope.json`).
+/// The `$id` of the canonical envelope schema — a cross-file `$ref` target on
+/// the contract surface (`api/events.json` → `envelope.json`).
 const ENVELOPE_SCHEMA_ID: &str = "https://rigorix.dev/schemas/envelope-v2.json";
 
+/// The `$id` of the canonical claims schema — the home of the shared identity
+/// shapes, a cross-file `$ref` target from the catalog
+/// (`api/catalog.json` → `claims.json#/$defs/identityRef|identityClaim`).
+const CLAIMS_SCHEMA_ID: &str = "https://rigorix.dev/schemas/claims.json";
+
 /// Build a JSON Schema validator, registering sibling contract schemas so
-/// cross-file `$ref`s (e.g. `events.json` → `envelope.json`) resolve offline.
+/// cross-file `$ref`s resolve offline (`events.json` → `envelope.json`;
+/// `api/catalog.json` → `claims.json`).
+///
+/// The schema being compiled is never registered as its own sibling resource.
 fn build_validator(file: &str, schema: &serde_json::Value) -> VerifyResult<jsonschema::Validator> {
-    // The envelope schema is the only external `$ref` target today. Register it
-    // under its `$id` unless we are compiling the envelope itself.
-    if file == "envelope.json" {
-        return jsonschema::validator_for(schema).map_err(|e| VerifyError::Schema(e.to_string()));
+    let mut options = jsonschema::options();
+    for (sibling, id) in [
+        ("envelope.json", ENVELOPE_SCHEMA_ID),
+        ("claims.json", CLAIMS_SCHEMA_ID),
+    ] {
+        if file == sibling {
+            continue;
+        }
+        let path = schema_path(sibling)?;
+        let text = std::fs::read_to_string(&path)
+            .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", path.display())))?;
+        let value: serde_json::Value = serde_json::from_str(&text)?;
+        let resource = jsonschema::Resource::from_contents(value)
+            .map_err(|e| VerifyError::Schema(e.to_string()))?;
+        options.with_resource(id, resource);
     }
-    let envelope_path = schema_path("envelope.json")?;
-    let envelope_text = std::fs::read_to_string(&envelope_path)
-        .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", envelope_path.display())))?;
-    let envelope: serde_json::Value = serde_json::from_str(&envelope_text)?;
-    let resource = jsonschema::Resource::from_contents(envelope)
-        .map_err(|e| VerifyError::Schema(e.to_string()))?;
-    jsonschema::options()
-        .with_resource(ENVELOPE_SCHEMA_ID, resource)
+    options
         .build(schema)
         .map_err(|e| VerifyError::Schema(e.to_string()))
 }
@@ -1052,6 +1064,41 @@ mod tests {
     // The frozen catalog is a contract consumers build against. Guard its
     // internal consistency: unique method names, known auth/kind/stability,
     // semver `since`, and every params/result `$ref` resolving into `$defs`.
+    /// The catalog inlines no identity shapes: `identityRef` / `identityClaim`
+    /// live in `claims.json` and are referenced cross-file, so there is exactly
+    /// one copy of each (no silent drift). Compiling the catalog proves both
+    /// `$id`-addressed refs resolve offline.
+    #[test]
+    fn catalog_references_claims_shapes_instead_of_duplicating_them() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/catalog.json");
+        let text = std::fs::read_to_string(&path).expect("read catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(&text).expect("catalog parses");
+
+        let defs = catalog["$defs"].as_object().expect("$defs object");
+        assert!(
+            !defs.contains_key("identityRef"),
+            "identityRef must not be duplicated in catalog.json — it lives in claims.json"
+        );
+        assert!(
+            !defs.contains_key("identityClaim"),
+            "identityClaim must not be duplicated in catalog.json — it lives in claims.json"
+        );
+
+        assert_eq!(
+            catalog["$defs"]["validatePlanParams"]["properties"]["identity"]["$ref"],
+            "https://rigorix.dev/schemas/claims.json#/$defs/identityRef"
+        );
+        assert_eq!(
+            catalog["$defs"]["authVerifyResult"]["properties"]["claim"]["$ref"],
+            "https://rigorix.dev/schemas/claims.json#/$defs/identityClaim"
+        );
+
+        // Unresolvable cross-file refs fail compilation — so this proves
+        // claims.json is registered and both refs resolve offline.
+        build_validator("api/catalog.json", &catalog)
+            .expect("catalog compiles with claims.json registered");
+    }
+
     #[test]
     fn catalog_integrity() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../schemas/api/catalog.json");

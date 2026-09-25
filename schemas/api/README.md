@@ -33,7 +33,10 @@ recorded in [`docs/adr/ADR-0001-native-api-catalog.md`](../../docs/adr/ADR-0001-
    [`../envelope.json`](../envelope.json), claims [`../claims.json`](../claims.json),
    policy [`../policy.json`](../policy.json). Push payloads reuse
    `envelope.json` event refs — never a second envelope dialect
-   ([`events.json`](events.json), ADR-0002).
+   ([`events.json`](events.json), ADR-0002). Identity shapes are **referenced,
+   not duplicated**: the catalog's `identityRef` / `identityClaim` are
+   `$id`-addressed `$ref`s into `claims.json` (`authVerifyResult.claim` →
+   `claims.json#/$defs/identityClaim`), so there is one copy of each.
 6. **The namespace is closed (ADR-0001 D3, SDK-C5).** A server implements a
    SUBSET of these methods and MUST NOT register an undeclared `rigorix.*`
    name. `rigorix-verifier::verify_catalog_subset` rejects a method list that
