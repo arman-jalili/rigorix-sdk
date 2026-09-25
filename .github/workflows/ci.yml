@@ -120,3 +120,29 @@ jobs:
         # tsc + `node --test`: byte-exact HMAC (lossless numbers), JSON Schema,
         # ADR-016 chain/checkpoint, Ed25519 anchor verification.
         run: npm test
+
+  typescript-client:
+    name: 🟦 rigorix-client (node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: typescript-client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: typescript-client/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test (typed client framing + catalog drift)
+        # tsc + `node --test`: JSON-RPC framing (single/batch/notification), error
+        # taxonomy, version negotiation, and catalog drift against catalog.json.
+        run: npm test
