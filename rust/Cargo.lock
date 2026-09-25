@@ -953,6 +953,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "rigorix-client"
+version = "0.1.0"
+dependencies = [
+ "rigorix-schemas",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "rigorix-schemas"
 version = "0.1.0"
 dependencies = [
