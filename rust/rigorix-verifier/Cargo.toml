@@ -1,12 +1,21 @@
 [package]
 name = "rigorix-verifier"
-description = "Protocol-only envelope verifier for Rigorix audit envelopes — HMAC integrity + JSON Schema conformance. No rigorix-engine dependency (frozen struct copies per the SDK contract-freeze)."
+description = "Protocol-only verifier for Rigorix audit envelopes — HMAC integrity, JSON Schema conformance, per-producer chain + anchor signatures. No rigorix-engine dependency (frozen struct copies per the SDK contract-freeze)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rigorix-verifier"
+authors = ["Arman Wolkenstein-Jalili and Rigorix contributors"]
+keywords = ["rigorix", "audit", "verifier", "hmac", "jsonschema"]
+categories = ["development-tools", "cryptography"]
+rust-version = "1.74"
+include = ["src/**/*", "README.md"]
 
 [dependencies]
+# Data-only: the embedded contract corpus. Preserves D-1 (no rigorix-engine).
+rigorix-schemas = { version = "0.1.0", path = "../rigorix-schemas" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 hmac = "0.12"
