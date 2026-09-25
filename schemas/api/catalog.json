@@ -161,6 +161,51 @@
       }
     },
     {
+      "name": "rigorix.audit.head",
+      "kind": "query",
+      "since": "1.0.0",
+      "stability": "frozen",
+      "auth": "session",
+      "mcpTool": null,
+      "description": "Current per-producer ledger head (anchor chain): sequence + envelope hash. Null sequence/hash when the producer has no chain yet (enterprise ADR-016 Phase B).",
+      "params": {
+        "$ref": "#/$defs/auditHeadParams"
+      },
+      "result": {
+        "$ref": "#/$defs/auditHeadResult"
+      }
+    },
+    {
+      "name": "rigorix.audit.history",
+      "kind": "query",
+      "since": "1.0.0",
+      "stability": "frozen",
+      "auth": "session",
+      "mcpTool": null,
+      "description": "Anchor-signed history projection (the ADR-016 `anchored` guard input) for a producer since a lower bound.",
+      "params": {
+        "$ref": "#/$defs/auditHistoryParams"
+      },
+      "result": {
+        "$ref": "#/$defs/auditHistoryResult"
+      }
+    },
+    {
+      "name": "rigorix.audit.overdue",
+      "kind": "query",
+      "since": "1.0.0",
+      "stability": "frozen",
+      "auth": "session",
+      "mcpTool": null,
+      "description": "Write-ahead registrations whose evidence is overdue (registered with no envelope ingested within the threshold).",
+      "params": {
+        "$ref": "#/$defs/auditOverdueParams"
+      },
+      "result": {
+        "$ref": "#/$defs/auditOverdueResult"
+      }
+    },
+    {
       "name": "rigorix.template.list",
       "kind": "query",
       "since": "1.0.0",
@@ -1319,6 +1364,143 @@
               "avg_duration_ms": {
                 "type": "integer",
                 "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "auditHeadParams": {
+      "type": "object",
+      "description": "`rigorix.audit.head` params (enterprise `LedgerHeadParams`).",
+      "required": [
+        "producer_id"
+      ],
+      "properties": {
+        "producer_id": {
+          "type": "string",
+          "description": "The chain (producer) to read the head of."
+        }
+      },
+      "additionalProperties": false
+    },
+    "auditHeadResult": {
+      "type": "object",
+      "description": "Per-producer ledger head (mirrors the enterprise `AnchorLedgerAdapter::head`). `sequence`/`envelope_hash` are null when the producer has no chain yet; `anchor_public_key` is the Ed25519 key clients verify anchor-signed reads with.",
+      "required": [
+        "producer_id",
+        "sequence",
+        "envelope_hash",
+        "anchor_public_key"
+      ],
+      "properties": {
+        "producer_id": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "envelope_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "anchor_public_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "Ed25519 public key (hex, 32 bytes)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "auditHistoryParams": {
+      "type": "object",
+      "description": "`rigorix.audit.history` params (enterprise `LedgerHistoryParams`).",
+      "required": [
+        "producer_id"
+      ],
+      "properties": {
+        "producer_id": {
+          "type": "string"
+        },
+        "since": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/dateTime"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Lower bound (inclusive); the server defaults to the epoch."
+        }
+      },
+      "additionalProperties": false
+    },
+    "auditHistoryResult": {
+      "description": "Anchor-signed history projection. Reuses the frozen `api/history-slice.json` shape by `$id` (no second dialect).",
+      "$ref": "https://rigorix.dev/schemas/api/history-slice-v1.json"
+    },
+    "auditOverdueParams": {
+      "type": "object",
+      "description": "`rigorix.audit.overdue` params (enterprise `OverdueParams`). `threshold_secs` defaults to the server value (3600 in the enterprise).",
+      "properties": {
+        "threshold_secs": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "auditOverdueResult": {
+      "type": "object",
+      "description": "Write-ahead registrations whose evidence is overdue (mirrors the enterprise `AuditReadService::overdue`; `status` is the `RunStatus` serde snake_case value).",
+      "required": [
+        "threshold_secs",
+        "count",
+        "runs"
+      ],
+      "properties": {
+        "threshold_secs": {
+          "type": "integer"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "execution_id",
+              "status",
+              "registered_at"
+            ],
+            "properties": {
+              "execution_id": {
+                "$ref": "#/$defs/uuid"
+              },
+              "status": {
+                "enum": [
+                  "registered",
+                  "policy_evaluated",
+                  "evidence_accepted",
+                  "rejected"
+                ]
+              },
+              "registered_at": {
+                "$ref": "#/$defs/dateTime"
               }
             },
             "additionalProperties": false

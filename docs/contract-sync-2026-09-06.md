@@ -298,6 +298,30 @@ Then: catalog design → servers → SDKs.
     the closed/subset model it should use the subset guard (the OSS server is a
     subset, not the whole namespace).
 
+- **2026-09-25 — SDK-CATALOG-AUDIT (ADR-016 Phase B surface; additive):**
+  The enterprise Execution API (rigorix-enterprise PR #210, merged) registers
+  three ADR-016 Phase B ledger methods that the frozen catalog did not declare —
+  the same closed-namespace drift SDK-C5 fixed for `rigorix.auth.verify`.
+  - `schemas/api/catalog.json`: **declared** `rigorix.audit.head` /
+    `.history` / `.overdue` (query / `session` / `mcpTool: null`, `since`
+    1.0.0), grounded in `rigorix-enterprise
+    core/src/execution_api/application/{catalog,services,dto}.rs`:
+    - `auditHeadParams { producer_id }`; `auditHeadResult { producer_id,
+      sequence|null, envelope_hash|null, anchor_public_key }` (the adapter's
+      head is nullable via null fields and carries the anchor's Ed25519 key).
+    - `auditHistoryParams { producer_id, since? }`; `auditHistoryResult`
+      **reuses the frozen `api/history-slice.json` by `$id`** (no second
+      dialect).
+    - `auditOverdueParams { threshold_secs? }`; `auditOverdueResult
+      { threshold_secs, count, runs[{ execution_id, status, registered_at }] }`
+      (`status` = the `RunStatus` serde snake_case set).
+  - `rust/rigorix-verifier`: `build_validator` registers `api/history-slice.json`
+    as a cross-file resource; `catalog_integrity` asserts the three methods'
+    shape + the history-slice reuse; the closed-namespace subset test now uses
+    the enterprise **13-method** set. 25 tests.
+  - `schemas/api/method-catalog.md` lists the three methods; contract-sync rule
+    4 (integrity test + delta note) satisfied.
+
 - **2026-09-24 — catalog de-duplicates the identity shapes (no instance change):**
   `schemas/api/catalog.json` inlined copies of `claims.json`'s `identityRef`
   (pre-existing) and `identityClaim` (added by SDK-C5). Structurally identical
