@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rigorix-verifier"
+version = "0.1.0"
+description = "Protocol-only verification of Rigorix audit envelopes: HMAC, JSON Schema, per-producer chains, and Ed25519 anchor artifacts. Consumes the canonical rigorix-schemas corpus."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.9"
+authors = [{ name = "Arman Wolkenstein-Jalili and Rigorix contributors" }]
+keywords = ["rigorix", "audit", "verifier", "hmac", "jsonschema"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Topic :: Security :: Cryptography",
+]
+dependencies = ["jsonschema>=4.0", "cryptography>=41.0"]
+
+[project.urls]
+Homepage = "https://github.com/arman-jalili/rigorix-sdk"
+Documentation = "https://github.com/arman-jalili/rigorix-sdk/tree/main/python"
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["rigorix_verifier"]
+
+[tool.setuptools.package-data]
+rigorix_verifier = ["_schemas/**/*", "_schemas/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

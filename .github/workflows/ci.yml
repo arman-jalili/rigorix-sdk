@@ -62,3 +62,53 @@ jobs:
         run: |
           unset RIGORIX_SDK_SCHEMAS
           cargo test -p rigorix-verifier --lib
+
+  python-verifier:
+    name: 🐍 rigorix-verifier (pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install -e ".[test]"
+
+      - name: Test (Strategy A parity, Python)
+        # Byte-exact HMAC against the committed engine fixtures + JSON Schema +
+        # ADR-016 chain/checkpoint + Ed25519 anchor verification.
+        run: pytest -q
+
+  typescript-verifier:
+    name: 🟦 rigorix-verifier (node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: typescript
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Test (Strategy A parity, TypeScript)
+        # tsc + `node --test`: byte-exact HMAC (lossless numbers), JSON Schema,
+        # ADR-016 chain/checkpoint, Ed25519 anchor verification.
+        run: npm test
