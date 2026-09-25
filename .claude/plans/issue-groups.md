@@ -20,7 +20,7 @@ Issues are grouped by:
 | # | ID | Priority | Component | Buildable now? |
 |---|----|----------|-----------|----------------|
 | 10 | SDK-C1 | high | SSE push spec | **DONE** — PR #13 |
-| 11 | SDK-C4 | medium | `rust/rigorix-client` (+ TS follow-up) | **In progress** — Rust client in `issue/11`, stacked on #21; TS client deferred |
+| 11 | SDK-C4 | medium | `rust/rigorix-client` + `typescript-client/` | **In progress** — Rust PR #26; TS client `issue/11-ts` (follow-up) |
 | 12 | SDK-AUDIT-A | high | envelope chain + anchor artifacts | **DONE** — PR #14 |
 | 15 | SDK-C5 | medium | catalog parity (`rigorix.auth.verify`) | **DONE** — PR #16 |
 | 18 | SDK-SCHEMAS-PUBLISH | high | `rust/rigorix-schemas` (new crate) + CI | **Yes** — packaging only |
@@ -134,8 +134,9 @@ Python (pytest) + TypeScript (`node --test`) CI jobs added.
 
 **Approach:** protocol-only `rigorix-client` (framing, transport seam, error
 taxonomy, catalog binding + drift test, no engine dep, governed flows only).
-The TS client is a follow-up in `typescript-client/` (`typescript/` is the #21
-verifier package).
+- `issue/11` → Rust client (PR #26, base `issue/21`).
+- `issue/11-ts` → TypeScript client in `typescript-client/` (base `issue/11`;
+  `typescript/` is the #21 verifier package).
 
 ---
 

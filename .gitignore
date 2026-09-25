@@ -1,6 +1,7 @@
 target/
 node_modules/
 typescript/dist/
+typescript-client/dist/
 __pycache__/
 *.pyc
 .venv/
