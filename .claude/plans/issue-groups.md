@@ -26,7 +26,7 @@ Issues are grouped by:
 | 18 | SDK-SCHEMAS-PUBLISH | high | `rust/rigorix-schemas` (new crate) + CI | **Yes** — packaging only |
 | 19 | SDK-VERIFIER-PUBLISH | high | `rust/rigorix-verifier` (self-contained publish) | **Yes** — stacked on #18 (`issue/19`); package/publish gate after `rigorix-schemas` release |
 | 20 | SDK-CATALOG-AUDIT | high | `schemas/api/catalog.json` (audit methods) | **In progress** — `issue/20`, stacked on #19 |
-| 21 | SDK-C6 | medium | `python/` + `typescript/` verifiers | Depends on #18 for a consumable corpus |
+| 21 | SDK-C6 | medium | `python/` + `typescript/` verifiers | **In progress** — `issue/21`, stacked on #20 |
 
 ---
 
@@ -111,6 +111,18 @@ activates once `rigorix-schemas` is on crates.io (the issue's prerequisite).
 **Code truth:** rigorix-enterprise PR #210 (ADR-016 Phase B ledger).
 `audit.history` reuses the frozen `api/history-slice.json`; the closed-namespace
 subset test now covers the enterprise 13-method set.
+
+---
+
+## Group: Multi-language verifiers (single, stacked)
+
+**Branch:** `issue/21` (base `issue/20`)
+**Issue:** 1
+- #21 SDK-C6: Python + TypeScript verifiers (Strategy A parity)
+
+**Approach:** independent re-implementations, byte-exact against the committed
+engine fixtures (canonical field order + sorted maps + lossless numbers).
+Python (pytest) + TypeScript (`node --test`) CI jobs added.
 
 ---
 
