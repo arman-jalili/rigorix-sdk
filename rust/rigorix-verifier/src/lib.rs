@@ -72,6 +72,11 @@ pub enum VerifyError {
     ChainBroken { detail: String },
     #[error("invalid Ed25519 anchor signature: {0}")]
     AnchorSignature(String),
+    #[error(
+        "method `{0}` is not declared in the frozen rigorix.* catalog \
+         (ADR-0001 D3 — the namespace is closed; a server implements a subset)"
+    )]
+    UndeclaredMethod(String),
 }
 
 pub type VerifyResult<T> = Result<T, VerifyError>;
@@ -656,6 +661,32 @@ fn schema_path(file: &str) -> VerifyResult<std::path::PathBuf> {
     }
 }
 
+/// Verify that every method in `candidate` is declared in the frozen catalog
+/// (`schemas/api/catalog.json`).
+///
+/// ADR-0001 D3: the `rigorix.*` namespace is **closed** — a server implements a
+/// SUBSET of the frozen catalog and MUST NOT register an undeclared method.
+/// Server CI / conformance passes the method set it serves; an unknown
+/// `rigorix.*` name is a contract violation (SDK-C5 / #15).
+pub fn verify_catalog_subset(candidate: &[&str]) -> VerifyResult<()> {
+    let path = schema_path("api/catalog.json")?;
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| VerifyError::SchemaRead(format!("{}: {e}", path.display())))?;
+    let catalog: serde_json::Value = serde_json::from_str(&text)?;
+    let declared: std::collections::HashSet<&str> = catalog["methods"]
+        .as_array()
+        .ok_or_else(|| VerifyError::Schema("catalog.json: methods is not an array".to_string()))?
+        .iter()
+        .filter_map(|method| method["name"].as_str())
+        .collect();
+    for method in candidate {
+        if !declared.contains(method) {
+            return Err(VerifyError::UndeclaredMethod((*method).to_string()));
+        }
+    }
+    Ok(())
+}
+
 /// The `$id` of the canonical envelope schema — the only cross-file `$ref`
 /// target on the contract surface (`api/events.json` → `envelope.json`).
 const ENVELOPE_SCHEMA_ID: &str = "https://rigorix.dev/schemas/envelope-v2.json";
@@ -1051,8 +1082,8 @@ mod tests {
         let defs = catalog["$defs"].as_object().expect("$defs object");
         let methods = catalog["methods"].as_array().expect("methods array");
         assert!(
-            methods.len() >= 19,
-            "catalog should list the frozen surface"
+            methods.len() >= 20,
+            "catalog should list the frozen surface (>= 20 methods)"
         );
 
         let mut seen = std::collections::HashSet::new();
@@ -1136,6 +1167,35 @@ mod tests {
             declared, known,
             "catalog transport.push.events must match events.json discriminants"
         );
+
+        // SDK-C5 / ADR-0001 D3: the closed-namespace rule is documented and the
+        // previously-undeclared `rigorix.auth.verify` is now declared.
+        assert!(
+            catalog["description"]
+                .as_str()
+                .is_some_and(|d| d.contains("CLOSED")),
+            "catalog.json must document the closed `rigorix.*` namespace"
+        );
+        let auth_verify = methods
+            .iter()
+            .find(|m| m["name"] == "rigorix.auth.verify")
+            .expect("rigorix.auth.verify must be declared in the frozen catalog");
+        assert_eq!(auth_verify["kind"], "query");
+        assert_eq!(auth_verify["auth"], "session");
+        assert!(
+            auth_verify["mcpTool"].is_null(),
+            "auth.verify is server-only"
+        );
+        for slot in ["params", "result"] {
+            let reference = auth_verify[slot]["$ref"]
+                .as_str()
+                .unwrap_or_else(|| panic!("auth.verify: missing {slot}.$ref"));
+            let key = reference.rsplit('/').next().unwrap_or_default();
+            assert!(
+                defs.contains_key(key),
+                "auth.verify {slot} $ref '{reference}' does not resolve in $defs"
+            );
+        }
     }
 
     // The error taxonomy and its code mapping must stay in sync: every
@@ -1388,6 +1448,34 @@ mod tests {
             format!("{}\n", serde_json::to_string_pretty(&checkpoint).unwrap()),
         )
         .expect("write compaction checkpoint");
+    }
+
+    // ─── Catalog parity / closed namespace (ADR-0001 D3, SDK-C5 / #15) ───
+    //
+    // Every method a server registers must be declared in the frozen catalog;
+    // a server implements a SUBSET, never an extension. The enterprise
+    // Execution API's method set is the canonical positive case.
+    #[test]
+    fn catalog_subset_guard_rejects_undeclared_method() {
+        let enterprise = [
+            "rigorix.plan",
+            "rigorix.validatePlan",
+            "rigorix.run",
+            "rigorix.approve",
+            "rigorix.auth.verify",
+            "rigorix.policy.bundle",
+            "rigorix.audit.read",
+            "rigorix.audit.list",
+            "rigorix.audit.summary",
+            "rigorix.system.version",
+        ];
+        verify_catalog_subset(&enterprise).expect("a declared subset must pass");
+
+        let err = verify_catalog_subset(&["rigorix.auth.bogus"]).unwrap_err();
+        assert!(
+            matches!(err, VerifyError::UndeclaredMethod(ref m) if m == "rigorix.auth.bogus"),
+            "{err:?}"
+        );
     }
 
     fn semver_ok(s: &str) -> bool {

@@ -1,7 +1,7 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-09-24
-**Total open issues:** 3 (#10, #11, #12)
+**Generated:** 2026-09-24 (updated)
+**Open issues:** 2 (#11, #15) — #10 (PR #13) and #12 (PR #14) are merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
 
 ---
@@ -19,9 +19,10 @@ Issues are grouped by:
 
 | # | ID | Priority | Component | Buildable now? |
 |---|----|----------|-----------|----------------|
-| 10 | SDK-C1 | high | `docs/adr` + `schemas/api` + `schemas/fixtures/events` + verifier | **Yes** — self-contained spec; engine `ExecutionEvent` + OSS `server/src/events.rs` exist as code truth |
-| 11 | SDK-C4 | medium | `rust/rigorix-client` + `typescript/` | Yes, but large; lists C1 as an optional dependency for event-stream parity |
-| 12 | SDK-AUDIT-A | high | `schemas/envelope.json` + `schemas/api` + `schemas/fixtures/integrity` + verifier | **Yes** — ADR-016 Phase A landed (`rigorix-oss` #902, `83e904ad`): engine struct now carries the chain fields |
+| 10 | SDK-C1 | high | `docs/adr` + `schemas/api` + `schemas/fixtures/events` + verifier | **DONE** — PR #13 merged |
+| 11 | SDK-C4 | medium | `rust/rigorix-client` + `typescript/` | Yes, but large; C1 dependency now satisfied |
+| 12 | SDK-AUDIT-A | high | `schemas/envelope.json` + `schemas/api` + `schemas/fixtures/integrity` + verifier | **DONE** — PR #14 merged |
+| 15 | SDK-C5 | medium | `schemas/api` + verifier (catalog parity) | **Yes** — enterprise `rigorix.auth.verify` is code truth (`rigorix-enterprise` #208) |
 
 ---
 
@@ -54,13 +55,28 @@ copy now does too.
 
 ---
 
+## Group: Catalog parity (single)
+
+**Branch:** `issue/15`
+**Issue:** 1
+- #15 SDK-C5: Catalog parity — declare `rigorix.auth.verify` + catalog-subset
+  conformance guard
+
+**Decision:** **declare** (option a). `rigorix-enterprise` #206/#208 registers
+`rigorix.auth.verify` (query / session / no MCP tool) dispatching to JWKS claim
+verification (`core/src/execution_api/application/catalog.rs:74,182`). It is
+distinct from `rigorix.auth.status` (local session status), so the SDK owns the
+call and declares it in the closed `rigorix.*` namespace (ADR-0001 D3).
+
+---
+
 ## Backlog (deferred, not blocked)
 
 **Issue:** #11 SDK-C4 — Typed SDK clients (Rust + TypeScript)
 
 **Defer reason:** it consumes C1 (`events.json`) for push-stream parity and is
-substantially larger (new Rust crate + TS package + two CI jobs). Run after #10
-merges.
+substantially larger (new Rust crate + TS package + two CI jobs). C1 is now
+merged (PR #13), so it is ready to start when scheduled.
 
 ---
 

@@ -270,3 +270,30 @@ Then: catalog design → servers → SDKs.
     Ed25519 implementation with the documented public key.
   - Additive and serde-defaulted: pre-Phase-A envelopes validate and canonicalize
     unchanged (legacy = chain-of-one / unknown predecessor, grandfathered).
+
+- **2026-09-24 — SDK-C5 catalog parity (closed namespace; additive contract):**
+  The enterprise Execution API (rigorix-enterprise #206 / PR #208) registered
+  `rigorix.auth.verify` (`core/src/execution_api/application/catalog.rs:74`,
+  dispatch at `:182`) but it was absent from the frozen catalog — drift in a
+  namespace meant to be closed (ADR-0001 D3).
+  - `schemas/api/catalog.json`: **declared** `rigorix.auth.verify` (query /
+    `session` / `mcpTool: null`, `since 1.0.0`) with `$defs.authVerifyParams`
+    (`{ attestation: string }`, the enterprise `AttestationParams`) and
+    `$defs.authVerifyResult` (`{ claim: identityClaim }` — the enterprise returns
+    the full `IdentityClaim`, matching `../claims.json` `$defs.identityClaim`).
+    Option (a) from the issue: the org-side JWKS verification is distinct from
+    `rigorix.auth.status` (which reports the local session), so declaring wins
+    over folding.
+  - Added a top-level `description` documenting the **closed namespace** (a
+    server implements a subset, never an extension) and allowed it in
+    `catalog.schema.json`.
+  - `rust/rigorix-verifier`: new `verify_catalog_subset(candidate)` — reads the
+    frozen method set and fails on any undeclared `rigorix.*` name
+    (`VerifyError::UndeclaredMethod`); `catalog_integrity` now asserts
+    `rigorix.auth.verify`'s shape + the closed-namespace description. 23 tests.
+  - `schemas/api/README.md` new rule 6 (closed namespace) + `method-catalog.md`
+    lists the method with a pointer to `catalog.json` as the authoritative set.
+  - **Cross-repo follow-up:** rigorix-oss `server/tests/catalog_parity.rs`
+    currently asserts the OSS in-code catalog **equals** the SDK catalog; with
+    the closed/subset model it should use the subset guard (the OSS server is a
+    subset, not the whole namespace).

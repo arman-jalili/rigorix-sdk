@@ -4,6 +4,10 @@
 is built *over* synced contracts so it cannot freeze drift. This sketch records the
 agreed shape: JSON-RPC 2.0 over HTTP, first-class typed methods, MCP stays an adapter.
 
+> **The live, frozen method set is [`catalog.json`](catalog.json)** (ADR-0001). This
+> file is historical context; `rigorix.auth.verify` was declared after the sketch
+> (SDK-C5) and is authoritative only in `catalog.json`.
+
 ## Shape
 
 - Transport: JSON-RPC 2.0 over HTTP POST (`/rpc`); SSE/event stream for push (approval
@@ -25,6 +29,7 @@ agreed shape: JSON-RPC 2.0 over HTTP, first-class typed methods, MCP stays an ad
 | `rigorix.checkEnforcement` | enforcement state snapshot (mirrors `rigorix_check_enforcement`) |
 | `rigorix.audit.list` / `rigorix.audit.read` / `rigorix.audit.summary` | signed trail (envelope v2) |
 | `rigorix.auth.login` / `rigorix.auth.status` / `rigorix.auth.logout` | OIDC device flow (RFC 8628, ADR-008/012) |
+| `rigorix.auth.verify` | org-side JWKS verification of an OSS-attested claim → the verified identity claim (enterprise Execution API; SDK-C5) |
 | `rigorix.template.*` | template CRUD/validate |
 | `rigorix.policy.bundle` | policy export for OSS-side enforcement (enterprise: source of truth) |
 | `rigorix.usageGuide` | self-description (mirrors `rigorix_get_usage_guide`) |
