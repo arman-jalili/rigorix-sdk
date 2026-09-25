@@ -1,7 +1,7 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-09-24 (updated)
-**Open issues:** 2 (#11, #15) — #10 (PR #13) and #12 (PR #14) are merged
+**Generated:** 2026-09-25 (updated)
+**Open issues:** 5 (#11, #18, #19, #20, #21) — #10/#12/#15 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
 
 ---
@@ -19,10 +19,14 @@ Issues are grouped by:
 
 | # | ID | Priority | Component | Buildable now? |
 |---|----|----------|-----------|----------------|
-| 10 | SDK-C1 | high | `docs/adr` + `schemas/api` + `schemas/fixtures/events` + verifier | **DONE** — PR #13 merged |
-| 11 | SDK-C4 | medium | `rust/rigorix-client` + `typescript/` | Yes, but large; C1 dependency now satisfied |
-| 12 | SDK-AUDIT-A | high | `schemas/envelope.json` + `schemas/api` + `schemas/fixtures/integrity` + verifier | **DONE** — PR #14 merged |
-| 15 | SDK-C5 | medium | `schemas/api` + verifier (catalog parity) | **Yes** — enterprise `rigorix.auth.verify` is code truth (`rigorix-enterprise` #208) |
+| 10 | SDK-C1 | high | SSE push spec | **DONE** — PR #13 |
+| 11 | SDK-C4 | medium | `rust/rigorix-client` + `typescript/` | Yes; C1 done |
+| 12 | SDK-AUDIT-A | high | envelope chain + anchor artifacts | **DONE** — PR #14 |
+| 15 | SDK-C5 | medium | catalog parity (`rigorix.auth.verify`) | **DONE** — PR #16 |
+| 18 | SDK-SCHEMAS-PUBLISH | high | `rust/rigorix-schemas` (new crate) + CI | **Yes** — packaging only |
+| 19 | SDK-VERIFIER-PUBLISH | high | `rust/rigorix-verifier` (self-contained publish) | Depends on #18 (this batch) |
+| 20 | SDK-CATALOG-AUDIT | medium | `schemas/api/catalog.json` (audit methods) | Needs the server code as truth (verify) |
+| 21 | SDK-C6 | medium | `python/` + `typescript/` verifiers | Depends on #18 for a consumable corpus |
 
 ---
 
@@ -67,6 +71,21 @@ copy now does too.
 verification (`core/src/execution_api/application/catalog.rs:74,182`). It is
 distinct from `rigorix.auth.status` (local session status), so the SDK owns the
 call and declares it in the closed `rigorix.*` namespace (ADR-0001 D3).
+
+---
+
+## Group: Schemas publish (single)
+
+**Branch:** `issue/18`
+**Issue:** 1
+- #18 SDK-SCHEMAS-PUBLISH: publish `rigorix-schemas` — the canonical contracts
+  as a consumable crate
+
+**Approach:** new build-time-embedding crate (issue option B). `schemas/` at the
+repo root stays canonical; `rust/rigorix-schemas/schemas` is a symlink that
+`cargo package` dereferences so the published crate is self-contained.
+Unblocks **#19** (publish `rigorix-verifier`) and **#21** (Python/TS verifiers,
+which consume the same corpus).
 
 ---
 

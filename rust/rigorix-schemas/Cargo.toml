@@ -1,0 +1,21 @@
+[package]
+name = "rigorix-schemas"
+description = "Canonical Rigorix contracts (JSON Schemas + conformance fixtures), embedded at build time and consumable by the verifier, clients, and servers — one copy, no vendoring. No rigorix-engine dependency."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rigorix-schemas"
+keywords = ["rigorix", "jsonschema", "audit", "contracts", "governance"]
+categories = ["development-tools", "encoding"]
+rust-version = "1.74"
+# Ship the embedded corpus (`schemas/` is a symlink to the repo-root single
+# source of truth; cargo dereferences it into the package). No duplicate copy
+# is committed.
+include = ["src/**/*", "build.rs", "README.md", "schemas/**/*"]
+
+[dependencies]
+
+[build-dependencies]
+serde_json = { workspace = true }
