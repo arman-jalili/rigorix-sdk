@@ -697,6 +697,10 @@ const ENVELOPE_SCHEMA_ID: &str = "https://rigorix.dev/schemas/envelope-v2.json";
 /// (`api/catalog.json` → `claims.json#/$defs/identityRef|identityClaim`).
 const CLAIMS_SCHEMA_ID: &str = "https://rigorix.dev/schemas/claims.json";
 
+/// The `$id` of the ADR-016 history-slice schema — the result shape of
+/// `rigorix.audit.history`, referenced cross-file from the catalog.
+const HISTORY_SLICE_SCHEMA_ID: &str = "https://rigorix.dev/schemas/api/history-slice-v1.json";
+
 /// Build a JSON Schema validator, registering sibling contract schemas so
 /// cross-file `$ref`s resolve offline (`events.json` → `envelope.json`;
 /// `api/catalog.json` → `claims.json`).
@@ -707,6 +711,7 @@ fn build_validator(file: &str, schema: &serde_json::Value) -> VerifyResult<jsons
     for (sibling, id) in [
         ("envelope.json", ENVELOPE_SCHEMA_ID),
         ("claims.json", CLAIMS_SCHEMA_ID),
+        ("api/history-slice.json", HISTORY_SLICE_SCHEMA_ID),
     ] {
         if file == sibling {
             continue;
@@ -1156,8 +1161,8 @@ mod tests {
         let defs = catalog["$defs"].as_object().expect("$defs object");
         let methods = catalog["methods"].as_array().expect("methods array");
         assert!(
-            methods.len() >= 20,
-            "catalog should list the frozen surface (>= 20 methods)"
+            methods.len() >= 23,
+            "catalog should list the frozen surface (>= 23 methods)"
         );
 
         let mut seen = std::collections::HashSet::new();
@@ -1265,6 +1270,37 @@ mod tests {
                 "auth.verify {slot} $ref '{reference}' does not resolve in $defs"
             );
         }
+
+        // SDK-CATALOG-AUDIT / ADR-016 Phase B: the three ledger methods the
+        // enterprise registers must be declared (query / session / no MCP tool).
+        for name in [
+            "rigorix.audit.head",
+            "rigorix.audit.history",
+            "rigorix.audit.overdue",
+        ] {
+            let method = methods
+                .iter()
+                .find(|m| m["name"] == name)
+                .unwrap_or_else(|| panic!("{name} must be declared in the frozen catalog"));
+            assert_eq!(method["kind"], "query", "{name}: kind");
+            assert_eq!(method["auth"], "session", "{name}: auth");
+            assert!(method["mcpTool"].is_null(), "{name} is server-only");
+            for slot in ["params", "result"] {
+                let reference = method[slot]["$ref"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{name}: missing {slot}.$ref"));
+                let key = reference.rsplit('/').next().unwrap_or_default();
+                assert!(
+                    defs.contains_key(key),
+                    "{name}: {slot} $ref '{reference}' does not resolve in $defs"
+                );
+            }
+        }
+        // `audit.history` reuses the frozen history-slice shape by `$id`.
+        assert_eq!(
+            defs["auditHistoryResult"]["$ref"], HISTORY_SLICE_SCHEMA_ID,
+            "rigorix.audit.history must reuse api/history-slice.json"
+        );
     }
 
     // The error taxonomy and its code mapping must stay in sync: every
@@ -1529,11 +1565,12 @@ mod tests {
         .expect("write compaction checkpoint");
     }
 
-    // ─── Catalog parity / closed namespace (ADR-0001 D3, SDK-C5 / #15) ───
+    // ─── Catalog parity / closed namespace (ADR-0001 D3; SDK-C5 #15,
+    //     SDK-CATALOG-AUDIT #20) ────────────────────────────────────────
     //
     // Every method a server registers must be declared in the frozen catalog;
     // a server implements a SUBSET, never an extension. The enterprise
-    // Execution API's method set is the canonical positive case.
+    // Execution API's 13-method set is the canonical positive case.
     #[test]
     fn catalog_subset_guard_rejects_undeclared_method() {
         let enterprise = [
@@ -1546,6 +1583,9 @@ mod tests {
             "rigorix.audit.read",
             "rigorix.audit.list",
             "rigorix.audit.summary",
+            "rigorix.audit.head",
+            "rigorix.audit.history",
+            "rigorix.audit.overdue",
             "rigorix.system.version",
         ];
         verify_catalog_subset(&enterprise).expect("a declared subset must pass");

@@ -25,7 +25,7 @@ Issues are grouped by:
 | 15 | SDK-C5 | medium | catalog parity (`rigorix.auth.verify`) | **DONE** — PR #16 |
 | 18 | SDK-SCHEMAS-PUBLISH | high | `rust/rigorix-schemas` (new crate) + CI | **Yes** — packaging only |
 | 19 | SDK-VERIFIER-PUBLISH | high | `rust/rigorix-verifier` (self-contained publish) | **Yes** — stacked on #18 (`issue/19`); package/publish gate after `rigorix-schemas` release |
-| 20 | SDK-CATALOG-AUDIT | medium | `schemas/api/catalog.json` (audit methods) | Needs the server code as truth (verify) |
+| 20 | SDK-CATALOG-AUDIT | high | `schemas/api/catalog.json` (audit methods) | **In progress** — `issue/20`, stacked on #19 |
 | 21 | SDK-C6 | medium | `python/` + `typescript/` verifiers | Depends on #18 for a consumable corpus |
 
 ---
@@ -99,6 +99,18 @@ which consume the same corpus).
 `RIGORIX_SDK_SCHEMAS` → embedded → error (no repo path); publish metadata +
 README + self-containment CI. The actual `cargo package`/`publish` gate
 activates once `rigorix-schemas` is on crates.io (the issue's prerequisite).
+
+---
+
+## Group: Catalog audit methods (single, stacked)
+
+**Branch:** `issue/20` (base `issue/19`)
+**Issue:** 1
+- #20 SDK-CATALOG-AUDIT: declare `rigorix.audit.head` / `.history` / `.overdue`
+
+**Code truth:** rigorix-enterprise PR #210 (ADR-016 Phase B ledger).
+`audit.history` reuses the frozen `api/history-slice.json`; the closed-namespace
+subset test now covers the enterprise 13-method set.
 
 ---
 
