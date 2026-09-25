@@ -1,0 +1,21 @@
+[package]
+name = "rigorix-client"
+description = "Protocol-only typed client for the frozen rigorix.* JSON-RPC catalog — governed flows only, no engine dependency, no raw step execution."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rigorix-client"
+keywords = ["rigorix", "jsonrpc", "client", "governance", "sdk"]
+categories = ["api-bindings", "development-tools"]
+rust-version = "1.74"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2"
+
+[dev-dependencies]
+# The catalog-drift test reads the frozen catalog from the embedded corpus.
+rigorix-schemas = { version = "0.1.0", path = "../rigorix-schemas" }

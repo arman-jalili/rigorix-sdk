@@ -63,6 +63,14 @@ jobs:
           unset RIGORIX_SDK_SCHEMAS
           cargo test -p rigorix-verifier --lib
 
+      - name: rigorix-client has NO rigorix-engine dependency
+        # ADR-0001 D-1: execution logic never moves into an SDK. SDK-C4.
+        run: |
+          if cargo tree -p rigorix-client | grep -q rigorix-engine; then
+            echo "rigorix-client must not depend on rigorix-engine"; exit 1
+          fi
+          echo "no rigorix-engine dependency"
+
   python-verifier:
     name: 🐍 rigorix-verifier (pytest)
     runs-on: ubuntu-latest
