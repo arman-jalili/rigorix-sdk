@@ -26,6 +26,7 @@ keys held in the engine configuration.
 | `envelope-sequence-denied-signed.json` | Dispatch-boundary deny recorded (`sequence_policy_denied`) |
 | `envelope-rich-pre-identity.json` | Rich additive blocks without the identity block (pre-identity shape) |
 | `envelope-effect-key-signed.json` | ADR-014: run-level `effect_key` (one-way keyed hash) recorded — effect-keyed history input |
+| `envelope-anchored-signed.json` | ADR-016 Phase C: anchored run — `history_integrity=anchored` + signed `anchor_head` (the verified ledger head), placed after `history_policy` / before `approval_events` |
 
 Each file validates against `schemas/envelope.json` (format v2) and its HMAC
 verifies byte-exact with `rigorix-verifier::verify_signature` under the key

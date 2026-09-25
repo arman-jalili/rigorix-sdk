@@ -1,7 +1,7 @@
 # Issue Implementation Groups
 
 **Generated:** 2026-09-25 (updated)
-**Open issues:** 1 (#29) — #10/#12/#15/#18–#21/#11 merged
+**Open issues:** 1 (#31) — #10/#12/#15/#18–#21/#11/#29 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
 
 ---
@@ -140,16 +140,18 @@ taxonomy, catalog binding + drift test, no engine dep, governed flows only).
 
 ---
 
-## Group: Verifier packaging (single)
+## Group: ADR-016 Phase C contract (single)
 
-**Branch:** `issue/29`
+**Branch:** `issue/31`
 **Issue:** 1
-- #29 SDK-C6-PACKAGING: bundle the contract corpus in the packed Python/TS
-  verifiers + pack-time gates
+- #31 SDK-CATALOG-ANCHOR-HEAD: declare envelope `anchor_head` (ADR-016 Phase C)
+  in `envelope.json` + all three verifiers at the exact engine position
 
-**Approach:** generate a real `_schemas` copy at pack/build time (npm `prepack`/
-`build`; setuptools `build_py`/`sdist` hooks + `conftest.py`), gitignore it, add
-sync tests, and gate CI on pack→install→smoke with the env override unset.
+**Approach:** additive `anchor_head` in `schemas/envelope.json` after
+`history_policy` / before `approval_events`; frozen struct field in the Rust
+verifier; skip-none set in Python/TS; an engine-produced anchored fixture; and
+focused regression tests in all three. Contract follows rigorix-oss
+`issue/899` (PR #908, code is truth).
 
 ---
 

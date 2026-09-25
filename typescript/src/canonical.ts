@@ -25,6 +25,7 @@ const SKIP_NONE = new Set([
   "prev_hash",
   "history_integrity",
   "history_policy",
+  "anchor_head",
   "decision_context_ref",
   "payload",
 ]);
