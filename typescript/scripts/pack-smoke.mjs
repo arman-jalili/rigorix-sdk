@@ -6,6 +6,6 @@
  */
 import { fixtureText, schemasRoot, verifyChain, verifySignature } from "rigorix-verifier";
 
-verifySignature(fixtureText("envelope/envelope-minimal-signed.json"), "fixture-hmac-key-2026");
+verifySignature(fixtureText("envelope/envelope-anchored-signed.json"), "fixture-hmac-key-2026");
 verifyChain(JSON.parse(fixtureText("integrity/chain.json")));
 console.log("packed typescript verifier smoke OK:", schemasRoot());

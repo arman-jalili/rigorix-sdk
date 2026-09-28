@@ -15,7 +15,8 @@ shelling out to Rust. No engine dependency.
 ## Install
 
 ```bash
-pip install .          # or: pip install -e ".[test]"
+pip install rigorix-verifier==0.2.0   # published artifact (embedded corpus)
+pip install .                          # or: pip install -e ".[test]" (from source)
 ```
 
 ## Usage

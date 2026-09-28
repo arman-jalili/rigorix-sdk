@@ -11,6 +11,12 @@ Two invariants are enforced in code and CI:
   test fails if one is ever added.
 - **No engine dependency** — execution logic never moves into an SDK (D-1).
 
+## Install
+
+```bash
+npm install rigorix-client@0.2.0
+```
+
 ## Usage
 
 ```ts

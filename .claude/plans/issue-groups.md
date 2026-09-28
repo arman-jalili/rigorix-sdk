@@ -14,7 +14,7 @@
 | # | ID | Priority | Component | Blocked by |
 |---|----|----------|-----------|-----------|
 | 34 | SDK-CRATES-0.2.0 | high | `rust/` version bump + packed-crate proof + consumer bumps | → `issue/34` (in progress) |
-| 33 | SDK-PUBLISH-PY-TS | medium | publish jobs + version alignment + README | #34 (shared 0.2.0) |
+| 33 | SDK-PUBLISH-PY-TS | medium | publish jobs + version alignment + README | → `issue/33` (in progress; base `issue/34`) |
 | 35 | SDK-CLIENTS-JAVA-GO | low | `java/` + `go/` verifiers + clients | #34 (schemas publish) |
 
 **Why one series:** all three are the D-1/D-2 distribution epic and share the

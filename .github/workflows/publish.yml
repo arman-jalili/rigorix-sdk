@@ -1,0 +1,181 @@
+name: Publish
+
+# SDK-PUBLISH-PY-TS (#33): tag-triggered registry publication for the Python +
+# TypeScript verifiers/clients, followed by a clean registry-install smoke.
+#
+# Auth (configure once, by the release owner):
+#   - PyPI: Trusted Publishing (OIDC) for repo `arman-jalili/rigorix-sdk`,
+#           workflow `publish.yml` — no secret (uses `id-token: write`).
+#   - npm:  `NPM_TOKEN` automation token (repo secret), 2FA bypass.
+#   - Publish the shared version first: `python/pyproject.toml`,
+#     `typescript/package.json`, `typescript-client/package.json` (+ their
+#     lockfiles). Each job asserts the tag matches the artifact version.
+#
+# Dry run (build only, no upload): Actions → Publish → Run workflow.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: 🐍 rigorix-verifier → PyPI
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write # PyPI Trusted Publishing (OIDC)
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Assert the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(python -c 'import tomllib;print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          echo "tag=$tag package=$pkg"
+          test "$tag" = "$pkg"
+
+      - name: Build sdist + wheel (corpus bundled by setup.py)
+        run: |
+          python -m pip install --upgrade build
+          python -m build --outdir dist
+
+      - name: Publish to PyPI (Trusted Publishing)
+        if: github.event_name == 'push'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist
+
+  npm-verifier:
+    name: 🟦 rigorix-verifier → npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: typescript/package-lock.json
+
+      - run: npm ci
+
+      - name: Assert the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(node -p "require('./package.json').version")"
+          echo "tag=$tag package=$ver"
+          test "$tag" = "$ver"
+
+      - run: npm run build
+
+      - name: Publish to npm (prepack re-bundles the corpus)
+        if: github.event_name == 'push'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  npm-client:
+    name: 🟦 rigorix-client → npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: typescript-client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: typescript-client/package-lock.json
+
+      - run: npm ci
+
+      - name: Assert the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(node -p "require('./package.json').version")"
+          echo "tag=$tag package=$ver"
+          test "$tag" = "$ver"
+
+      - name: Publish to npm (prepack builds dist/)
+        if: github.event_name == 'push'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  smoke:
+    name: 🔎 registry install + anchored-fixture smoke
+    needs: [python, npm-verifier, npm-client]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: PyPI install → verify the anchored fixture (no env override)
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          python -m venv "$RUNNER_TEMP/py"
+          # PyPI/CDN propagation can lag briefly after Trusted Publishing.
+          # Retry the install a bounded number of times before failing.
+          installed=no
+          for attempt in 1 2 3 4 5; do
+            if "$RUNNER_TEMP/py/bin/pip" install --quiet "rigorix-verifier==$tag"; then
+              installed=yes; break
+            fi
+            echo "py install attempt $attempt: not yet available; retrying in 15s"
+            sleep 15
+          done
+          test "$installed" = yes || { echo "FAIL: rigorix-verifier==$tag not installable from PyPI"; exit 1; }
+          unset RIGORIX_SDK_SCHEMAS
+          "$RUNNER_TEMP/py/bin/python" "$GITHUB_WORKSPACE/python/scripts/pack_smoke.py"
+
+      - name: npm install → verify the anchored fixture (no env override)
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          mkdir -p "$RUNNER_TEMP/npm"
+          cp "$GITHUB_WORKSPACE/typescript/scripts/pack-smoke.mjs" "$RUNNER_TEMP/npm/smoke.mjs"
+          cd "$RUNNER_TEMP/npm"
+          npm init -y >/dev/null
+          # npm registry propagation can lag briefly after publish.
+          installed=no
+          for attempt in 1 2 3 4 5; do
+            if npm install "rigorix-verifier@$tag" "rigorix-client@$tag" --no-audit --no-fund; then
+              installed=yes; break
+            fi
+            echo "npm install attempt $attempt: not yet available; retrying in 15s"
+            sleep 15
+          done
+          test "$installed" = yes || { echo "FAIL: rigorix-verifier@$tag / rigorix-client@$tag not installable from npm"; exit 1; }
+          unset RIGORIX_SDK_SCHEMAS
+          node smoke.mjs
