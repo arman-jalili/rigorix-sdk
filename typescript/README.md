@@ -14,8 +14,8 @@ protocol-only** verifier for Node. No engine dependency.
 ## Install
 
 ```bash
-npm install
-npm run build
+npm install rigorix-verifier@0.2.0   # published artifact (embedded corpus)
+npm install && npm run build          # from source
 ```
 
 ## Usage
