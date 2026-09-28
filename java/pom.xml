@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>dev.rigorix</groupId>
+  <artifactId>rigorix-verifier</artifactId>
+  <version>0.2.0</version>
+  <packaging>jar</packaging>
+  <name>rigorix-verifier</name>
+  <description>Protocol-only verification of Rigorix audit envelopes and ADR-016 anchor artifacts (HMAC, JSON Schema, chains, Ed25519).</description>
+
+  <properties>
+    <maven.compiler.release>17</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <jackson.version>2.17.2</jackson.version>
+    <json.schema.validator.version>1.5.4</json.schema.validator.version>
+    <bouncycastle.version>1.78.1</bouncycastle.version>
+    <junit.version>5.10.3</junit.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>${jackson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <version>${json.schema.validator.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.bouncycastle</groupId>
+      <artifactId>bcprov-jdk18on</artifactId>
+      <version>${bouncycastle.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>${junit.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <!-- SDK-CLIENTS-JAVA-GO: the canonical corpus is the repo-root `schemas/`
+           (single source of truth). Copied into the jar; never re-vendored in
+           a committed duplicate. -->
+      <resource>
+        <directory>${project.basedir}/../schemas</directory>
+        <targetPath>rigorix/schemas</targetPath>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.2.5</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>
