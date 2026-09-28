@@ -54,6 +54,14 @@ jobs:
         # corpus — no path/env dependency on the repo (SDK-SCHEMAS-PUBLISH).
         run: cargo package -p rigorix-schemas
 
+      - name: Packaged 0.2.0 carries anchor_head (clean-consumer smoke)
+        # SDK-CRATES-0.2.0: the packaged `rigorix-schemas` .crate must declare
+        # the Phase C `anchor_head` + fixture, and a clean scratch consumer must
+        # verify the anchored fixture with RIGORIX_SDK_SCHEMAS unset. `cargo
+        # package -p rigorix-verifier` becomes runnable once rigorix-schemas
+        # 0.2.0 is on crates.io (publish schemas first).
+        run: ./scripts/verify-packaged-crates.sh
+
       - name: Verifier self-containment (embedded corpus, no override)
         # SDK-VERIFIER-PUBLISH: the verifier resolves contracts from the embedded
         # `rigorix-schemas` corpus (env override unset). `cargo package -p
