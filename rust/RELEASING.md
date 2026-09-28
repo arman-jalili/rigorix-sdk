@@ -1,7 +1,12 @@
-# Releasing the SDK crates
+# Releasing the SDK
 
-Published crates: **`rigorix-schemas`** and **`rigorix-verifier`**.
-`rigorix-client` is a typed protocol client (independent release cadence).
+Two distribution channels share one version (`0.2.0`):
+
+- **Rust crates (crates.io)** — `rigorix-schemas`, `rigorix-verifier`
+  (`rigorix-client` is a typed protocol client, independent cadence). Published
+  manually (`cargo publish`), marker tag `rust-v0.2.0`.
+- **Python + TypeScript (PyPI + npm)** — `rigorix-verifier` (both) and
+  `rigorix-client` (npm). Published by CI on the `v0.2.0` tag.
 
 `rust/Cargo.toml` `[workspace.package] version` is the single source for every
 workspace member (`version.workspace = true`). The verifier + client pin
@@ -50,9 +55,22 @@ cargo add rigorix-verifier@0.2.0
 
 ### 4. Tag
 
+Two tags, two purposes — both point at the same commit on `main`:
+
+- **`rust-v0.2.0`** — the Rust crates marker. Does **not** trigger any workflow
+  (the crates are published manually above).
+- **`v0.2.0`** — triggers `.github/workflows/publish.yml`, which publishes the
+  Python + TypeScript artifacts to **PyPI** and **npm**. The workflow asserts the
+  tag matches each package version (`v0.2.0` → `0.2.0`), so the tag is load-bearing.
+
 ```bash
-git tag rust-v0.2.0 && git push origin rust-v0.2.0
+git tag rust-v0.2.0 && git push origin rust-v0.2.0   # crates marker
+git tag v0.2.0     && git push origin v0.2.0         # → PyPI + npm publish
 ```
+
+> `publish.yml` matches `tags: ["v*"]`. `rust-v0.2.0` deliberately does **not**
+> match (it starts with `r`) — pushing only `rust-v0.2.0` publishes the crates and
+> silently skips PyPI/npm. Push **both** tags.
 
 ### 5. Bump consumers (0.x semver: `^0.1` does **not** match `0.2`)
 
