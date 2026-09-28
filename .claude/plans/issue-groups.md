@@ -1,17 +1,43 @@
 # Issue Implementation Groups
 
 **Generated:** 2026-09-25 (updated)
-**Open issues:** 1 (#31) — #10/#12/#15/#18–#21/#11/#29 merged
+**Open issues:** 3 (#33, #34, #35) — #10/#12/#15/#18–#21/#11/#29/#31 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
 
 ---
 
-## Grouping Strategy
+## Series: SDK distribution (D-1 / D-2) — 2026-09-25
 
-Issues are grouped by:
-1. **Component** — Same module/files affected
-2. **Priority** — Critical > High > Medium > Low
-3. **Dependency** — Blocking relationships
+**Batch:** 3 issues, dependency-ordered **#34 → #33 → #35** (one PR per issue,
+`issue/{N}`, base `main`; publish steps gated on registry credentials).
+
+| # | ID | Priority | Component | Blocked by |
+|---|----|----------|-----------|-----------|
+| 34 | SDK-CRATES-0.2.0 | high | `rust/` version bump + packed-crate proof + consumer bumps | → `issue/34` (in progress) |
+| 33 | SDK-PUBLISH-PY-TS | medium | publish jobs + version alignment + README | #34 (shared 0.2.0) |
+| 35 | SDK-CLIENTS-JAVA-GO | low | `java/` + `go/` verifiers + clients | #34 (schemas publish) |
+
+**Why one series:** all three are the D-1/D-2 distribution epic and share the
+0.2.0 version. They are **not** one PR: each has distinct layers (`rust/` vs
+ci/packaging vs new `java/`+`go/` trees) and distinct external risk (crates.io,
+PyPI/npm). Dependency order is strict: #34 publishes `rigorix-schemas 0.2.0`
+**first** (the verifier dep is exact-versioned); #33 folds its artifact versions
+into the same 0.2.0; #35 consumes the published corpus.
+
+**Non-local tail (needs credentials / other repos) — implemented, documented,
+CI-gated here, then executed by the release owner:**
+- `cargo publish -p rigorix-schemas` → then `-p rigorix-verifier` (crates.io token).
+- PyPI Trusted Publishing / `PYPI_TOKEN`; npm `NPM_TOKEN`.
+- `rigorix-oss` + `rigorix-enterprise` consumer bumps (`^0.1` does **not** match
+  `0.2`) — separate-repo PRs.
+
+**Readiness (each read against `main` @ `4efbc32`):**
+- #34: buildable now — bump, `cargo package`, unpack → verify the anchored
+  fixture with no env; publish + cross-repo bumps are the gated tail.
+- #33: buildable now — tag-triggered job + post-publish smoke reusing
+  `pack_smoke.py` / `pack-smoke.mjs`; alignment waits on #34.
+- #35: buildable now — new `java/` + `go/` trees; large; every catalog method +
+  every fixture.
 
 ---
 

@@ -369,3 +369,20 @@ Then: catalog design → servers → SDKs.
     contract follows the branch's code, and the fixture was generated from that
     branch, so the SDK validates anchored evidence the moment #908 lands. When
     it merges, no SDK change is needed (the field/position are already frozen).
+
+- **2026-09-25 — SDK-CRATES-0.2.0 (release; no contract change):**
+  `rigorix-schemas` 0.1.0 + `rigorix-verifier` 0.1.0 were published **before**
+  #31/#32 added `anchor_head`, so the crates.io verifier cannot verify an
+  anchored envelope. `rust/Cargo.toml` `[workspace.package] version` is now
+  **0.2.0** (and the verifier/client `rigorix-schemas` dep → 0.2.0).
+  - `rust/scripts/verify-packaged-crates.sh` + a CI step prove the packaged
+    `rigorix-schemas` `.crate` carries `anchor_head` and the anchored fixture,
+    and that a clean consumer verifies it with `RIGORIX_SDK_SCHEMAS` unset.
+  - `rust/RELEASING.md` documents the publish order (schemas first), the
+    post-publish clean-project check, the `rust-v0.2.0` tag, and the mandatory
+    0.x consumer bumps (`^0.1` does not match 0.2).
+  - **Deferred (credential-gated):** the actual `cargo publish`, the tag, and
+    the `rigorix-oss` / `rigorix-enterprise` consumer bumps. `cargo package -p
+    rigorix-verifier` becomes runnable once `rigorix-schemas` 0.2.0 is live
+    (cargo resolves the exact-version dep against the registry even with
+    `--no-verify`). 0.1.0 is not yanked (valid for catalog-only use).
