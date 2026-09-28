@@ -146,7 +146,17 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME#v}"
           python -m venv "$RUNNER_TEMP/py"
-          "$RUNNER_TEMP/py/bin/pip" install "rigorix-verifier==$tag"
+          # PyPI/CDN propagation can lag briefly after Trusted Publishing.
+          # Retry the install a bounded number of times before failing.
+          installed=no
+          for attempt in 1 2 3 4 5; do
+            if "$RUNNER_TEMP/py/bin/pip" install --quiet "rigorix-verifier==$tag"; then
+              installed=yes; break
+            fi
+            echo "py install attempt $attempt: not yet available; retrying in 15s"
+            sleep 15
+          done
+          test "$installed" = yes || { echo "FAIL: rigorix-verifier==$tag not installable from PyPI"; exit 1; }
           unset RIGORIX_SDK_SCHEMAS
           "$RUNNER_TEMP/py/bin/python" "$GITHUB_WORKSPACE/python/scripts/pack_smoke.py"
 
@@ -157,6 +167,15 @@ jobs:
           cp "$GITHUB_WORKSPACE/typescript/scripts/pack-smoke.mjs" "$RUNNER_TEMP/npm/smoke.mjs"
           cd "$RUNNER_TEMP/npm"
           npm init -y >/dev/null
-          npm install "rigorix-verifier@$tag" "rigorix-client@$tag" --no-audit --no-fund
+          # npm registry propagation can lag briefly after publish.
+          installed=no
+          for attempt in 1 2 3 4 5; do
+            if npm install "rigorix-verifier@$tag" "rigorix-client@$tag" --no-audit --no-fund; then
+              installed=yes; break
+            fi
+            echo "npm install attempt $attempt: not yet available; retrying in 15s"
+            sleep 15
+          done
+          test "$installed" = yes || { echo "FAIL: rigorix-verifier@$tag / rigorix-client@$tag not installable from npm"; exit 1; }
           unset RIGORIX_SDK_SCHEMAS
           node smoke.mjs
