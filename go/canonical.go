@@ -38,6 +38,7 @@ var skipEmpty = map[string]bool{
 	"scope_violations":         true,
 	"sequence_policy_findings": true,
 	"requirement_findings":     true,
+	"precondition_findings":    true,
 }
 
 // nestedFields maps a field to the `$defs` struct whose property order applies.
@@ -48,6 +49,7 @@ var nestedFields = map[string]string{
 	"scope_violations":         "scopeViolationRef",
 	"sequence_policy_findings": "sequencePolicyFindingRef",
 	"requirement_findings":     "requirementFindingRef",
+	"precondition_findings":    "preconditionFindingRef",
 	"scoring_results":          "scoringResultRef",
 }
 

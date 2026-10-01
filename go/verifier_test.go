@@ -113,6 +113,51 @@ func TestAnchoredFixtureBindsAnchorHead(t *testing.T) {
 	}
 }
 
+// TestPreconditionFindingsFixture covers ADR-017: the contract-first
+// precondition fixture verifies byte-exact and is tamper-detected.
+func TestPreconditionFindingsFixture(t *testing.T) {
+	text := readFixture(t, "envelope/envelope-precondition-signed.json")
+	var data map[string]any
+	decodeInto(t, []byte(text), &data)
+	findings, ok := data["precondition_findings"].([]any)
+	if !ok || len(findings) != 3 {
+		t.Fatalf("expected 3 precondition findings")
+	}
+	first := findings[0].(map[string]any)
+	if first["outcome"] != "failed" || intOf(first["exit_code"]) != 3 {
+		t.Fatalf("finding[0]: %v", first)
+	}
+	second := findings[1].(map[string]any)
+	if second["outcome"] != "passed" || intOf(second["exit_code"]) != 0 {
+		t.Fatalf("finding[1]: %v", second)
+	}
+	third := findings[2].(map[string]any)
+	if third["outcome"] != "error" || third["exit_code"] != nil {
+		t.Fatalf("finding[2]: %v", third)
+	}
+
+	if err := VerifySignature(text, fixtureKey); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateEnvelope(text); err != nil {
+		t.Fatal(err)
+	}
+
+	first["inputs_hash"] = strings.Repeat("0", 64)
+	raw, _ := json.Marshal(data)
+	if err := VerifySignature(raw, fixtureKey); !errors.Is(err, ErrSignatureMismatch) {
+		t.Fatalf("tamper not detected: %v", err)
+	}
+
+	legacy := readFixture(t, "envelope/envelope-minimal-signed.json")
+	if strings.Contains(legacy, "precondition_findings") {
+		t.Fatal("legacy fixture must not carry precondition_findings")
+	}
+	if err := VerifySignature(legacy, fixtureKey); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestTamperingDetected(t *testing.T) {
 	var data map[string]any
 	decodeInto(t, []byte(readFixture(t, "envelope/envelope-minimal-signed.json")), &data)

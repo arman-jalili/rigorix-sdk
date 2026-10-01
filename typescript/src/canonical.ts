@@ -37,6 +37,7 @@ const SKIP_EMPTY = new Set([
   "scope_violations",
   "sequence_policy_findings",
   "requirement_findings",
+  "precondition_findings",
 ]);
 
 const NESTED: Record<string, string> = {
@@ -46,6 +47,7 @@ const NESTED: Record<string, string> = {
   scope_violations: "scopeViolationRef",
   sequence_policy_findings: "sequencePolicyFindingRef",
   requirement_findings: "requirementFindingRef",
+  precondition_findings: "preconditionFindingRef",
   scoring_results: "scoringResultRef",
 };
 

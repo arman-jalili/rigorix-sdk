@@ -386,3 +386,35 @@ Then: catalog design → servers → SDKs.
     rigorix-verifier` becomes runnable once `rigorix-schemas` 0.2.0 is live
     (cargo resolves the exact-version dep against the registry even with
     `--no-verify`). 0.1.0 is not yanked (valid for catalog-only use).
+
+- **2026-10-01 — ADR-017 consequence gating (contract-first; additive):**
+  rigorix-oss ADR-017 (`engine/.pi/architecture/decisions/ADR-017-consequence-gating.md`,
+  module `consequence-gating.md`) introduces dispatch-time authority
+  **preconditions** and step-outcome gating. The engine has **not** implemented
+  it yet; this freezes the cross-repo contract first (D-011/D-012).
+  - `schemas/policy.json`: additive root `preconditions[]` (`$defs.precondition`:
+    `id` / `match` (reused `stepPredicate`) / `require_params[]` (presence-only,
+    ADR-015 semantics) / `command[]` (argv, no shell; `command[0]` must resolve
+    outside the agent-writable workspace) / `timeout_ms` (default 5000) /
+    `failure` (`deny`, the v1-only value) / `capture_output` (default false)) and
+    `$defs.gating` (`release_dependents_on_failure`, default true);
+    `$defs.stepRequirement` gains `require_companion_step { match }` (closes the
+    ADR-015 companion-step non-goal).
+  - `schemas/envelope.json`: additive `precondition_findings[]`
+    (`$defs.preconditionFindingRef`: `precondition_id` / `step` / `outcome`
+    (`passed|failed|error|unarmed`) / `exit_code` (nullable, fixed shape) /
+    `inputs_hash` / `checked_at` / `summary`) declared **after
+    `requirement_findings`, before `decision_context_ref`** (frozen position);
+    serde skip-if-empty so an absent list leaves chain/HMAC bytes unchanged.
+    Only an `inputs_hash` is recorded — never parameter values or stdout.
+  - `schemas/api/errors.json`: a precondition refusal is a `policy_violation`
+    carrying `data.precondition_id` / `data.step` / `data.outcome`, and is
+    **non-retryable** (`retryable: false`; documented in `x-precondition-denial`).
+  - `schemas/fixtures/envelope/envelope-precondition-signed.json`:
+    **contract-first** fixture (no engine implementation yet), signed with
+    `fixture-hmac-key-2026` by the reference verifier; verified byte-exact in
+    Rust / Python / TypeScript / Java / Go, with focused ADR-017 regression
+    tests (outcome + `exit_code:null` + tamper detection). Replace from the
+    engine once ADR-017 Phase B lands.
+  - `catalog.json` unchanged (**23** methods): config + evidence only, no new
+    `rigorix.*` method (ADR-0001 D3 closed namespace).

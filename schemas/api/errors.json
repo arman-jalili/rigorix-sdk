@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rigorix.dev/schemas/api/errors-v1.json",
   "title": "Rigorix Native API — error model v1",
-  "description": "JSON-RPC 2.0 error objects for the native rigorix.* API (ADR-0001 D6). `data.type` is the stable machine identifier; `message` is human text and may change. `denied_by_sequence` MUST carry data.rule_id and data.step when known.",
+  "description": "JSON-RPC 2.0 error objects for the native rigorix.* API (ADR-0001 D6). `data.type` is the stable machine identifier; `message` is human text and may change. `denied_by_sequence` MUST carry data.rule_id and data.step when known. ADR-017 R1: a dispatch-time precondition refusal is a `policy_violation` carrying `data.precondition_id` + `data.step` + `data.outcome`, and is never retryable (`retryable: false`).",
   "type": "object",
   "required": ["code", "message"],
   "properties": {
@@ -14,6 +14,8 @@
         "type": { "$ref": "#/$defs/errorType" },
         "rule_id": { "type": "string", "description": "Sequence rule id for denied_by_sequence (R2/R7…)." },
         "step": { "type": "string", "description": "Step refused by policy, when known." },
+        "precondition_id": { "type": "string", "description": "ADR-017 R1: the precondition id for a dispatch-time authority refusal (`data.type` = policy_violation)." },
+        "outcome": { "enum": ["passed", "failed", "error", "unarmed"], "description": "ADR-017 R1: the precondition outcome that refused dispatch. `failed` / `error` / `unarmed` all refuse; none is retryable." },
         "details": {},
         "retryable": { "type": "boolean" }
       },
@@ -68,5 +70,13 @@
     "timeout": -32021,
     "api_error": -32030,
     "not_enabled": -32031
+  },
+  "x-precondition-denial": {
+    "data.type": "policy_violation",
+    "data.precondition_id": "required",
+    "data.step": "required",
+    "data.outcome": "failed | error | unarmed",
+    "retryable": false,
+    "note": "ADR-017 R1: a dispatch-time precondition refusal. The step's tool is never called, and the determination is recorded in the signed envelope's precondition_findings[]. There is no allow-on-error mode in v1 (fail closed)."
   }
 }

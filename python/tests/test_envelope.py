@@ -115,3 +115,31 @@ def test_anchored_fixture_binds_anchor_head_at_engine_position():
     legacy = next(p for p in _envelope_paths() if "minimal" in p.name)
     assert json.loads(legacy.read_text()).get("anchor_head") is None
     rv.verify_signature(legacy.read_text(), FIXTURE_KEY)
+
+
+def test_precondition_findings_fixture():
+    """ADR-017: the contract-first precondition fixture verifies byte-exact and
+    is tamper-detected; legacy fixtures carry no ``precondition_findings``."""
+    path = (
+        corpus.schemas_root()
+        / "fixtures"
+        / "envelope"
+        / "envelope-precondition-signed.json"
+    )
+    text = path.read_text(encoding="utf-8")
+    data = json.loads(text)
+    findings = data["precondition_findings"]
+    assert [f["outcome"] for f in findings] == ["failed", "passed", "error"]
+    assert [f["exit_code"] for f in findings] == [3, 0, None]
+
+    rv.verify_signature(text, FIXTURE_KEY)
+    rv.validate_envelope(text)
+
+    tampered = json.loads(text)
+    tampered["precondition_findings"][0]["inputs_hash"] = "0" * 64
+    with pytest.raises(rv.SignatureMismatch):
+        rv.verify_signature(tampered, FIXTURE_KEY)
+
+    minimal = next(p for p in _envelope_paths() if "minimal" in p.name)
+    assert "precondition_findings" not in json.loads(minimal.read_text())
+    rv.verify_signature(minimal.read_text(), FIXTURE_KEY)

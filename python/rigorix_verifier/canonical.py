@@ -42,6 +42,7 @@ _SKIP_EMPTY = {
     "scope_violations",
     "sequence_policy_findings",
     "requirement_findings",
+    "precondition_findings",
 }
 
 # field -> ``$defs`` struct name (the value is a struct, or an array of them).
@@ -52,6 +53,7 @@ _NESTED = {
     "scope_violations": "scopeViolationRef",
     "sequence_policy_findings": "sequencePolicyFindingRef",
     "requirement_findings": "requirementFindingRef",
+    "precondition_findings": "preconditionFindingRef",
     "scoring_results": "scoringResultRef",
 }
 

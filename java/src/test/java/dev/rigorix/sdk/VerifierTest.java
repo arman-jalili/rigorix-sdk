@@ -63,4 +63,29 @@ class VerifierTest {
         VerifyException error = assertThrows(VerifyException.class, () -> Envelope.verifySignature(node.toString(), KEY));
         assertEquals(VerifyException.Kind.UNSIGNED_NOT_DEGRADED, error.kind());
     }
+
+    @Test
+    void preconditionFindingsFixtureVerifies() throws Exception {
+        String json = Corpus.fixture("envelope/envelope-precondition-signed.json");
+        JsonNode findings = Canonical.MAPPER.readTree(json).get("precondition_findings");
+        assertEquals(3, findings.size());
+        assertEquals("failed", findings.get(0).get("outcome").asText());
+        assertEquals(3, findings.get(0).get("exit_code").asInt());
+        assertEquals("passed", findings.get(1).get("outcome").asText());
+        assertEquals(0, findings.get(1).get("exit_code").asInt());
+        assertEquals("error", findings.get(2).get("outcome").asText());
+        assertTrue(findings.get(2).get("exit_code").isNull());
+
+        Envelope.verifySignature(json, KEY);
+        Envelope.validateEnvelope(json);
+
+        ObjectNode tampered = (ObjectNode) Canonical.MAPPER.readTree(json);
+        ((ObjectNode) tampered.get("precondition_findings").get(0))
+                .put("inputs_hash", "0".repeat(64));
+        assertThrows(VerifyException.class, () -> Envelope.verifySignature(tampered.toString(), KEY));
+
+        String legacy = Corpus.fixture("envelope/envelope-minimal-signed.json");
+        assertFalse(legacy.contains("precondition_findings"));
+        Envelope.verifySignature(legacy, KEY);
+    }
 }
