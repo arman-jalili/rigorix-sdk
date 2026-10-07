@@ -1158,10 +1158,15 @@ mod tests {
             Some("sha256:1111111111111111111111111111111111111111111111111111111111111111")
         );
         assert_eq!(
-            envelope.precondition_findings[0].authority_digest.as_deref(),
+            envelope.precondition_findings[0]
+                .authority_digest
+                .as_deref(),
             Some("sha256:2222222222222222222222222222222222222222222222222222222222222222")
         );
-        assert_eq!(envelope.precondition_findings[0].check_writable, Some(false));
+        assert_eq!(
+            envelope.precondition_findings[0].check_writable,
+            Some(false)
+        );
         // Absent fields in the third finding = pre-attribution, not tampered.
         assert_eq!(envelope.precondition_findings[2].check_digest, None);
         assert_eq!(envelope.precondition_findings[2].authority_digest, None);
