@@ -1,17 +1,30 @@
 # Releasing the SDK
 
-Two distribution channels share one version (`0.2.0`):
+Two distribution channels share one version (`0.3.0`):
 
 - **Rust crates (crates.io)** — `rigorix-schemas`, `rigorix-verifier`
   (`rigorix-client` is a typed protocol client, independent cadence). Published
-  manually (`cargo publish`), marker tag `rust-v0.2.0`.
+  manually (`cargo publish`), marker tag `rust-v0.3.0`.
 - **Python + TypeScript (PyPI + npm)** — `rigorix-verifier` (both) and
-  `rigorix-client` (npm). Published by CI on the `v0.2.0` tag.
+  `rigorix-client` (npm). Published by CI on the `v0.3.0` tag.
 
 `rust/Cargo.toml` `[workspace.package] version` is the single source for every
 workspace member (`version.workspace = true`). The verifier + client pin
 `rigorix-schemas` to the **same exact version**, and `rigorix-schemas` must be
 published **before** the verifier.
+
+## 0.3.0 — ADR-017 dispatch-time preconditions + signed attribution
+
+Additive contract release: the policy schema gains `preconditions` + `gating`
+(ADR-017), and the envelope's `precondition_findings[]`
+(`$defs.preconditionFindingRef`) gains `check_digest` / `authority_digest` /
+`check_writable`. Every block is serde-defaulted and omitted when empty, so
+absent ≠ tampered; a `0.2.0` verifier still verifies pre-0.3.0 envelopes, but an
+envelope carrying the new fields needs `0.3.0` to canonicalize byte-exact.
+
+`rigorix-schemas` and `rigorix-verifier` bump together (exact-version dep).
+Consumers pin `rigorix-verifier = "0.3"` (`rigorix-oss/server`,
+`rigorix-enterprise/core`).
 
 ## 0.2.0 — required for anchored verification
 
