@@ -41,7 +41,7 @@ public final class Canonical {
 
     private static final Set<String> SKIP_EMPTY = Set.of(
             "file_paths", "scoring_results", "approval_events",
-            "scope_violations", "sequence_policy_findings", "requirement_findings");
+            "scope_violations", "sequence_policy_findings", "requirement_findings", "precondition_findings");
 
     private static final Map<String, String> NESTED = Map.ofEntries(
             Map.entry("identity", "identityRef"),
@@ -50,6 +50,7 @@ public final class Canonical {
             Map.entry("scope_violations", "scopeViolationRef"),
             Map.entry("sequence_policy_findings", "sequencePolicyFindingRef"),
             Map.entry("requirement_findings", "requirementFindingRef"),
+            Map.entry("precondition_findings", "preconditionFindingRef"),
             Map.entry("scoring_results", "scoringResultRef"));
 
     private static final Map<String, List<String>> ORDER_CACHE = new HashMap<>();

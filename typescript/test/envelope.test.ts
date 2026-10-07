@@ -99,3 +99,30 @@ test("anchored engine fixture binds anchor_head at the engine position", () => {
   assert.ok(!localText.includes('"anchor_head"'));
   verifySignature(localText, KEY);
 });
+
+test("precondition findings fixture verifies (ADR-017)", () => {
+  const path = join(schemasRoot(), "fixtures", "envelope", "envelope-precondition-signed.json");
+  const text = readFileSync(path, "utf8");
+  const data = JSON.parse(text) as any;
+  const findings = data.precondition_findings;
+  assert.deepEqual(
+    findings.map((finding: any) => finding.outcome),
+    ["failed", "passed", "error"],
+  );
+  assert.deepEqual(
+    findings.map((finding: any) => finding.exit_code),
+    [3, 0, null],
+  );
+
+  verifySignature(text, KEY);
+  validateEnvelope(data);
+
+  const tampered = JSON.parse(text);
+  tampered.precondition_findings[0].inputs_hash = "0".repeat(64);
+  assert.throws(() => verifySignature(tampered, KEY), SignatureMismatch);
+
+  const minimalPath = envelopePaths().find((candidate) => candidate.includes("minimal"))!;
+  const minimalText = readFileSync(minimalPath, "utf8");
+  assert.ok(!minimalText.includes("precondition_findings"));
+  verifySignature(minimalText, KEY);
+});

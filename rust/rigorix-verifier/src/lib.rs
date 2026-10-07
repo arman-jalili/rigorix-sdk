@@ -157,6 +157,10 @@ pub struct AuditEnvelope {
     /// `sequence_policy_findings` and before `decision_context_ref`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub requirement_findings: Vec<RequirementFindingRef>,
+    /// ADR-017 R1/B dispatch-time precondition findings. MUST stay after
+    /// `requirement_findings` and before `decision_context_ref`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub precondition_findings: Vec<PreconditionFindingRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_context_ref: Option<String>,
 }
@@ -253,6 +257,21 @@ pub struct RequirementFindingRef {
     pub step: String,
     pub action: String,
     pub unmet: Vec<String>,
+    pub summary: String,
+}
+
+/// ADR-017 R1/B dispatch-time precondition finding (mirrors the engine
+/// `PreconditionFindingRef`). Fixed shape: `exit_code` is always serialized
+/// (`null` for `error`/`unarmed`). Only an `inputs_hash` is recorded \u2014 never
+/// parameter values or raw stdout (SpanPrivacy).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreconditionFindingRef {
+    pub precondition_id: String,
+    pub step: String,
+    pub outcome: String,
+    pub exit_code: Option<i32>,
+    pub inputs_hash: String,
+    pub checked_at: DateTime<Utc>,
     pub summary: String,
 }
 
@@ -1046,6 +1065,90 @@ mod tests {
         let local = fixture_text("envelope/envelope-minimal-signed.json");
         assert!(!local.contains("\"anchor_head\""));
         verify_signature(&local, "fixture-hmac-key-2026").expect("local fixture unchanged");
+    }
+
+    /// SDK #39 / ADR-017: write the contract-first `precondition_findings[]`
+    /// fixture. The engine does not implement ADR-017 yet, so the reference
+    /// verifier signs a minimal envelope (the cross-language check is that
+    /// Python/TS/Java/Go independently reproduce the bytes). Regenerate from the
+    /// engine once ADR-017 Phase B lands.
+    #[test]
+    #[ignore = "writes the ADR-017 precondition fixture (contract-first)"]
+    fn generate_precondition_fixture() {
+        let base = fixture_text("envelope/envelope-minimal-signed.json");
+        let mut value: serde_json::Value =
+            serde_json::from_str(&base).expect("minimal fixture parses");
+        let obj = value.as_object_mut().expect("object");
+        let _ = obj.remove("signature");
+        obj.insert(
+            "precondition_findings".to_string(),
+            serde_json::json!([
+                {
+                    "precondition_id": "beneficiary-eligible",
+                    "step": "risky_step",
+                    "outcome": "failed",
+                    "exit_code": 3,
+                    "inputs_hash": "5f2a9c1e7b4d5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+                    "checked_at": "2026-10-01T12:00:00Z",
+                    "summary": "authority check denied dispatch (exit 3)"
+                },
+                {
+                    "precondition_id": "account-open",
+                    "step": "run_command",
+                    "outcome": "passed",
+                    "exit_code": 0,
+                    "inputs_hash": "1c2b3a495867798a0b1c2d3e4f5061728394a5b6c7d8e9f0a1b2c3d4e5f60718",
+                    "checked_at": "2026-10-01T12:00:01Z",
+                    "summary": "authority stands"
+                },
+                {
+                    "precondition_id": "network-eligible",
+                    "step": "run_command",
+                    "outcome": "error",
+                    "exit_code": null,
+                    "inputs_hash": "9e8d7c6b5a4938271605f4e3d2c1b0a99887766554433221100ffeeddccbbaa",
+                    "checked_at": "2026-10-01T12:00:02Z",
+                    "summary": "check timed out"
+                }
+            ]),
+        );
+        let signature = sign(&value.to_string(), FIXTURE_KEY).expect("sign fixture");
+        let mut envelope: AuditEnvelope =
+            serde_json::from_value(value).expect("fixture parses into AuditEnvelope");
+        envelope.signature = Some(signature);
+        let json = serde_json::to_string_pretty(&envelope).expect("serialize fixture");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../schemas/fixtures/envelope/envelope-precondition-signed.json");
+        std::fs::write(&path, format!("{json}\n")).expect("write fixture");
+        eprintln!("wrote {}", path.display());
+    }
+
+    /// SDK #39 / ADR-017: the contract-first `precondition_findings[]` fixture
+    /// verifies byte-exact and is tamper-detected; legacy fixtures are unchanged.
+    #[test]
+    fn precondition_findings_fixture_verifies() {
+        let json = fixture_text("envelope/envelope-precondition-signed.json");
+        let envelope: AuditEnvelope = serde_json::from_str(&json).expect("fixture parses");
+        assert_eq!(envelope.precondition_findings.len(), 3);
+        assert_eq!(envelope.precondition_findings[0].outcome, "failed");
+        assert_eq!(envelope.precondition_findings[0].exit_code, Some(3));
+        assert_eq!(envelope.precondition_findings[1].outcome, "passed");
+        assert_eq!(envelope.precondition_findings[1].exit_code, Some(0));
+        assert_eq!(envelope.precondition_findings[2].outcome, "error");
+        assert_eq!(envelope.precondition_findings[2].exit_code, None);
+
+        verify_signature(&json, "fixture-hmac-key-2026").expect("byte-exact");
+        validate_schema(&json).expect("schema conformance");
+
+        let tampered = json.replacen("\"exit_code\": 3", "\"exit_code\": 0", 1);
+        assert!(matches!(
+            verify_signature(&tampered, "fixture-hmac-key-2026"),
+            Err(VerifyError::SignatureMismatch { .. })
+        ));
+
+        let legacy = fixture_text("envelope/envelope-minimal-signed.json");
+        assert!(!legacy.contains("precondition_findings"));
+        verify_signature(&legacy, "fixture-hmac-key-2026").expect("legacy unchanged");
     }
 
     // ─── Schema lint (SDK contract surface) ───────────────────────────────

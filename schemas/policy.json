@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rigorix.dev/schemas/policy.json",
   "title": "Rigorix Policy & Configuration Model v1",
-  "description": "v1 (2026-09-07) \u2014 grounded in rigorix-oss engine code (code is truth): sequence-policy rules from engine/src/sequence_policy/domain/rule.rs + config.rs (SequenceRule, StepPredicate, ParamPredicate, HistoryPredicate, RuleAction, SequencePolicyConfig, SafetyCaps) and the root rigorix.toml surface from engine/src/configuration/domain/config.rs (permission_mode, audit HMAC knobs). Root validates the OPERATOR-authored sequence-policy file (`[sequence_policy]` with `[[rules]]`, as consumed from .rigorix/sequence-policy.toml). The root config surface (rigorix.toml) is represented at $defs.rootConfigSurface for cross-tool alignment \u2014 permission_mode is a runtime-validated string (engine: Option<String>); known values documented. Enterprise policy_engine bundles must emit rule semantics in this shape (id/action/window/history/step predicates) \u2014 extension slots (approval policy, scope roles) are enterprise-only and land in the delta map. ADR-015: additive root `requirements` (StepRequirement/RequirementAction) + SafetyCaps `max_requirements_per_file` / `max_required_params_per_requirement`.",
+  "description": "v1 (2026-09-07) \u2014 grounded in rigorix-oss engine code (code is truth): sequence-policy rules from engine/src/sequence_policy/domain/rule.rs + config.rs (SequenceRule, StepPredicate, ParamPredicate, HistoryPredicate, RuleAction, SequencePolicyConfig, SafetyCaps) and the root rigorix.toml surface from engine/src/configuration/domain/config.rs (permission_mode, audit HMAC knobs). Root validates the OPERATOR-authored sequence-policy file (`[sequence_policy]` with `[[rules]]`, as consumed from .rigorix/sequence-policy.toml). The root config surface (rigorix.toml) is represented at $defs.rootConfigSurface for cross-tool alignment \u2014 permission_mode is a runtime-validated string (engine: Option<String>); known values documented. Enterprise policy_engine bundles must emit rule semantics in this shape (id/action/window/history/step predicates) \u2014 extension slots (approval policy, scope roles) are enterprise-only and land in the delta map. ADR-015: additive root `requirements` (StepRequirement/RequirementAction) + SafetyCaps `max_requirements_per_file` / `max_required_params_per_requirement`. ADR-017: additive root `preconditions` (dispatch-time authority checks) + `gating` (step-outcome gating), and `require_companion_step` on `[[requirements]]` (closes the ADR-015 companion-step non-goal).",
   "type": "object",
   "required": [
     "fail_closed",
@@ -26,6 +26,17 @@
       "items": {
         "$ref": "#/$defs/stepRequirement"
       }
+    },
+    "preconditions": {
+      "type": "array",
+      "description": "ADR-017 R1: ordered operator-authored dispatch-time preconditions ([[preconditions]] in .rigorix/preconditions.toml \u2014 operator-owned, never agent-writable). Each matches an about-to-dispatch step and runs an argv check; pass = dispatch, non-zero / timeout / spawn / trust-boundary / unarmed = refuse (fail closed). Empty \u2192 no preconditions (today's behavior).",
+      "items": {
+        "$ref": "#/$defs/precondition"
+      }
+    },
+    "gating": {
+      "$ref": "#/$defs/gating",
+      "description": "ADR-017 R2: step-outcome gating mode. Absent \u2192 today's behavior (dependents always released)."
     }
   },
   "additionalProperties": false,
@@ -181,7 +192,7 @@
         "name",
         "match"
       ],
-      "description": "R9/ADR-015: one operator-authored step requirement ([[requirements]] in .rigorix/sequence-policy.toml \u2014 same trust surface as rules; operator-owned, never plan data). `match` reuses the frozen stepPredicate matcher; at least one of require_identity / require_params MUST be set (a no-op requirement is a fail-closed config error); require_params pointers MUST start with `/` and are checked for presence only \u2014 the operator names a pointer, the domain supplies its value, no domain semantics enter the engine. `equals_step` parameter predicates are invalid in `match` (there is no earlier matched step).",
+      "description": "R9/ADR-015: one operator-authored step requirement ([[requirements]] in .rigorix/sequence-policy.toml \u2014 same trust surface as rules; operator-owned, never plan data). `match` reuses the frozen stepPredicate matcher; at least one of require_identity / require_params / require_companion_step MUST be set (a no-op requirement is a fail-closed config error); require_params pointers MUST start with `/` and are checked for presence only \u2014 the operator names a pointer, the domain supplies its value, no domain semantics enter the engine. `equals_step` parameter predicates are invalid in `match` (there is no earlier matched step).",
       "properties": {
         "id": {
           "type": "string",
@@ -217,6 +228,20 @@
         "action": {
           "$ref": "#/$defs/requirementAction",
           "description": "Action for unmet parameter obligations (`deny` default | `promote`). Identity failures are always `deny` regardless of this value."
+        },
+        "require_companion_step": {
+          "type": "object",
+          "required": [
+            "match"
+          ],
+          "properties": {
+            "match": {
+              "$ref": "#/$defs/stepPredicate",
+              "description": "Predicate the plan MUST contain a step for (companion obligation)."
+            }
+          },
+          "additionalProperties": false,
+          "description": "ADR-017 R3: the plan MUST contain a step matching this predicate (closes the ADR-015 companion-step non-goal). Unmet \u2192 the requirement's `action` (deny default | promote), with a requirement_findings[] entry."
         }
       },
       "additionalProperties": false
@@ -297,6 +322,73 @@
         }
       },
       "additionalProperties": true
+    },
+    "precondition": {
+      "type": "object",
+      "required": [
+        "id",
+        "match",
+        "command"
+      ],
+      "description": "ADR-017 R1: one operator-authored dispatch-time authority check ([[preconditions]] in .rigorix/preconditions.toml). `match` reuses the frozen stepPredicate matcher; `command` is an argv array (no shell, no interpolation) whose program must resolve outside the agent-writable workspace (trust boundary \u2014 a check the agent can edit is no check). `require_params` reuses ADR-015 presence-only semantics.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable identifier, e.g. \"beneficiary-eligible\" (required; non-empty and unique per file)."
+        },
+        "match": {
+          "$ref": "#/$defs/stepPredicate",
+          "description": "Selects the about-to-dispatch step the precondition gates (tool exact/glob + parameter predicates; same matcher as rules/requirements)."
+        },
+        "require_params": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string",
+            "pattern": "^/"
+          },
+          "description": "JSON pointers that MUST be present (non-null) in the matched step's declared parameters, checked BEFORE the command runs; absent \u2192 refuse (fail closed). Presence only \u2014 pointer NAMES, never values. Default empty."
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "argv array (no shell). command[0] is the check program \u2014 it must resolve outside the agent-writable workspace, else the step is refused (`error`)."
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 5000,
+          "description": "Wall-clock timeout; expiry refuses the step (`error`). Default 5000."
+        },
+        "failure": {
+          "enum": [
+            "deny"
+          ],
+          "default": "deny",
+          "description": "Action on a non-zero exit. v1: the only value is `deny` (refuse; the tool is never called)."
+        },
+        "capture_output": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true the check's stdout may be captured (truncated/redacted). Default false \u2014 stdout is never recorded."
+        }
+      },
+      "additionalProperties": false
+    },
+    "gating": {
+      "type": "object",
+      "description": "ADR-017 R2: step-outcome gating. When `release_dependents_on_failure` is false, a failed (or denied) step does not release its transitive dependents \u2014 they are marked Skipped and never dispatched.",
+      "properties": {
+        "release_dependents_on_failure": {
+          "type": "boolean",
+          "default": true,
+          "description": "Default true = today's behavior (dependents always released). Set false so a failed step stops what depends on it."
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

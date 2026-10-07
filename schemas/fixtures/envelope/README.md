@@ -27,6 +27,7 @@ keys held in the engine configuration.
 | `envelope-rich-pre-identity.json` | Rich additive blocks without the identity block (pre-identity shape) |
 | `envelope-effect-key-signed.json` | ADR-014: run-level `effect_key` (one-way keyed hash) recorded — effect-keyed history input |
 | `envelope-anchored-signed.json` | ADR-016 Phase C: anchored run — `history_integrity=anchored` + signed `anchor_head` (the verified ledger head), placed after `history_policy` / before `approval_events` |
+| `envelope-precondition-signed.json` | ADR-017: dispatch-time `precondition_findings[]` (`passed` / `failed` / `error`; `exit_code` + `inputs_hash`; no parameter values) |
 
 Each file validates against `schemas/envelope.json` (format v2) and its HMAC
 verifies byte-exact with `rigorix-verifier::verify_signature` under the key
@@ -44,3 +45,8 @@ RIGORIX_FIXTURE_OUT=<dir> cargo test -p rigorix-engine \
 ```
 
 Then replace the JSON files here and re-run the verifier fixture test.
+
+`envelope-precondition-signed.json` (ADR-017) is currently **contract-first**: the
+engine does not implement ADR-017 yet, so it is signed by the reference verifier's
+ignored `generate_precondition_fixture` test. Replace it from the engine once
+ADR-017 Phase B lands.

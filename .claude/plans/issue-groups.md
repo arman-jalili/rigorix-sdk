@@ -1,7 +1,7 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-09-25 (updated)
-**Open issues:** 3 (#33, #34, #35) — #10/#12/#15/#18–#21/#11/#29/#31 merged
+**Generated:** 2026-10-01 (updated)
+**Open issues:** 1 (#39) — #10/#12/#15/#18–#21/#11/#29/#31/#33/#34/#35 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
 
 ---
@@ -178,6 +178,21 @@ taxonomy, catalog binding + drift test, no engine dep, governed flows only).
 verifier; skip-none set in Python/TS; an engine-produced anchored fixture; and
 focused regression tests in all three. Contract follows rigorix-oss
 `issue/899` (PR #908, code is truth).
+
+---
+
+## Group: ADR-017 consequence gating (single, contract-first)
+
+**Branch:** `issue/39`
+**Issue:** 1
+- #39 freeze precondition config + envelope `precondition_findings` (ADR-017)
+
+**Approach:** contract-first per D-011/D-012 (the engine has no ADR-017 code).
+`policy.json` gains `preconditions[]` + `gating` + `require_companion_step`;
+`envelope.json` gains additive `precondition_findings[]` (after
+`requirement_findings`, before `decision_context_ref`); `errors.json` gains the
+non-retryable denial taxonomy. A contract-first signed fixture is verified
+byte-exact in all five verifiers. `catalog.json` unchanged (23 methods).
 
 ---
 
