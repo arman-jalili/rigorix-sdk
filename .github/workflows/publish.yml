@@ -27,6 +27,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
+      # Job-level `permissions` REPLACES the workflow-level block, so
+      # `contents: read` must be repeated here or `actions/checkout` fails with
+      # "Repository not found" (private repo, token has no contents scope).
+      contents: read
       id-token: write # PyPI Trusted Publishing (OIDC)
     defaults:
       run:
