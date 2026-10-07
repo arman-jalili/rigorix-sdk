@@ -273,6 +273,17 @@ pub struct PreconditionFindingRef {
     pub inputs_hash: String,
     pub checked_at: DateTime<Utc>,
     pub summary: String,
+    /// ADR-017 attribution (#987): SHA-256 of the resolved check program.
+    /// Additive/omitted when absent (pre-attribution envelope).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_digest: Option<String>,
+    /// ADR-017 attribution (#987): SHA-256 of the authority artifact the check
+    /// consulted. A changed authority changes this digest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_digest: Option<String>,
+    /// ADR-017 boundary fact (#986): the check was writable by the engine euid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_writable: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1090,7 +1101,10 @@ mod tests {
                     "exit_code": 3,
                     "inputs_hash": "5f2a9c1e7b4d5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
                     "checked_at": "2026-10-01T12:00:00Z",
-                    "summary": "authority check denied dispatch (exit 3)"
+                    "summary": "authority check denied dispatch (exit 3)",
+                    "check_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                    "authority_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                    "check_writable": false
                 },
                 {
                     "precondition_id": "account-open",
@@ -1099,7 +1113,9 @@ mod tests {
                     "exit_code": 0,
                     "inputs_hash": "1c2b3a495867798a0b1c2d3e4f5061728394a5b6c7d8e9f0a1b2c3d4e5f60718",
                     "checked_at": "2026-10-01T12:00:01Z",
-                    "summary": "authority stands"
+                    "summary": "authority stands",
+                    "check_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                    "check_writable": true
                 },
                 {
                     "precondition_id": "network-eligible",
@@ -1136,6 +1152,24 @@ mod tests {
         assert_eq!(envelope.precondition_findings[1].exit_code, Some(0));
         assert_eq!(envelope.precondition_findings[2].outcome, "error");
         assert_eq!(envelope.precondition_findings[2].exit_code, None);
+        // ADR-017 attribution (#987): digests + boundary fact are bound.
+        assert_eq!(
+            envelope.precondition_findings[0].check_digest.as_deref(),
+            Some("sha256:1111111111111111111111111111111111111111111111111111111111111111")
+        );
+        assert_eq!(
+            envelope.precondition_findings[0]
+                .authority_digest
+                .as_deref(),
+            Some("sha256:2222222222222222222222222222222222222222222222222222222222222222")
+        );
+        assert_eq!(
+            envelope.precondition_findings[0].check_writable,
+            Some(false)
+        );
+        // Absent fields in the third finding = pre-attribution, not tampered.
+        assert_eq!(envelope.precondition_findings[2].check_digest, None);
+        assert_eq!(envelope.precondition_findings[2].authority_digest, None);
 
         verify_signature(&json, "fixture-hmac-key-2026").expect("byte-exact");
         validate_schema(&json).expect("schema conformance");
@@ -1143,6 +1177,17 @@ mod tests {
         let tampered = json.replacen("\"exit_code\": 3", "\"exit_code\": 0", 1);
         assert!(matches!(
             verify_signature(&tampered, "fixture-hmac-key-2026"),
+            Err(VerifyError::SignatureMismatch { .. })
+        ));
+
+        // A forged authority changes `authority_digest` -> signature mismatch.
+        let forged = json.replacen(
+            "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+            1,
+        );
+        assert!(matches!(
+            verify_signature(&forged, "fixture-hmac-key-2026"),
             Err(VerifyError::SignatureMismatch { .. })
         ));
 

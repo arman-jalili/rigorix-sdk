@@ -374,6 +374,15 @@
           "type": "boolean",
           "default": false,
           "description": "When true the check's stdout may be captured (truncated/redacted). Default false \u2014 stdout is never recorded."
+        },
+        "require_immutable_check": {
+          "type": "boolean",
+          "default": false,
+          "description": "ADR-017 (#986): when true, refuse the matched step if the resolved check program (or `authority_path`) is writable by the engine's effective UID. Default false \u2014 the boundary is path + hook; immutability is opt-in. Unreadable metadata fails closed."
+        },
+        "authority_path": {
+          "type": "string",
+          "description": "ADR-017 (#987): optional operator-declared authority artifact the check consults (e.g. the beneficiary file). The engine hashes it into `authority_digest` (never its contents) and, under `require_immutable_check`, refuses when it is writable."
         }
       },
       "additionalProperties": false

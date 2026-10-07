@@ -32,6 +32,9 @@ _SKIP_NONE = {
     "anchor_head",
     "decision_context_ref",
     "payload",
+    "check_digest",
+    "authority_digest",
+    "check_writable",
 }
 
 # Vec/Map fields with ``skip_serializing_if = "Vec::is_empty"`` / map is_empty.

@@ -28,6 +28,9 @@ const SKIP_NONE = new Set([
   "anchor_head",
   "decision_context_ref",
   "payload",
+  "check_digest",
+  "authority_digest",
+  "check_writable",
 ]);
 
 const SKIP_EMPTY = new Set([

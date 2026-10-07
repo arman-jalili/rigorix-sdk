@@ -28,6 +28,9 @@ var skipNone = map[string]bool{
 	"decision_context_ref": true,
 	"payload":              true,
 	"sig":                  true,
+	"check_digest":         true,
+	"authority_digest":     true,
+	"check_writable":       true,
 }
 
 // skipEmpty mirrors `skip_serializing_if = "Vec::is_empty"` / map is_empty.
