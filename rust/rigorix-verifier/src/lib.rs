@@ -284,6 +284,12 @@ pub struct PreconditionFindingRef {
     /// ADR-017 boundary fact (#986): the check was writable by the engine euid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub check_writable: Option<bool>,
+    /// ISSUE-ATTRIBUTION-ABSENCE-REASON: structured reason the attribution
+    /// digests are present or absent (`recorded` | `refused_before_check` |
+    /// `artifact_unreadable`). Additive/omitted when absent (pre-attribution
+    /// envelope); a new engine always sets it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attribution: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1104,7 +1110,8 @@ mod tests {
                     "summary": "authority check denied dispatch (exit 3)",
                     "check_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
                     "authority_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-                    "check_writable": false
+                    "check_writable": false,
+                    "attribution": "recorded"
                 },
                 {
                     "precondition_id": "account-open",
@@ -1115,7 +1122,8 @@ mod tests {
                     "checked_at": "2026-10-01T12:00:01Z",
                     "summary": "authority stands",
                     "check_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-                    "check_writable": true
+                    "check_writable": true,
+                    "attribution": "recorded"
                 },
                 {
                     "precondition_id": "network-eligible",
@@ -1124,7 +1132,19 @@ mod tests {
                     "exit_code": null,
                     "inputs_hash": "9e8d7c6b5a4938271605f4e3d2c1b0a99887766554433221100ffeeddccbbaa",
                     "checked_at": "2026-10-01T12:00:02Z",
-                    "summary": "check timed out"
+                    "summary": "check refused before it ran",
+                    "attribution": "refused_before_check"
+                },
+                {
+                    "precondition_id": "payout-authority",
+                    "step": "run_command",
+                    "outcome": "failed",
+                    "exit_code": 5,
+                    "inputs_hash": "0a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef",
+                    "checked_at": "2026-10-01T12:00:03Z",
+                    "summary": "authority check denied dispatch (exit 5)",
+                    "check_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+                    "attribution": "artifact_unreadable"
                 }
             ]),
         );
@@ -1145,13 +1165,15 @@ mod tests {
     fn precondition_findings_fixture_verifies() {
         let json = fixture_text("envelope/envelope-precondition-signed.json");
         let envelope: AuditEnvelope = serde_json::from_str(&json).expect("fixture parses");
-        assert_eq!(envelope.precondition_findings.len(), 3);
+        assert_eq!(envelope.precondition_findings.len(), 4);
         assert_eq!(envelope.precondition_findings[0].outcome, "failed");
         assert_eq!(envelope.precondition_findings[0].exit_code, Some(3));
         assert_eq!(envelope.precondition_findings[1].outcome, "passed");
         assert_eq!(envelope.precondition_findings[1].exit_code, Some(0));
         assert_eq!(envelope.precondition_findings[2].outcome, "error");
         assert_eq!(envelope.precondition_findings[2].exit_code, None);
+        assert_eq!(envelope.precondition_findings[3].outcome, "failed");
+        assert_eq!(envelope.precondition_findings[3].exit_code, Some(5));
         // ADR-017 attribution (#987): digests + boundary fact are bound.
         assert_eq!(
             envelope.precondition_findings[0].check_digest.as_deref(),
@@ -1167,9 +1189,32 @@ mod tests {
             envelope.precondition_findings[0].check_writable,
             Some(false)
         );
-        // Absent fields in the third finding = pre-attribution, not tampered.
+        // ISSUE-ATTRIBUTION-ABSENCE-REASON: the four states are distinct.
+        assert_eq!(
+            envelope.precondition_findings[0].attribution.as_deref(),
+            Some("recorded")
+        );
+        assert_eq!(
+            envelope.precondition_findings[1].attribution.as_deref(),
+            Some("recorded")
+        );
+        assert_eq!(
+            envelope.precondition_findings[2].attribution.as_deref(),
+            Some("refused_before_check")
+        );
+        assert_eq!(
+            envelope.precondition_findings[3].attribution.as_deref(),
+            Some("artifact_unreadable")
+        );
+        // A refusal omits the digests; the reason is the machine-readable cause.
         assert_eq!(envelope.precondition_findings[2].check_digest, None);
         assert_eq!(envelope.precondition_findings[2].authority_digest, None);
+        // `artifact_unreadable` keeps the digest it could compute and omits the other.
+        assert_eq!(
+            envelope.precondition_findings[3].check_digest.as_deref(),
+            Some("sha256:1111111111111111111111111111111111111111111111111111111111111111")
+        );
+        assert_eq!(envelope.precondition_findings[3].authority_digest, None);
 
         verify_signature(&json, "fixture-hmac-key-2026").expect("byte-exact");
         validate_schema(&json).expect("schema conformance");

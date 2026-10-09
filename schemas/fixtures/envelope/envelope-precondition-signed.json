@@ -27,7 +27,7 @@
       }
     }
   ],
-  "signature": "4b8c1b910c237802d8486c9c0357aa874e9415375abb424cffb36ce322b4a99d",
+  "signature": "b5c9eec4da5a91a227b090923f402a896e5bc8e255c52aa4e380b3ae61655982",
   "evidence_degraded": false,
   "precondition_findings": [
     {
@@ -40,7 +40,8 @@
       "summary": "authority check denied dispatch (exit 3)",
       "check_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
       "authority_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-      "check_writable": false
+      "check_writable": false,
+      "attribution": "recorded"
     },
     {
       "precondition_id": "account-open",
@@ -51,7 +52,8 @@
       "checked_at": "2026-10-01T12:00:01Z",
       "summary": "authority stands",
       "check_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-      "check_writable": true
+      "check_writable": true,
+      "attribution": "recorded"
     },
     {
       "precondition_id": "network-eligible",
@@ -60,7 +62,19 @@
       "exit_code": null,
       "inputs_hash": "9e8d7c6b5a4938271605f4e3d2c1b0a99887766554433221100ffeeddccbbaa",
       "checked_at": "2026-10-01T12:00:02Z",
-      "summary": "check timed out"
+      "summary": "check refused before it ran",
+      "attribution": "refused_before_check"
+    },
+    {
+      "precondition_id": "payout-authority",
+      "step": "run_command",
+      "outcome": "failed",
+      "exit_code": 5,
+      "inputs_hash": "0a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef",
+      "checked_at": "2026-10-01T12:00:03Z",
+      "summary": "authority check denied dispatch (exit 5)",
+      "check_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "attribution": "artifact_unreadable"
     }
   ]
 }

@@ -544,6 +544,19 @@
             "null"
           ],
           "description": "ADR-017 boundary fact (#986): the resolved check was writable by the engine's effective UID at dispatch. Omitted when unknown."
+        },
+        "attribution": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "recorded",
+            "refused_before_check",
+            "artifact_unreadable",
+            null
+          ],
+          "description": "ISSUE-ATTRIBUTION-ABSENCE-REASON / ADR-017: structured reason the attribution digests are present or absent. `recorded` = the check ran (passed or failed) and attribution was collected; `refused_before_check` = a trust-boundary or boundary-strength refusal (nothing hashed or executed); `artifact_unreadable` = a digest could not be computed. Additive and optional (serde-defaulted, omitted when absent): a missing field means 'pre-attribution engine' (written by an engine < 1.9.2), NOT tampering. A new engine always sets it, so absence is unambiguous from the next release onward."
         }
       },
       "additionalProperties": false

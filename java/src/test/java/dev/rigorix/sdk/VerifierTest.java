@@ -68,13 +68,23 @@ class VerifierTest {
     void preconditionFindingsFixtureVerifies() throws Exception {
         String json = Corpus.fixture("envelope/envelope-precondition-signed.json");
         JsonNode findings = Canonical.MAPPER.readTree(json).get("precondition_findings");
-        assertEquals(3, findings.size());
+        assertEquals(4, findings.size());
         assertEquals("failed", findings.get(0).get("outcome").asText());
         assertEquals(3, findings.get(0).get("exit_code").asInt());
         assertEquals("passed", findings.get(1).get("outcome").asText());
         assertEquals(0, findings.get(1).get("exit_code").asInt());
         assertEquals("error", findings.get(2).get("outcome").asText());
         assertTrue(findings.get(2).get("exit_code").isNull());
+        assertEquals("failed", findings.get(3).get("outcome").asText());
+        assertEquals(5, findings.get(3).get("exit_code").asInt());
+        // ISSUE-ATTRIBUTION-ABSENCE-REASON: the four states are distinct.
+        assertEquals("recorded", findings.get(0).get("attribution").asText());
+        assertEquals("recorded", findings.get(1).get("attribution").asText());
+        assertEquals("refused_before_check", findings.get(2).get("attribution").asText());
+        assertEquals("artifact_unreadable", findings.get(3).get("attribution").asText());
+        assertFalse(findings.get(2).has("check_digest"));
+        assertTrue(findings.get(3).has("check_digest"));
+        assertFalse(findings.get(3).has("authority_digest"));
 
         Envelope.verifySignature(json, KEY);
         Envelope.validateEnvelope(json);
