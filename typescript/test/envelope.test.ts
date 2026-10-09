@@ -107,12 +107,20 @@ test("precondition findings fixture verifies (ADR-017)", () => {
   const findings = data.precondition_findings;
   assert.deepEqual(
     findings.map((finding: any) => finding.outcome),
-    ["failed", "passed", "error"],
+    ["failed", "passed", "error", "failed"],
   );
   assert.deepEqual(
     findings.map((finding: any) => finding.exit_code),
-    [3, 0, null],
+    [3, 0, null, 5],
   );
+  // ISSUE-ATTRIBUTION-ABSENCE-REASON: the four states are distinct.
+  assert.deepEqual(
+    findings.map((finding: any) => finding.attribution),
+    ["recorded", "recorded", "refused_before_check", "artifact_unreadable"],
+  );
+  assert.equal(findings[2].check_digest, undefined);
+  assert.ok(findings[3].check_digest);
+  assert.equal(findings[3].authority_digest, undefined);
 
   verifySignature(text, KEY);
   validateEnvelope(data);

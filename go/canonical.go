@@ -31,6 +31,7 @@ var skipNone = map[string]bool{
 	"check_digest":         true,
 	"authority_digest":     true,
 	"check_writable":       true,
+	"attribution":          true,
 }
 
 // skipEmpty mirrors `skip_serializing_if = "Vec::is_empty"` / map is_empty.

@@ -35,6 +35,7 @@ _SKIP_NONE = {
     "check_digest",
     "authority_digest",
     "check_writable",
+    "attribution",
 }
 
 # Vec/Map fields with ``skip_serializing_if = "Vec::is_empty"`` / map is_empty.

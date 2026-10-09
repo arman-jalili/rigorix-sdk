@@ -418,3 +418,33 @@ Then: catalog design → servers → SDKs.
     engine once ADR-017 Phase B lands.
   - `catalog.json` unchanged (**23** methods): config + evidence only, no new
     `rigorix.*` method (ADR-0001 D3 closed namespace).
+
+- **2026-10-09 — ISSUE-ATTRIBUTION-ABSENCE-REASON (contract change; additive):**
+  rigorix-oss #994 (epic `consequence-gating`, component `PreconditionFinding`).
+  Before this change, absence of the ADR-017 attribution digests was overloaded:
+  it meant *pre-attribution engine* (old record), *refused before the check ran*
+  (`TrustBoundary` / `Boundary` — nothing hashed or executed), or *artifact
+  unreadable* (`sha256_file` could not read the artifact). A consumer could not
+  tell a refusal (the interesting case) from an old record.
+  - `schemas/envelope.json`: `$defs.preconditionFindingRef` gains an additive,
+    optional `attribution` enum — `recorded` | `refused_before_check` |
+    `artifact_unreadable` (serde `Option<String>`,
+    `skip_serializing_if = "Option::is_none"`, declared **last**, after
+    `check_writable`). Absent ⇒ unchanged meaning (pre-attribution engine);
+    a new engine always sets it, so absence is unambiguous from the next
+    release onward. `additionalProperties: false` still holds.
+  - Canonical (HMAC) form: the field is skipped when absent and serialized last
+    when present; the struct field order in `rigorix-verifier` mirrors the schema
+    exactly. All five verifiers (Rust/Python/TypeScript/Java/Go) add `attribution`
+    to their skip-when-none set; `go/internal/corpus/corpus_gen.go` regenerated.
+  - `schemas/fixtures/envelope/envelope-precondition-signed.json`: now carries
+    four findings covering `recorded` (passed + failed), `refused_before_check`
+    (digests omitted), and `artifact_unreadable` (the computable digest kept, the
+    unreadable one omitted); legacy-absent is covered by the minimal envelope.
+    Re-signed with `fixture-hmac-key-2026`; verified byte-exact in all five
+    verifiers.
+  - Sequencing (per #994): this SDK contract change lands before the engine
+    populates the field at the three sites; a minor SDK release (additive)
+    precedes the enterprise ingest/console work. The enterprise conformance
+    mirror must be updated — serde drops unknown fields, so a missed mirror
+    silently diverges the HMAC bytes.

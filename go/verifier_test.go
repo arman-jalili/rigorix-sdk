@@ -120,8 +120,8 @@ func TestPreconditionFindingsFixture(t *testing.T) {
 	var data map[string]any
 	decodeInto(t, []byte(text), &data)
 	findings, ok := data["precondition_findings"].([]any)
-	if !ok || len(findings) != 3 {
-		t.Fatalf("expected 3 precondition findings")
+	if !ok || len(findings) != 4 {
+		t.Fatalf("expected 4 precondition findings")
 	}
 	first := findings[0].(map[string]any)
 	if first["outcome"] != "failed" || intOf(first["exit_code"]) != 3 {
@@ -134,6 +134,20 @@ func TestPreconditionFindingsFixture(t *testing.T) {
 	third := findings[2].(map[string]any)
 	if third["outcome"] != "error" || third["exit_code"] != nil {
 		t.Fatalf("finding[2]: %v", third)
+	}
+	fourth := findings[3].(map[string]any)
+	if fourth["outcome"] != "failed" || intOf(fourth["exit_code"]) != 5 {
+		t.Fatalf("finding[3]: %v", fourth)
+	}
+	// ISSUE-ATTRIBUTION-ABSENCE-REASON: the four states are distinct.
+	wantAttribution := []string{"recorded", "recorded", "refused_before_check", "artifact_unreadable"}
+	for i, want := range wantAttribution {
+		if findings[i].(map[string]any)["attribution"] != want {
+			t.Fatalf("finding[%d] attribution: got %v want %q", i, findings[i].(map[string]any)["attribution"], want)
+		}
+	}
+	if _, present := third["check_digest"]; present {
+		t.Fatalf("refused finding must omit check_digest")
 	}
 
 	if err := VerifySignature(text, fixtureKey); err != nil {

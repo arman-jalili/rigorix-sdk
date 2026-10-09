@@ -31,6 +31,7 @@ const SKIP_NONE = new Set([
   "check_digest",
   "authority_digest",
   "check_writable",
+  "attribution",
 ]);
 
 const SKIP_EMPTY = new Set([

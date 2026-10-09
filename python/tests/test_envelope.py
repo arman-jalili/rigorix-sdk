@@ -129,8 +129,18 @@ def test_precondition_findings_fixture():
     text = path.read_text(encoding="utf-8")
     data = json.loads(text)
     findings = data["precondition_findings"]
-    assert [f["outcome"] for f in findings] == ["failed", "passed", "error"]
-    assert [f["exit_code"] for f in findings] == [3, 0, None]
+    assert [f["outcome"] for f in findings] == ["failed", "passed", "error", "failed"]
+    assert [f["exit_code"] for f in findings] == [3, 0, None, 5]
+    # ISSUE-ATTRIBUTION-ABSENCE-REASON: the four states are distinct.
+    assert [f.get("attribution") for f in findings] == [
+        "recorded",
+        "recorded",
+        "refused_before_check",
+        "artifact_unreadable",
+    ]
+    assert "check_digest" not in findings[2]
+    assert findings[3]["check_digest"]
+    assert "authority_digest" not in findings[3]
 
     rv.verify_signature(text, FIXTURE_KEY)
     rv.validate_envelope(text)
