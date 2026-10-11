@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# SDK-CRATES-0.2.0 — prove the 0.2.0 distribution carries the ADR-016 Phase C
-# `anchor_head`, with RIGORIX_SDK_SCHEMAS unset.
+# SDK-CRATES-0.4.0 — prove the distribution carries the release payload, with
+# RIGORIX_SDK_SCHEMAS unset:
+#   * ADR-016 Phase C `anchor_head` (0.2.0), and
+#   * the structured attribution reason on precondition findings (0.4.0).
 #
 # Two gates:
 #   1. `cargo package -p rigorix-schemas` (verified build) → the produced
@@ -38,7 +40,13 @@ grep -q '"anchor_head"' "$schemas_pkg/schemas/envelope.json" \
   || { echo "FAIL: packaged rigorix-schemas $version envelope.json lacks anchor_head"; exit 1; }
 [[ -f "$schemas_pkg/schemas/fixtures/envelope/envelope-anchored-signed.json" ]] \
   || { echo "FAIL: packaged rigorix-schemas lacks the anchored fixture"; exit 1; }
-echo "gate 1: packaged rigorix-schemas-$version carries anchor_head + fixture OK"
+# 0.4.0 payload: the structured attribution reason + its re-signed fixture. This
+# release's entire contract change, so assert it is actually in the .crate.
+grep -q '"attribution"' "$schemas_pkg/schemas/envelope.json" \
+  || { echo "FAIL: packaged rigorix-schemas $version envelope.json lacks the 0.4.0 attribution reason"; exit 1; }
+[[ -f "$schemas_pkg/schemas/fixtures/envelope/envelope-precondition-signed.json" ]] \
+  || { echo "FAIL: packaged rigorix-schemas lacks the precondition fixture"; exit 1; }
+echo "gate 1: packaged rigorix-schemas-$version carries anchor_head + attribution + fixtures OK"
 
 # ── Gate 2: clean scratch consumer verifies the anchored fixture (no env) ────
 proj="$work/consumer"
@@ -72,7 +80,20 @@ fn main() {
     let envelopes: Vec<rigorix_verifier::AuditEnvelope> =
         serde_json::from_str(chain).expect("chain parses");
     rigorix_verifier::verify_chain(&envelopes).expect("verifier verifies the chain");
-    println!("gate 2: clean consumer verifies anchored fixture + chain OK");
+
+    // 0.4.0 payload: the precondition fixture carries the structured attribution
+    // reason and must verify byte-exact from the embedded corpus. This is the
+    // whole contract change of the release, so prove it end to end rather than
+    // trusting the version bump.
+    let pre = rigorix_schemas::fixture("envelope/envelope-precondition-signed.json")
+        .expect("corpus must embed the precondition fixture");
+    assert!(
+        pre.contains("\"attribution\""),
+        "precondition fixture must carry the 0.4.0 attribution reason"
+    );
+    rigorix_verifier::verify_signature(pre, "fixture-hmac-key-2026")
+        .expect("verifier must verify the precondition fixture byte-exact");
+    println!("gate 2: clean consumer verifies anchored + precondition fixtures + chain OK");
 }
 RS
 

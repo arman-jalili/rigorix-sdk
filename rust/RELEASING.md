@@ -1,17 +1,40 @@
 # Releasing the SDK
 
-Two distribution channels share one version (`0.3.0`):
+Two distribution channels share one version (`0.4.0`):
 
 - **Rust crates (crates.io)** — `rigorix-schemas`, `rigorix-verifier`
   (`rigorix-client` is a typed protocol client, independent cadence). Published
-  manually (`cargo publish`), marker tag `rust-v0.3.0`.
+  manually (`cargo publish`), marker tag `rust-v0.4.0`.
 - **Python + TypeScript (PyPI + npm)** — `rigorix-verifier` (both) and
-  `rigorix-client` (npm). Published by CI on the `v0.3.0` tag.
+  `rigorix-client` (npm). Published by CI on the `v0.4.0` tag.
 
 `rust/Cargo.toml` `[workspace.package] version` is the single source for every
 workspace member (`version.workspace = true`). The verifier + client pin
 `rigorix-schemas` to the **same exact version**, and `rigorix-schemas` must be
 published **before** the verifier.
+
+## 0.4.0 — structured attribution reason (additive)
+
+Additive contract release: `$defs.preconditionFindingRef` gains an optional
+`attribution` — `recorded` | `refused_before_check` | `artifact_unreadable` —
+declared **last** so envelopes without it canonicalize byte-identically. It gives
+attribution *absence* a machine-readable cause; previously one empty state
+covered three different situations (a pre-attribution engine, a refusal *before*
+the check ran, an unreadable artifact).
+
+> **Breaking for verifiers, not for envelopes.** The HMAC is over the struct
+> field order, so a `0.3.0` verifier **cannot** verify an envelope carrying
+> `attribution` — it drops the unknown field and reports a signature mismatch
+> (verified against the published `rigorix-verifier@0.3.0`). The field is
+> optional, so `0.4.0` verifies both old and new envelopes. An engine must not
+> emit `attribution` before `0.4.0` is published.
+>
+> Publish order is therefore load-bearing: **schemas → verifier (crates.io) and
+> the tag-triggered PyPI/npm jobs**, all before any engine release that emits
+> the field.
+
+Consumers pin `rigorix-verifier = "0.4"` (`rigorix-oss/server`,
+`rigorix-enterprise/core`).
 
 ## 0.3.0 — ADR-017 dispatch-time preconditions + signed attribution
 
