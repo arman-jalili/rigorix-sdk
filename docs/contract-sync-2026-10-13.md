@@ -64,10 +64,15 @@ cannot ship its MCP tool ahead of this. Sequencing is the point, exactly as the
 - Python/TypeScript `_schemas` copies and the Go corpus are **generated** from
   `schemas/`; their sync tests re-derive and compare byte-for-byte.
 
-## Release sequencing (acceptance criterion 5)
+## Release sequencing (acceptance criterion 5) — SHIPPED
 
-A **minor SDK release** (0.4.0 → 0.5.0) is required before `rigorix-oss`
-`ISSUE-PROJECTION-SURFACES` may ship its MCP tool. The release notes MUST state
-that consumers upgrade the SDK before the OSS tool ships. Cutting the release is
-the release owner's action (registry credentials) and is not part of this
-contract commit.
+`0.5.0` is published on every channel — crates.io (`rigorix-schemas`,
+`rigorix-verifier`), PyPI (`rigorix-verifier`), npm (`rigorix-verifier`,
+`rigorix-client`) — under tags `rust-v0.5.0` and `v0.5.0`, and the registry
+install smoke job is green. `rust/RELEASING.md` carries the requirement in its
+0.5.0 release notes.
+
+`rigorix-oss` `ISSUE-PROJECTION-SURFACES` may now ship its MCP tool — but only
+after the consumers move, because 0.x semver means `^0.4` does **not** resolve
+`0.5.0`. `rigorix-oss/server` and `rigorix-enterprise/core` pin
+`rigorix-verifier = "0.5"`.
