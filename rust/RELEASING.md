@@ -1,17 +1,43 @@
 # Releasing the SDK
 
-Two distribution channels share one version (`0.4.0`):
+Two distribution channels share one version (`0.5.0`):
 
 - **Rust crates (crates.io)** — `rigorix-schemas`, `rigorix-verifier`
   (`rigorix-client` is a typed protocol client, independent cadence). Published
-  manually (`cargo publish`), marker tag `rust-v0.4.0`.
+  manually (`cargo publish`), marker tag `rust-v0.5.0`.
 - **Python + TypeScript (PyPI + npm)** — `rigorix-verifier` (both) and
-  `rigorix-client` (npm). Published by CI on the `v0.4.0` tag.
+  `rigorix-client` (npm). Published by CI on the `v0.5.0` tag.
 
 `rust/Cargo.toml` `[workspace.package] version` is the single source for every
 workspace member (`version.workspace = true`). The verifier + client pin
 `rigorix-schemas` to the **same exact version**, and `rigorix-schemas` must be
 published **before** the verifier.
+
+## 0.5.0 — authority-fact projection method (additive)
+
+The catalog gains one method, `rigorix.audit.authorityFacts` (query, auth
+`session`, MCP tool `rigorix_audit_authority_facts`), and one standalone schema
+file, `api/authority-fact-bundle.json`, whose `envelopes[]` item `$ref`s
+`envelope.json` by `$id` — the canonical envelope shape is referenced, never
+re-declared, so there is still no second envelope dialect. Frozen method set:
+**23 → 24**.
+
+> **Not breaking for envelopes.** Nothing in the envelope canonical (HMAC) form
+> changes, so a `0.4.0` verifier still verifies every envelope, and `0.5.0`
+> verifies both old and new. The addition is contract-only.
+>
+> **But consumers must upgrade before the surface ships.** A client or verifier
+> built against the `0.4.0` catalog does not know the new method. Publish order is
+> therefore load-bearing: **schemas → verifier (crates.io) and the tag-triggered
+> PyPI/npm jobs, all before `rigorix-oss` exposes the MCP tool.**
+
+`rigorix-oss` tracks the consumer side as ISSUE-PROJECTION-SURFACES; the tool must
+not ship ahead of this release. An engine must not emit an authority-fact bundle
+before `0.5.0` is published.
+
+Consumers pin `rigorix-verifier = "0.5"` (`rigorix-oss/server`,
+`rigorix-enterprise/core`). The bump is mandatory: `^0.4` does **not** resolve
+`0.5.0` under 0.x semver.
 
 ## 0.4.0 — structured attribution reason (additive)
 

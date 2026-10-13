@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# SDK-CRATES-0.4.0 — prove the distribution carries the release payload, with
+# SDK-CRATES-0.5.0 — prove the distribution carries the release payload, with
 # RIGORIX_SDK_SCHEMAS unset:
-#   * ADR-016 Phase C `anchor_head` (0.2.0), and
-#   * the structured attribution reason on precondition findings (0.4.0).
+#   * ADR-016 Phase C `anchor_head` (0.2.0),
+#   * the structured attribution reason on precondition findings (0.4.0), and
+#   * the authority-fact bundle schema + its catalog method (0.5.0).
 #
 # Two gates:
 #   1. `cargo package -p rigorix-schemas` (verified build) → the produced
@@ -46,7 +47,16 @@ grep -q '"attribution"' "$schemas_pkg/schemas/envelope.json" \
   || { echo "FAIL: packaged rigorix-schemas $version envelope.json lacks the 0.4.0 attribution reason"; exit 1; }
 [[ -f "$schemas_pkg/schemas/fixtures/envelope/envelope-precondition-signed.json" ]] \
   || { echo "FAIL: packaged rigorix-schemas lacks the precondition fixture"; exit 1; }
-echo "gate 1: packaged rigorix-schemas-$version carries anchor_head + attribution + fixtures OK"
+# 0.5.0 payload: the authority-fact bundle schema + its catalog method. Assert both
+# are in the .crate, and that the bundle REFERENCES the canonical envelope dialect
+# instead of re-declaring it (the "no second dialect" rule).
+[[ -f "$schemas_pkg/schemas/api/authority-fact-bundle.json" ]] \
+  || { echo "FAIL: packaged rigorix-schemas lacks api/authority-fact-bundle.json"; exit 1; }
+grep -q 'envelope-v2.json' "$schemas_pkg/schemas/api/authority-fact-bundle.json" \
+  || { echo "FAIL: packaged authority-fact bundle must reference envelope-v2.json by id (no second dialect)"; exit 1; }
+grep -q 'rigorix.audit.authorityFacts' "$schemas_pkg/schemas/api/catalog.json" \
+  || { echo "FAIL: packaged rigorix-schemas $version catalog lacks rigorix.audit.authorityFacts"; exit 1; }
+echo "gate 1: packaged rigorix-schemas-$version carries anchor_head + attribution + fixtures + bundle OK"
 
 # ── Gate 2: clean scratch consumer verifies the anchored fixture (no env) ────
 proj="$work/consumer"
@@ -93,7 +103,22 @@ fn main() {
     );
     rigorix_verifier::verify_signature(pre, "fixture-hmac-key-2026")
         .expect("verifier must verify the precondition fixture byte-exact");
-    println!("gate 2: clean consumer verifies anchored + precondition fixtures + chain OK");
+
+    // 0.5.0 payload: the authority-fact bundle schema and its catalog method must
+    // be present in the embedded corpus, and the bundle must REFERENCE the
+    // canonical envelope dialect rather than re-declaring it.
+    let bundle = rigorix_schemas::schema("api/authority-fact-bundle.json")
+        .expect("corpus must embed the authority-fact bundle schema");
+    assert!(
+        bundle.contains("envelope-v2.json"),
+        "bundle envelopes[] must reference envelope-v2.json by $id (no second dialect)"
+    );
+    let catalog = rigorix_schemas::schema("api/catalog.json").expect("corpus must embed the catalog");
+    assert!(
+        catalog.contains("rigorix.audit.authorityFacts"),
+        "catalog must declare the 0.5.0 authority-fact method"
+    );
+    println!("gate 2: clean consumer verifies anchored + precondition fixtures + chain + bundle OK");
 }
 RS
 
