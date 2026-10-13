@@ -150,15 +150,16 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME#v}"
           python -m venv "$RUNNER_TEMP/py"
-          # PyPI/CDN propagation can lag briefly after Trusted Publishing.
-          # Retry the install a bounded number of times before failing.
+          # PyPI/CDN propagation can lag after Trusted Publishing. Retry
+          # generously: the job has a 20-minute timeout, so a few extra minutes
+          # of waiting is far cheaper than a false red on a real release.
           installed=no
-          for attempt in 1 2 3 4 5; do
+          for attempt in {1..12}; do
             if "$RUNNER_TEMP/py/bin/pip" install --quiet "rigorix-verifier==$tag"; then
               installed=yes; break
             fi
-            echo "py install attempt $attempt: not yet available; retrying in 15s"
-            sleep 15
+            echo "py install attempt $attempt: not yet available; retrying in 20s"
+            sleep 20
           done
           test "$installed" = yes || { echo "FAIL: rigorix-verifier==$tag not installable from PyPI"; exit 1; }
           unset RIGORIX_SDK_SCHEMAS
@@ -171,14 +172,19 @@ jobs:
           cp "$GITHUB_WORKSPACE/typescript/scripts/pack-smoke.mjs" "$RUNNER_TEMP/npm/smoke.mjs"
           cd "$RUNNER_TEMP/npm"
           npm init -y >/dev/null
-          # npm registry propagation can lag briefly after publish.
+          # npm registry propagation can lag after publish — MEASURED at ~95s on
+          # the v0.5.0 release (the npm-client job reported success at 17:31:58 but
+          # `rigorix-client@0.5.0` only became installable at 17:33:33). The previous
+          # window was 5 x 15s = 75s, which is SHORTER than that lag, so the smoke
+          # gate failed on a perfectly good release. Keep a window well above the
+          # observed lag: 12 x 20s = 4 minutes.
           installed=no
-          for attempt in 1 2 3 4 5; do
+          for attempt in {1..12}; do
             if npm install "rigorix-verifier@$tag" "rigorix-client@$tag" --no-audit --no-fund; then
               installed=yes; break
             fi
-            echo "npm install attempt $attempt: not yet available; retrying in 15s"
-            sleep 15
+            echo "npm install attempt $attempt: not yet available; retrying in 20s"
+            sleep 20
           done
           test "$installed" = yes || { echo "FAIL: rigorix-verifier@$tag / rigorix-client@$tag not installable from npm"; exit 1; }
           unset RIGORIX_SDK_SCHEMAS
