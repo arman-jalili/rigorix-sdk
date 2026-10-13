@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/api/authority-fact-bundle-v1.json",
+  "title": "Rigorix Authority Fact Bundle v1",
+  "description": "The consequence-gating §4.3 authority-fact projection bundle: the projection, the signed history it was derived from, and the subjects the consumer asked about (`subjects_without_record`). Rigorix exports its own hash-chained history as attributable present-state facts for an external determination consumer; the projection reports what was established, when, and how it can be verified, and SHALL NOT assert present standing (NC-4). Verification is by RE-DERIVATION, not by signature (spec §4.3.1): a verifier checks the envelope chain, re-derives the projection from that verified history, and compares the facts and anchor reference exactly (the `generated_at` timestamp is not compared). The `envelopes[]` items are `$ref`-addressed to the one canonical envelope dialect (`envelope-v2.json`) — this schema never re-declares envelope fields. DISCLOSURE: a bundle carries the envelopes, so a caller receives the signed history, not a summary; that is inherent to re-derivation and is declared, not discovered.",
+  "type": "object",
+  "required": ["projection", "envelopes"],
+  "properties": {
+    "projection": {
+      "$ref": "#/$defs/projection"
+    },
+    "envelopes": {
+      "type": "array",
+      "description": "The signed history the projection was derived from. Each item is the ONE canonical envelope dialect (`envelope.json`, `$id` `envelope-v2.json`) — referenced, never re-declared, so there is no second envelope shape.",
+      "items": {
+        "$ref": "https://rigorix.dev/schemas/envelope-v2.json"
+      }
+    },
+    "subjects_without_record": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "The subjects the consumer asked about that had no record. Carried so re-derivation is reproducible: without it the `NOT_ESTABLISHED` facts cannot be regenerated and the check would silently be incomplete. Absent (serde default) is treated as empty, not as an error."
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "projection": {
+      "type": "object",
+      "description": "A versioned, offline-verifiable projection of authority facts (mirrors rigorix-oss `AuthorityFactProjection`).",
+      "required": ["spec", "version", "generated_at", "claim_ceiling", "facts"],
+      "properties": {
+        "spec": {
+          "const": "rigorix-authority-fact-projection",
+          "description": "Stable spec identifier."
+        },
+        "version": {
+          "type": "string",
+          "description": "Projection version (currently `1.0`)."
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the projection was generated. NOT compared by re-derivation (not reproducible)."
+        },
+        "claim_ceiling": {
+          "$ref": "#/$defs/claimCeiling"
+        },
+        "anchor_ref": {
+          "$ref": "#/$defs/anchorRef"
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/authorityFact"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "claimCeiling": {
+      "type": "object",
+      "description": "The machine-readable claim ceiling carried by a projection (spec §6). Carried as data, not prose, so a summarizer cannot drop it.",
+      "required": ["layer", "establishes", "does_not_establish", "asserts_present_standing"],
+      "properties": {
+        "layer": {
+          "type": "string",
+          "description": "The evidence layer this projection establishes at (e.g. `engineering_verification`)."
+        },
+        "establishes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "does_not_establish": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "asserts_present_standing": {
+          "type": "boolean",
+          "description": "Always `false`: the projection never asserts present standing."
+        }
+      },
+      "additionalProperties": false
+    },
+    "anchorRef": {
+      "type": "object",
+      "description": "The anchor reference for a projection: the chain tip that lets a third party verify lineage (ADR-016).",
+      "required": ["head_sequence", "history_integrity"],
+      "properties": {
+        "head_sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The highest chain position included."
+        },
+        "history_integrity": {
+          "type": ["string", "null"],
+          "description": "The `history_integrity` marker of the tip (`local_unanchored` / `anchored`); null when the tip has none."
+        },
+        "producer_id": {
+          "type": "string",
+          "description": "The producer the chain belongs to, when present."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authorityFact": {
+      "type": "object",
+      "description": "One attributable present-state fact (mirrors rigorix-oss `AuthorityFact`). It carries an `outcome` and an `authority_digest` when a record has them — never an assertion that the authority is presently valid.",
+      "required": ["subject", "scope", "established_at", "epistemic_status", "chain_position"],
+      "properties": {
+        "subject": {
+          "type": "string",
+          "description": "The subject the fact is about (e.g. `authority:beneficiary-eligible`). Redaction-safe: no absolute path, no username, no secret."
+        },
+        "scope": {
+          "type": "string",
+          "description": "The operator's scope token the fact was recorded under."
+        },
+        "established_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the underlying record established the fact."
+        },
+        "epistemic_status": {
+          "enum": ["ESTABLISHED", "NOT_ESTABLISHED"],
+          "description": "`NOT_ESTABLISHED` means the fact is absent from the record. It is not a refusal and SHALL NOT be rendered as one, and SHALL NOT be promoted to a positive."
+        },
+        "outcome": {
+          "type": "string",
+          "description": "The recorded outcome (`passed` | `failed` | `error`), when established."
+        },
+        "authority_digest": {
+          "type": "string",
+          "description": "The one-way digest binding the authority artifact, when the record has one. Absent ≠ tampered."
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceRef"
+          },
+          "description": "The records this fact is attributed to. Never empty for `ESTABLISHED`."
+        },
+        "chain_position": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The chain position (sequence) of the record that established the fact."
+        },
+        "producer_id": {
+          "type": "string",
+          "description": "The producer id of the record, when present."
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidenceRef": {
+      "type": "object",
+      "description": "The one-way link from a fact to the record it is attributed to (mirrors rigorix-oss `EvidenceRef`).",
+      "required": ["kind", "reference"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "The kind of record (e.g. `precondition_finding`)."
+        },
+        "reference": {
+          "type": "string",
+          "description": "A stable, redaction-safe reference into the record (`<execution-id>#<precondition-id>@<sequence>`)."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "x-verification": {
+    "method": "re-derivation, not signature (consequence-gating spec §4.3.1)",
+    "steps": [
+      "verify the envelope chain (verify_chain) — unverified history re-derives to unverified facts, so it is checked first",
+      "re-derive the projection from that verified history with the same derivation the producer used",
+      "compare the facts and the anchor reference exactly; generated_at is not compared"
+    ],
+    "signed-optimisation": "Documented as deferred (spec §4.3.2). A future signed/cached projection MUST be anchored to the chain, or verification degrades from 'consistent with the anchored chain' to 'asserted by a key holder'."
+  }
+}

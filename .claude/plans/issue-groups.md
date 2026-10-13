@@ -53,6 +53,12 @@ decision is "MCP tool"; if "CLI-only", close #44 without code.
 answered"* — is an MCP tool the right surface, or is the projection CLI-only?
 A "CLI-only" answer means #44 is closed, not implemented.
 
+**Decision (2026-10-13):** proceed with the MCP/catalog method. Contract shape:
+`rigorix.audit.authorityFacts` (query, `session`, tool `rigorix_audit_authority_facts`),
+result is the standalone `api/authority-fact-bundle.json` (`$id` addressed;
+`envelopes[]` `$ref`s the one canonical `envelope.json`). Recorded in
+`docs/contract-sync-2026-10-13.md`; plan in `.claude/plans/issue-44.md`.
+
 ---
 
 ## Historical series (SDK distribution, 2026-09/10 — merged)

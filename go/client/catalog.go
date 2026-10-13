@@ -42,6 +42,7 @@ var Methods = []MethodBinding{
 	{Name: "rigorix.audit.head", Binding: Binding{Kind: ServerOnly, Reason: "enterprise ADR-016 Phase B ledger surface"}},
 	{Name: "rigorix.audit.history", Binding: Binding{Kind: ServerOnly, Reason: "enterprise ADR-016 Phase B ledger surface"}},
 	{Name: "rigorix.audit.overdue", Binding: Binding{Kind: ServerOnly, Reason: "enterprise ADR-016 Phase B ledger surface"}},
+	{Name: "rigorix.audit.authorityFacts", Binding: Binding{Kind: ServerOnly, Reason: "authority-fact projection bundle export (audit evidence surface; no typed wrapper yet)"}},
 	{Name: "rigorix.template.list", Binding: Binding{Kind: Typed}},
 	{Name: "rigorix.template.get", Binding: Binding{Kind: Typed}},
 	{Name: "rigorix.template.create", Binding: Binding{Kind: Typed}},

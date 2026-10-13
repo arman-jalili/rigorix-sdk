@@ -76,6 +76,12 @@ pub const METHODS: &[MethodBinding] = &[
         binding: Binding::ServerOnly("enterprise ADR-016 Phase B ledger surface"),
     },
     MethodBinding {
+        name: "rigorix.audit.authorityFacts",
+        binding: Binding::ServerOnly(
+            "authority-fact projection bundle export (audit evidence surface; no typed wrapper yet)",
+        ),
+    },
+    MethodBinding {
         name: "rigorix.template.list",
         binding: Binding::Typed,
     },

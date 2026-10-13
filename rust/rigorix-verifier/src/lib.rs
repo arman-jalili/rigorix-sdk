@@ -744,6 +744,12 @@ const CLAIMS_SCHEMA_ID: &str = "https://rigorix.dev/schemas/claims.json";
 /// `rigorix.audit.history`, referenced cross-file from the catalog.
 const HISTORY_SLICE_SCHEMA_ID: &str = "https://rigorix.dev/schemas/api/history-slice-v1.json";
 
+/// The `$id` of the consequence-gating §4.3 authority-fact bundle schema — the
+/// result shape of `rigorix.audit.authorityFacts`, referenced cross-file from
+/// the catalog. It in turn `$ref`s the one canonical envelope dialect.
+const AUTHORITY_FACT_BUNDLE_SCHEMA_ID: &str =
+    "https://rigorix.dev/schemas/api/authority-fact-bundle-v1.json";
+
 /// Build a JSON Schema validator, registering sibling contract schemas so
 /// cross-file `$ref`s resolve offline (`events.json` → `envelope.json`;
 /// `api/catalog.json` → `claims.json`).
@@ -755,6 +761,10 @@ fn build_validator(file: &str, schema: &serde_json::Value) -> VerifyResult<jsons
         ("envelope.json", ENVELOPE_SCHEMA_ID),
         ("claims.json", CLAIMS_SCHEMA_ID),
         ("api/history-slice.json", HISTORY_SLICE_SCHEMA_ID),
+        (
+            "api/authority-fact-bundle.json",
+            AUTHORITY_FACT_BUNDLE_SCHEMA_ID,
+        ),
     ] {
         if file == sibling {
             continue;
@@ -1258,6 +1268,7 @@ mod tests {
             "api/ledger-receipt.json",
             "api/history-slice.json",
             "api/compaction-checkpoint.json",
+            "api/authority-fact-bundle.json",
         ] {
             let text = schema_text(name).unwrap_or_else(|e| panic!("{name}: {e}"));
             let schema: serde_json::Value =
@@ -1844,6 +1855,50 @@ mod tests {
             matches!(err, VerifyError::UndeclaredMethod(ref m) if m == "rigorix.auth.bogus"),
             "{err:?}"
         );
+    }
+
+    // The consequence-gating §4.3 catalog addition (SDK #44): the method is
+    // declared with the frozen shape, its result is the STANDALONE bundle file
+    // (not an inline shape), and that bundle `$ref`s the one canonical envelope
+    // dialect — no second envelope shape. Additive within the closed namespace.
+    #[test]
+    fn catalog_declares_authority_fact_projection_additively() {
+        let text = schema_text("api/catalog.json").expect("catalog.json");
+        let catalog: serde_json::Value = serde_json::from_str(&text).expect("catalog parses");
+        let method = catalog["methods"]
+            .as_array()
+            .expect("methods")
+            .iter()
+            .find(|m| m["name"] == "rigorix.audit.authorityFacts")
+            .expect("rigorix.audit.authorityFacts must be declared");
+        assert_eq!(method["kind"], "query");
+        assert_eq!(
+            method["auth"], "session",
+            "an OSS capability is a session method, not an enterprise (admin) scope"
+        );
+        assert_eq!(method["mcpTool"], "rigorix_audit_authority_facts");
+        assert_eq!(method["params"]["$ref"], "#/$defs/authorityFactsParams");
+        assert_eq!(method["result"]["$ref"], "#/$defs/authorityFactsResult");
+
+        // `authorityFactsResult` addresses the standalone bundle by `$id`; the
+        // catalog's `$defs` hold method-local shapes, and canonical artifacts
+        // are standalone files with an `$id` (as with `auditHistoryResult`).
+        assert_eq!(
+            catalog["$defs"]["authorityFactsResult"]["$ref"],
+            AUTHORITY_FACT_BUNDLE_SCHEMA_ID
+        );
+
+        // The bundle's `envelopes[]` is the ONE canonical envelope dialect.
+        let bundle_text = schema_text("api/authority-fact-bundle.json").expect("bundle schema");
+        let bundle: serde_json::Value = serde_json::from_str(&bundle_text).expect("bundle parses");
+        assert_eq!(
+            bundle["properties"]["envelopes"]["items"]["$ref"], ENVELOPE_SCHEMA_ID,
+            "the bundle must $ref envelope.json (no second envelope dialect)"
+        );
+
+        // The new name is a declared subset member (a server may serve it).
+        verify_catalog_subset(&["rigorix.audit.authorityFacts"])
+            .expect("the projection method must be a declared subset member");
     }
 
     fn semver_ok(s: &str) -> bool {
