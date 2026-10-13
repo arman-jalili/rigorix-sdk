@@ -67,7 +67,7 @@ if [ -d "tests" ]; then
         # Run all integration test files
         TEST_COUNT=$(find tests -name "*.rs" 2>/dev/null | wc -l | tr -d ' ') || true
         if [ "$TEST_COUNT" -gt 0 ]; then
-            if cargo test --test '*' --quiet 2>/dev/null; then
+            if cargo test --tests --quiet 2>/dev/null; then
                 pass "Integration tests passed"
             else
                 fail "Integration tests failed"

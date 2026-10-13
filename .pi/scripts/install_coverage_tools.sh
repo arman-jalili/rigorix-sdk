@@ -29,7 +29,7 @@ detect_language() {
 
 LANG="$(detect_language)"
 
-if [ "C.UTF-8" = "unknown" ]; then
+if [ "$LANG" = "unknown" ]; then
     echo "⚠️  No project language detected — nothing to install." >&2
     exit 0
 fi

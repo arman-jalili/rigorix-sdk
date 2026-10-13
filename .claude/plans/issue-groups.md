@@ -1,10 +1,61 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-10-01 (updated)
-**Open issues:** 1 (#39) — #10/#12/#15/#18–#21/#11/#29/#31/#33/#34/#35 merged
+**Generated:** 2026-10-13 (updated)
+**Open issues:** 2 (#43, #44) — #10/#12/#15/#18–#21/#11/#29/#31/#33/#34/#35/#39 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
 
 ---
+
+## Series: validator integrity + catalog projection (2026-10-13)
+
+Two independent singles. They share no files and have no ordering dependency,
+but they are **not** one PR: #43 touches only `.pi/scripts` (tooling), #44 touches
+`schemas/` + the three client trees (a frozen contract). Per `AGENTS.md` rule 2,
+#44 is a contract change and is **decision-gated by the issue itself** — the
+surface question (`MCP tool` vs `CLI-only`) must be answered before any edit.
+
+| # | ID | Priority | Component | Branch | Blocked by |
+|---|----|----------|-----------|--------|-----------|
+| 43 | SDK-VALIDATOR-MAINTENANCE | medium | `.pi/scripts/languages/rust/*` + dispatchers | `issue/43` | — (actionable now) |
+| 44 | SDK-CATALOG-PROJECTION-METHOD | medium | `schemas/api/catalog.json` + rust/ts/go clients | `issue/44` | **surface decision** (issue gate) |
+
+**Order:** #43 first (independent, no decision needed). #44 only if the surface
+decision is "MCP tool"; if "CLI-only", close #44 without code.
+
+### Group: Validator maintenance (single) — actionable
+
+**Branch:** `issue/43`
+**Issue:** 1
+- #43 SDK-VALIDATOR-MAINTENANCE: `cargo test --test '*'` latent false failure +
+  OSS divergence + hardcoded `C.UTF-8` locale in dispatchers
+
+**Why not grouped:** tooling-only, single component owner (`.pi/scripts`).
+
+**Verified facts (code is truth, 2026-10-13):**
+- `.pi/scripts/languages/rust/validate-tests.sh:70` and
+  `validate-integration.sh:45` still use `cargo test --test '*'`.
+- No `required-features` target exists in `rust/**/Cargo.toml` today — the
+  failure is latent, exactly as the issue states.
+- The `C.UTF-8` literal is present in three dispatchers:
+  `.pi/scripts/coverage.sh:47`, `.pi/scripts/install_coverage_tools.sh:32`,
+  `.pi/scripts/ci/stage_lint.sh:33` (`[ "C.UTF-8" = "unknown" ]` /
+  `case "C.UTF-8" in`) — `$LANG` was substituted by a locale value.
+
+### Group: Catalog projection method (single) — decision-gated
+
+**Branch:** `issue/44` (only if approved)
+**Issue:** 1
+- #44 SDK-CATALOG-PROJECTION-METHOD: add the authority-fact projection to the
+  frozen catalog (23 → 24 methods), regenerate copies/embeddings, update clients
+  + go drift test, cut a minor release
+
+**Gate:** the issue says *"Do not implement this issue until that question is
+answered"* — is an MCP tool the right surface, or is the projection CLI-only?
+A "CLI-only" answer means #44 is closed, not implemented.
+
+---
+
+## Historical series (SDK distribution, 2026-09/10 — merged)
 
 ## Series: SDK distribution (D-1 / D-2) — 2026-09-25
 
