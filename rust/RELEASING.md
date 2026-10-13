@@ -5,6 +5,13 @@ Two distribution channels share one version (`0.5.0`):
 - **Rust crates (crates.io)** — `rigorix-schemas`, `rigorix-verifier`
   (`rigorix-client` is a typed protocol client, independent cadence). Published
   manually (`cargo publish`), marker tag `rust-v0.5.0`.
+
+  Pass the token explicitly: `cargo publish -p <crate> --token "$CRATES_TOKEN"`.
+  The token stored in `~/.cargo/credentials.toml` may be revoked, which surfaces
+  as `status 403 Forbidden: authentication failed`. That is a **stale credential**,
+  not a problem with the crate name or the account — do not go hunting for
+  ownership issues. `rigorix-schemas` must be published **and indexed** before
+  `rigorix-verifier`, whose dependency on it is exact-versioned.
 - **Python + TypeScript (PyPI + npm)** — `rigorix-verifier` (both) and
   `rigorix-client` (npm). Published by CI on the `v0.5.0` tag.
 
