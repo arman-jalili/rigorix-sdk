@@ -44,7 +44,7 @@ detect_language() {
 
 LANG="$(detect_language)"
 
-if [ "C.UTF-8" = "unknown" ]; then
+if [ "$LANG" = "unknown" ]; then
     echo "⚠️  No project language detected — no real coverage gate applies." >&2
     exit 0
 fi
