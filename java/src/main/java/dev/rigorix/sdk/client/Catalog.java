@@ -43,6 +43,9 @@ public final class Catalog {
             Method.serverOnly("rigorix.audit.head", "enterprise ADR-016 Phase B ledger surface"),
             Method.serverOnly("rigorix.audit.history", "enterprise ADR-016 Phase B ledger surface"),
             Method.serverOnly("rigorix.audit.overdue", "enterprise ADR-016 Phase B ledger surface"),
+            Method.serverOnly(
+                    "rigorix.audit.authorityFacts",
+                    "authority-fact projection bundle export (audit evidence surface; no typed wrapper yet)"),
             Method.typed("rigorix.template.list"),
             Method.typed("rigorix.template.get"),
             Method.typed("rigorix.template.create"),

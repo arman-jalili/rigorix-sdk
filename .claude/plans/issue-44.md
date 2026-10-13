@@ -48,6 +48,7 @@ Shape decisions recorded in `docs/contract-sync-2026-10-13.md`:
 | `rust/rigorix-client/src/catalog.rs` | `ServerOnly` binding |
 | `typescript-client/src/catalog.ts` | `server_only` binding |
 | `go/client/catalog.go` | `ServerOnly` binding |
+| `java/src/main/java/dev/rigorix/sdk/client/Catalog.java` | `SERVER_ONLY` binding |
 | `go/internal/corpus/corpus_gen.go` | regenerated (`go run ./scripts/gen-corpus`) |
 | `rust/rigorix-verifier/src/lib.rs` | register bundle `$id`; compile it in `all_schemas_compile`; new integrity test |
 | `docs/contract-sync-2026-10-13.md` | **new** contract delta note |
@@ -57,7 +58,7 @@ Shape decisions recorded in `docs/contract-sync-2026-10-13.md`:
 ## Verification
 
 - `cargo test -p rigorix-verifier -p rigorix-client -p rigorix-schemas` — green
-- `go test ./...`, `pytest` (19), `npm test` (ts verifier 19, ts-client 10) — green
+- `go test ./...`, `pytest` (19), `npm test` (ts verifier 19, ts-client 10), `mvn -B -q verify` (java) — green
 - `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` — green
 - `validate-ci.sh`, `validate-tests.sh`, `validate-architecture.sh`, `validate-canonical.sh` — green
 - Corpus/copy sync tests re-derive from `schemas/` and compare byte-for-byte — green

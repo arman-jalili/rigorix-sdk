@@ -48,6 +48,7 @@ Rationale for the shape:
 | `rust/rigorix-client/src/catalog.rs` | explicit `ServerOnly` binding (no typed wrapper yet) |
 | `typescript-client/src/catalog.ts` | `server_only` binding |
 | `go/client/catalog.go` | `ServerOnly` binding |
+| `java/src/main/java/dev/rigorix/sdk/client/Catalog.java` | `SERVER_ONLY` binding (drift-tested in CI) |
 | `go/internal/corpus/corpus_gen.go` | regenerated (`go run ./scripts/gen-corpus`) |
 | `rust/rigorix-verifier/src/lib.rs` | register the bundle `$id` as a cross-file resource; compile it in `all_schemas_compile`; add `catalog_declares_authority_fact_projection_additively` |
 | `docs/contract-sync-2026-10-13.md` | **new** contract delta note (schema rule 4) |
@@ -66,6 +67,7 @@ go test ./...                                                         ✅
 python -m pytest                                                      ✅ (19 passed)
 npm test   (typescript verifier)                                      ✅ (19 passed)
 npm test   (typescript-client)                                        ✅ (10 passed)
+mvn -B -q verify   (java)                                             ✅ (incl. catalog drift)
 .pi/scripts/validate-ci.sh                                            ✅
 .pi/scripts/validate-tests.sh                                         ✅
 .pi/scripts/validate-architecture.sh                                  ✅
