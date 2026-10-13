@@ -34,6 +34,13 @@ export const METHODS: MethodBinding[] = [
     name: "rigorix.audit.overdue",
     binding: { kind: "server_only", reason: "enterprise ADR-016 Phase B ledger surface" },
   },
+  {
+    name: "rigorix.audit.authorityFacts",
+    binding: {
+      kind: "server_only",
+      reason: "authority-fact projection bundle export (audit evidence surface; no typed wrapper yet)",
+    },
+  },
   { name: "rigorix.template.list", binding: { kind: "typed" } },
   { name: "rigorix.template.get", binding: { kind: "typed" } },
   { name: "rigorix.template.create", binding: { kind: "typed" } },

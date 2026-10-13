@@ -29,6 +29,7 @@ agreed shape: JSON-RPC 2.0 over HTTP, first-class typed methods, MCP stays an ad
 | `rigorix.checkEnforcement` | enforcement state snapshot (mirrors `rigorix_check_enforcement`) |
 | `rigorix.audit.list` / `rigorix.audit.read` / `rigorix.audit.summary` | signed trail (envelope v2) |
 | `rigorix.audit.head` / `.history` / `.overdue` | ADR-016 Phase B ledger: per-producer head, anchor-signed history slice, write-ahead overdue detection (enterprise; SDK-CATALOG-AUDIT) |
+| `rigorix.audit.authorityFacts` | Authority-fact projection bundle (projection + the signed history it was derived from + subjects without record) for offline third-party re-derivation; the caller receives the envelopes; never asserts present standing (consequence-gating spec §4.3; SDK catalog) |
 | `rigorix.auth.login` / `rigorix.auth.status` / `rigorix.auth.logout` | OIDC device flow (RFC 8628, ADR-008/012) |
 | `rigorix.auth.verify` | org-side JWKS verification of an OSS-attested claim → the verified identity claim (enterprise Execution API; SDK-C5) |
 | `rigorix.template.*` | template CRUD/validate |

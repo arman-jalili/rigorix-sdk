@@ -206,6 +206,21 @@
       }
     },
     {
+      "name": "rigorix.audit.authorityFacts",
+      "kind": "query",
+      "since": "1.0.0",
+      "stability": "frozen",
+      "auth": "session",
+      "mcpTool": "rigorix_audit_authority_facts",
+      "description": "Export an authority-fact projection bundle (projection + the signed envelopes it was derived from + subjects without record) for offline third-party re-derivation (consequence-gating spec §4.3). DISCLOSES the envelopes: the caller receives the signed history, not a summary. Reports what was established, when, and how it can be verified; it never asserts present standing (NC-4). Verification is by re-derivation, not by signature. Additive: no envelope canonical-form change (old verifiers still verify envelopes).",
+      "params": {
+        "$ref": "#/$defs/authorityFactsParams"
+      },
+      "result": {
+        "$ref": "#/$defs/authorityFactsResult"
+      }
+    },
+    {
       "name": "rigorix.template.list",
       "kind": "query",
       "since": "1.0.0",
@@ -1461,6 +1476,32 @@
         }
       },
       "additionalProperties": false
+    },
+    "authorityFactsParams": {
+      "type": "object",
+      "description": "`rigorix.audit.authorityFacts` params. `subjects` are the authority subjects the caller asks about (e.g. `authority:beneficiary-eligible`); each with no record yields an explicit `NOT_ESTABLISHED` fact, which is required for re-derivation to be reproducible.",
+      "required": [
+        "subjects"
+      ],
+      "properties": {
+        "subjects": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "Authority subjects to project. Empty is not allowed: a projection with no subjects and no history carries no attestation."
+        },
+        "producer_id": {
+          "type": "string",
+          "description": "Restrict to one producer's chain (`envelope.producer_id`). Omit to project the caller's default scope."
+        }
+      },
+      "additionalProperties": false
+    },
+    "authorityFactsResult": {
+      "description": "The consequence-gating §4.3 authority-fact bundle. Reuses the frozen `api/authority-fact-bundle.json` shape by `$id` (no second dialect); the bundle `envelopes[]` in turn `$ref`s the one canonical `envelope.json`. Verified by re-derivation, not by signature.",
+      "$ref": "https://rigorix.dev/schemas/api/authority-fact-bundle-v1.json"
     },
     "auditOverdueResult": {
       "type": "object",

@@ -38,7 +38,8 @@ rigorix-governed once v0 lands (dogfood demo #2).
 - [x] Contract-sync design doc (2026-09-06) — enterprise-side situation file created
 - [x] Envelope v2 schema + signed fixtures (anchored / effect-key / sequence-denied / unsigned-degraded)
 - [x] Policy/config model schema (`policy.json`) + identity/claim schema (`claims.json`)
-- [x] Catalog freeze — ADR-0001, **23** `rigorix.*` methods (OSS server serves a 19-method subset) — drift CI in both OSS and enterprise
+- [x] Catalog freeze — ADR-0001, **24** `rigorix.*` methods (OSS server serves a 19-method subset) — drift CI in both OSS and enterprise
+- [x] ADR-017 / consequence-gating §4.3 — `rigorix.audit.authorityFacts` + `api/authority-fact-bundle.json` (SDK #44)
 - [x] SSE push channel — ADR-0002 + `events.json` + fixtures
 - [x] ADR-016 integrity contract — `api/history-slice.json`, `api/ledger-receipt.json`, `api/compaction-checkpoint.json`
 - [x] `rust/` **0.2.0** (`rigorix-schemas`, `rigorix-verifier`, `rigorix-client`) — published to crates.io
