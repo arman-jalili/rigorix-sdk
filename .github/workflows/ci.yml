@@ -240,3 +240,44 @@ jobs:
         # The canonical schemas/ corpus is copied from the repo root into the jar
         # at build time (self-contained; never re-vendored).
         run: mvn -B -q verify
+
+  publish-helper:
+    name: 🔎 publish helper (registry-wait classification)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The release smoke only runs on a tag, so a broken helper would surface
+      # at release time. Guard its classification contract here instead.
+      - name: Syntax + classification self-test
+        run: |
+          set -eu
+          helper=.github/scripts/wait-for-registry.sh
+          bash -n "$helper"
+
+          expect() {
+            want="$1"; shift
+            set +e
+            "$@" >/tmp/helper.out 2>&1
+            got=$?
+            set -e
+            if [ "$got" -ne "$want" ]; then
+              echo "expected exit $want, got $got"; cat /tmp/helper.out; exit 1
+            fi
+            echo "✅ exit $got (expected $want)"
+          }
+
+          # visible and installable
+          expect 0 "$helper" npm bash -c 'exit 0'
+          # visible but broken -> fail fast
+          expect 2 "$helper" npm bash -c 'echo "npm ERR! code EINTEGRITY"; exit 1'
+          # not visible after the whole window -> distinct propagation timeout
+          expect 3 env REGISTRY_MAX_ATTEMPTS=1 REGISTRY_RETRY_SECONDS=0 \
+            "$helper" pypi bash -c 'echo "No matching distribution found"; exit 1'
+          # not-visible then visible -> still succeeds
+          counter="$(mktemp)"
+          echo 0 > "$counter"
+          expect 0 env COUNTER="$counter" REGISTRY_MAX_ATTEMPTS=3 REGISTRY_RETRY_SECONDS=0 \
+            "$helper" npm bash -c 'n=$(cat "$COUNTER"); n=$((n+1)); echo "$n" > "$COUNTER"; [ "$n" -ge 2 ] || { echo ETARGET; exit 1; }'

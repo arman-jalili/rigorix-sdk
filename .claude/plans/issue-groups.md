@@ -1,8 +1,30 @@
 # Issue Implementation Groups
 
 **Generated:** 2026-10-18 (updated)
-**Open issues:** 1 (#47) — #43/#44 merged
+**Open issues:** 1 (#50) — #43/#44/#47 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
+
+---
+
+## Series: release-pipeline reliability (2026-10-18)
+
+| # | ID | Priority | Component | Branch | Blocked by |
+|---|----|----------|-----------|--------|-----------|
+| 50 | registry smoke retry | low | `.github/workflows/publish.yml` | `issue/50` | — |
+
+### Group: registry smoke retry (single) — actionable
+
+**Branch:** `issue/50`
+**Issue:** 1
+- #50: the publish smoke's 4-minute retry budget sits inside npm's normal
+  propagation window and failed a successful v0.6.0 release; it also cannot
+  distinguish "not visible yet" from "visible but broken".
+
+**Approach:** a tested helper (`.github/scripts/wait-for-registry.sh`) — 15-minute
+window, retry only propagation signatures, fail fast on a real defect, and report
+give-up as a distinct **propagation timeout**. The smoke job contains no publish
+step, so re-running it cannot re-push. A `publish-helper` CI job guards the
+classification contract.
 
 ---
 

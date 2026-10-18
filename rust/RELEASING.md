@@ -167,6 +167,14 @@ git tag v0.2.0     && git push origin v0.2.0         # → PyPI + npm publish
 > match (it starts with `r`) — pushing only `rust-v0.2.0` publishes the crates and
 > silently skips PyPI/npm. Push **both** tags.
 
+> **Registry smoke (post-publish).** The `smoke` job installs the just-published
+> packages and verifies the anchored fixture. Registry propagation can lag minutes
+> past a successful publish; `.github/scripts/wait-for-registry.sh` retries only
+> *not yet visible* errors for up to 15 minutes. A visible-but-broken artifact fails
+> immediately. Giving up is reported as **propagation timeout — artifacts published,
+> smoke unverified**, not as a bad artifact. Re-run only the `smoke` job: it only
+> installs and never re-publishes.
+
 ### 5. Bump consumers (0.x semver: `^0.1` does **not** match `0.2`)
 
 - `rigorix-oss/server/Cargo.toml` → `rigorix-verifier = "0.2"`
