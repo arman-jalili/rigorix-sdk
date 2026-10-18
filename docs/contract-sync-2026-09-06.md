@@ -235,7 +235,8 @@ Then: catalog design → servers → SDKs.
   dialect. The anchor itself (Phases B/C) does not exist yet, so the three
   anchor artifacts are contract-first, frozen from ADR-016's Contract section.
   - `schemas/envelope.json`: additive `producer_id` / `sequence` / `prev_hash` /
-    `history_integrity` (`local_unanchored` | `anchored`) / `history_policy`
+    `history_integrity` (`local_unanchored` | `anchored` | `anchored_pending` —
+    the third value is the 2026-10-18 delta, `docs/contract-sync-2026-10-18-envelope-integrity.md`) / `history_policy`
     (`allow_unanchored`), placed after `evidence_degraded` and before
     `approval_events` to match the engine struct order exactly (canonicalization
     parity). New `$defs.historyIntegrity` / `$defs.historyPolicy`.
