@@ -20,6 +20,32 @@ workspace member (`version.workspace = true`). The verifier + client pin
 `rigorix-schemas` to the **same exact version**, and `rigorix-schemas` must be
 published **before** the verifier.
 
+## 0.6.0 — `anchored_pending` integrity regime (additive to the schema, breaking for verifiers)
+
+`$defs.historyIntegrity` gains a third value: `local_unanchored` | `anchored` |
+`anchored_pending`. It records that the anchor is configured in anchored mode but **no verified
+head exists yet** — the startup window, or a history read that has not succeeded.
+
+> **Only `anchored` asserts anchor-authenticated evidence.** `anchored_pending` means nothing was
+> verified: configuration is intent, a head is evidence. A consumer that trusts the label must not
+> treat `anchored_pending` as a weaker `anchored` — it is the absence of evidence, recorded.
+
+> **Breaking for verifiers, not for envelopes.** The field is part of the canonical (HMAC) form and
+> the verifier's enum is closed, so a `0.5.0` verifier cannot deserialize an envelope carrying
+> `anchored_pending` and reports a parse failure rather than a signature mismatch. Every envelope
+> *without* the new value verifies unchanged in both directions.
+
+> **Publish order is load-bearing, and it is cross-repo.** `rigorix-schemas` → `rigorix-verifier`
+> (crates.io, then the `v0.6.0` tag for PyPI/npm) → `rigorix-enterprise` (its canonical form must
+> accept the value) → the `rigorix-oss` engine release that emits it. Shipping the engine before
+> the consumers makes startup-window evidence unverifiable at best and rejected at worst.
+
+Fixture: `schemas/fixtures/envelope/envelope-anchored-pending-signed.json` (engine-signed,
+`anchored_pending`, no `anchor_head`). Its tamper test flips the value to `anchored` and asserts the
+signature fails — proof that the regime is inside the signed bytes.
+
+Contract delta: `docs/contract-sync-2026-10-18-envelope-integrity.md`.
+
 ## 0.5.0 — authority-fact projection method (additive)
 
 The catalog gains one method, `rigorix.audit.authorityFacts` (query, auth
