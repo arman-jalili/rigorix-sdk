@@ -99,7 +99,7 @@
         },
         "history_integrity": {
           "type": ["string", "null"],
-          "description": "The `history_integrity` marker of the tip (`local_unanchored` / `anchored`); null when the tip has none."
+          "description": "The `history_integrity` marker of the tip (`local_unanchored` / `anchored` / `anchored_pending`); null when the tip has none. Only `anchored` asserts anchor-authenticated evidence; `anchored_pending` means anchored mode was configured but nothing was verified yet."
         },
         "producer_id": {
           "type": "string",

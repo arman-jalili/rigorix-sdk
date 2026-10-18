@@ -1,8 +1,34 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-10-13 (updated)
-**Open issues:** 2 (#43, #44) — #10/#12/#15/#18–#21/#11/#29/#31/#33/#34/#35/#39 merged
+**Generated:** 2026-10-18 (updated)
+**Open issues:** 1 (#47) — #43/#44 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
+
+---
+
+## Series: envelope integrity contract (2026-10-18)
+
+Single high-severity contract fix (schema-vs-engine drift). Not groupable: one
+schema surface (`schemas/envelope.json`) + the verifier's frozen enum copy.
+
+| # | ID | Priority | Component | Branch | Blocked by |
+|---|----|----------|-----------|--------|-----------|
+| 47 | envelope `historyIntegrity` | high | `schemas/envelope.json` + rust verifier enum | `issue/47` | — |
+
+### Group: `anchored_pending` (single) — actionable
+
+**Branch:** `issue/47`
+**Issue:** 1
+- #47: the frozen envelope schema rejects `history_integrity=anchored_pending`,
+  which rigorix-oss now emits (anchored mode, no verified head).
+
+**Verified facts (code is truth, 2026-10-18):**
+- `rigorix-oss` `engine/src/audit/domain/envelope.rs`: `HistoryIntegrity` has
+  `AnchoredPending`; `envelope_factory_impl.rs:137,359` emits it with
+  `anchor_head: None`.
+- `schemas/envelope.json` `$defs.historyIntegrity` allowed only two values; the
+  Rust verifier's frozen `HistoryIntegrity` enum also had only two.
+- Fix is additive; only `anchored` asserts anchor-authenticated evidence.
 
 ---
 

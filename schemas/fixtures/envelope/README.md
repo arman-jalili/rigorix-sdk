@@ -27,12 +27,19 @@ keys held in the engine configuration.
 | `envelope-rich-pre-identity.json` | Rich additive blocks without the identity block (pre-identity shape) |
 | `envelope-effect-key-signed.json` | ADR-014: run-level `effect_key` (one-way keyed hash) recorded — effect-keyed history input |
 | `envelope-anchored-signed.json` | ADR-016 Phase C: anchored run — `history_integrity=anchored` + signed `anchor_head` (the verified ledger head), placed after `history_policy` / before `approval_events` |
+| `envelope-anchored-pending-signed.json` | ADR-016: anchored mode configured but **no verified head** — `history_integrity=anchored_pending`, no `anchor_head` (the startup window). Only `anchored` asserts anchor-authenticated evidence; `anchored_pending` means nothing was verified. Contract-first (re-signed from the anchored fixture with the fixed test key) until the engine's conformance writer emits it. |
 | `envelope-precondition-signed.json` | ADR-017: dispatch-time `precondition_findings[]` (`passed` / `failed` / `error`; `exit_code` + `inputs_hash`; no parameter values), including the ISSUE-ATTRIBUTION-ABSENCE-REASON `attribution` reason (`recorded` / `refused_before_check` / `artifact_unreadable`) |
 
 Each file validates against `schemas/envelope.json` (format v2) and its HMAC
 verifies byte-exact with `rigorix-verifier::verify_signature` under the key
 above — proving canonicalization parity between the engine and the independent
 verifier (Strategy A: the HMAC trail is checkable anywhere).
+
+> **Contract-first exceptions:** `envelope-precondition-signed.json` (ADR-017)
+> and `envelope-anchored-pending-signed.json` (ADR-016 `anchored_pending`) are
+> signed by the reference verifier with the same fixed test key, because the
+> engine's conformance writer does not emit those variants yet. Replace them
+> from the engine when it does.
 
 ## Regenerate
 

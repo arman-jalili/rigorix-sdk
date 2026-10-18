@@ -1,0 +1,133 @@
+{
+  "execution_id": "2c21f1a3-a4f9-4019-aeea-498aa04fe4e9",
+  "timestamp": "2026-09-25T17:34:17.059430Z",
+  "template_id": "conference-registration",
+  "planning_hash": "274f5bcc379aac58d1396434ab45ae48941977de9601ec608d84a1ebe47c88b1",
+  "source": "rigorix_action",
+  "repository": "arman-jalili/conference-demo",
+  "author": "user@org",
+  "identity": {
+    "subject": "user@org",
+    "issuer": "https://idp.example.com",
+    "source": "idp_token",
+    "authority": "admin",
+    "expires_at": "2026-09-25T18:04:17.059052Z"
+  },
+  "total_tokens": 3200,
+  "duration_ms": 48200,
+  "git_commit": "1f6a4c9e2b8d4f0a3c5e7b9d1a2c4e6f8a0b2d4c6",
+  "git_branch": "main",
+  "model_version": "claude-sonnet-4-20250514",
+  "planning_prompt": null,
+  "file_paths": [
+    "data/registrations.json",
+    "src/injected.rs"
+  ],
+  "events": [
+    {
+      "event_type": "approval_recorded",
+      "summary": "Approval recorded: risky_step by user@org",
+      "occurred_at": "2026-09-25T17:34:17.059076Z",
+      "correlation_id": "5799e60d-6c0f-45f1-af09-66b70d6d0fad",
+      "status": "Success",
+      "payload": {
+        "approver_id": "user@org",
+        "authority": "role:operator",
+        "decided_at": "2026-09-25T17:34:17.059128+00:00",
+        "decision_context_ref": "deploy to prod",
+        "intent_hash": "abc123",
+        "node_id": "5a03141a-2c2f-45b6-bd6b-44053b23fa17",
+        "step_name": "risky_step"
+      }
+    },
+    {
+      "event_type": "scope_violation_recorded",
+      "summary": "Effects outside declared scope",
+      "occurred_at": "2026-09-25T17:34:17.059143Z",
+      "correlation_id": "59b65974-1e95-4206-ab4c-15fae590fb1c",
+      "status": "Failure",
+      "payload": {
+        "detected_at": "2026-09-25T17:34:17.059146+00:00",
+        "node_id": "599c2b55-06ee-4723-b491-5fbbdda6545e",
+        "out_of_scope": [
+          "src/injected.rs"
+        ],
+        "step_name": "run_command"
+      }
+    },
+    {
+      "event_type": "sequence_rule_matched",
+      "summary": "remove-then-reassign matched",
+      "occurred_at": "2026-09-25T17:34:17.059148Z",
+      "correlation_id": null,
+      "status": "Skipped",
+      "payload": {
+        "action": "promote",
+        "later_step": "registration_add",
+        "matched_indices": [
+          0,
+          3
+        ],
+        "rule_id": "no-remove-then-reassign",
+        "summary": "step 3 promoted for human approval"
+      }
+    }
+  ],
+  "scoring_results": {
+    "node-1": {
+      "passed": true,
+      "backend": "llm-judge",
+      "dimensions": {
+        "code_quality": {
+          "score": 0.9,
+          "max": 1.0,
+          "label": "Code quality",
+          "passed": true
+        },
+        "coverage": {
+          "score": 0.8,
+          "max": 1.0,
+          "label": "Coverage",
+          "passed": true
+        }
+      },
+      "duration_ms": 1200
+    }
+  },
+  "signature": "53d28700913cc5cc639ab42fd89cc22635ecb2b8f36a9e10884e8a44371d25f1",
+  "evidence_degraded": false,
+  "history_integrity": "anchored_pending",
+  "approval_events": [
+    {
+      "node_id": "5a03141a-2c2f-45b6-bd6b-44053b23fa17",
+      "step_name": "risky_step",
+      "intent_hash": "abc123",
+      "approver_id": "user@org",
+      "authority": "role:operator",
+      "decided_at": "2026-09-25T17:34:17.059128Z"
+    }
+  ],
+  "scope_violations": [
+    {
+      "node_id": "599c2b55-06ee-4723-b491-5fbbdda6545e",
+      "step_name": "run_command",
+      "out_of_scope": [
+        "src/injected.rs"
+      ],
+      "detected_at": "2026-09-25T17:34:17.059146Z"
+    }
+  ],
+  "sequence_policy_findings": [
+    {
+      "rule_id": "no-remove-then-reassign",
+      "action": "promote",
+      "later_step": "registration_add",
+      "matched_indices": [
+        0,
+        3
+      ],
+      "summary": "step 3 promoted for human approval"
+    }
+  ],
+  "decision_context_ref": "deploy to prod"
+}

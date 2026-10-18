@@ -167,7 +167,7 @@
           "type": "null"
         }
       ],
-      "description": "ADR-016: which integrity regime produced this evidence (local_unanchored | anchored). Omitted in legacy envelopes (no integrity claim)."
+      "description": "ADR-016: which integrity regime produced this evidence (local_unanchored | anchored | anchored_pending). Only `anchored` asserts anchor-authenticated evidence; `anchored_pending` means anchored mode was configured but no head was verified yet. Omitted in legacy envelopes (no integrity claim)."
     },
     "history_policy": {
       "oneOf": [
@@ -565,9 +565,10 @@
       "type": "string",
       "enum": [
         "local_unanchored",
-        "anchored"
+        "anchored",
+        "anchored_pending"
       ],
-      "description": "HistoryIntegrity (ADR-016, serde snake_case). `local_unanchored` = tamper-evident local cache only (HMAC + local chain, not anchor-authenticated); `anchored` = anchor-authenticated evidence (Phase C). NULL/absent is reserved for legacy envelopes with no integrity claim."
+      "description": "HistoryIntegrity (ADR-016, serde snake_case). `local_unanchored` = tamper-evident local cache only (HMAC + local chain, not anchor-authenticated); `anchored` = anchor-authenticated evidence with a verified head (Phase C); `anchored_pending` = anchored mode configured but no verified head exists yet (startup window). Anchored mode configured is intent; a verified head is evidence — a consumer that trusts the label must not accept `anchored_pending` as authenticated. NULL/absent is reserved for legacy envelopes with no integrity claim."
     },
     "historyPolicy": {
       "type": "string",

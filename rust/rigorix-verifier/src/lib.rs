@@ -173,6 +173,9 @@ pub enum HistoryIntegrity {
     LocalUnanchored,
     /// Anchor-authenticated evidence (Phase C).
     Anchored,
+    /// Anchor configured in anchored mode but no verified head exists yet
+    /// (startup window). Not anchor-authenticated; never treat as `Anchored`.
+    AnchoredPending,
 }
 
 /// ADR-016: a recorded history-policy opt-in.
@@ -1167,6 +1170,70 @@ mod tests {
             .join("../../schemas/fixtures/envelope/envelope-precondition-signed.json");
         std::fs::write(&path, format!("{json}\n")).expect("write fixture");
         eprintln!("wrote {}", path.display());
+    }
+
+    /// SDK #47 / ADR-016: write a fixture envelope carrying the third
+    /// `historyIntegrity` value `anchored_pending` (anchored mode configured,
+    /// no verified head). Derived from the engine-signed `anchored` fixture by
+    /// dropping the unverified `anchor_head` and re-signing with the fixed test
+    /// key; the engine emits this value in the same shape
+    /// (`envelope_factory_impl.rs`: `AnchoredPending => anchor_head: None`).
+    /// Contract-first until the engine's conformance writer emits it directly.
+    #[test]
+    #[ignore = "writes the anchored_pending fixture (contract-first)"]
+    fn generate_anchored_pending_fixture() {
+        let base = fixture_text("envelope/envelope-anchored-signed.json");
+        let mut value: serde_json::Value =
+            serde_json::from_str(&base).expect("anchored fixture parses");
+        let obj = value.as_object_mut().expect("object");
+        let _ = obj.remove("signature");
+        // `anchored_pending` pairs with `anchor_head: None` in the engine.
+        let _ = obj.remove("anchor_head");
+        obj.insert(
+            "history_integrity".to_string(),
+            serde_json::json!("anchored_pending"),
+        );
+        let signature = sign(&value.to_string(), FIXTURE_KEY).expect("sign fixture");
+        let mut envelope: AuditEnvelope =
+            serde_json::from_value(value).expect("fixture parses into AuditEnvelope");
+        assert_eq!(
+            envelope.history_integrity,
+            Some(HistoryIntegrity::AnchoredPending)
+        );
+        assert!(envelope.anchor_head.is_none());
+        envelope.signature = Some(signature);
+        let json = serde_json::to_string_pretty(&envelope).expect("serialize fixture");
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../schemas/fixtures/envelope/envelope-anchored-pending-signed.json");
+        std::fs::write(&path, format!("{json}\n")).expect("write fixture");
+        eprintln!("wrote {}", path.display());
+    }
+
+    /// SDK #47: the `anchored_pending` fixture is schema-valid and HMAC-valid,
+    /// and the label is not a weaker `anchored` (nothing was verified).
+    #[test]
+    fn anchored_pending_fixture_verifies() {
+        let json = fixture_text("envelope/envelope-anchored-pending-signed.json");
+        let envelope: AuditEnvelope = serde_json::from_str(&json).expect("fixture parses");
+        assert_eq!(
+            envelope.history_integrity,
+            Some(HistoryIntegrity::AnchoredPending)
+        );
+        assert!(envelope.anchor_head.is_none(), "nothing was verified");
+        assert_ne!(
+            envelope.history_integrity,
+            Some(HistoryIntegrity::Anchored),
+            "anchored_pending must not be treated as authenticated"
+        );
+        verify_signature(&json, FIXTURE_KEY).expect("fixture verifies byte-exact");
+        validate_schema(&json).expect("fixture conforms to envelope.json");
+
+        // The label is part of the signed canonical form.
+        let tampered = json.replacen("anchored_pending", "anchored", 1);
+        assert!(matches!(
+            verify_signature(&tampered, FIXTURE_KEY),
+            Err(VerifyError::SignatureMismatch { .. })
+        ));
     }
 
     /// SDK #39 / ADR-017: the contract-first `precondition_findings[]` fixture
