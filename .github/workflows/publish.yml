@@ -134,7 +134,8 @@ jobs:
     needs: [python, npm-verifier, npm-client]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Worst case is two propagation windows (15 min each) + setup/install.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -150,18 +151,13 @@ jobs:
         run: |
           tag="${GITHUB_REF_NAME#v}"
           python -m venv "$RUNNER_TEMP/py"
-          # PyPI/CDN propagation can lag after Trusted Publishing. Retry
-          # generously: the job has a 20-minute timeout, so a few extra minutes
-          # of waiting is far cheaper than a false red on a real release.
-          installed=no
-          for attempt in {1..12}; do
-            if "$RUNNER_TEMP/py/bin/pip" install --quiet "rigorix-verifier==$tag"; then
-              installed=yes; break
-            fi
-            echo "py install attempt $attempt: not yet available; retrying in 20s"
-            sleep 20
-          done
-          test "$installed" = yes || { echo "FAIL: rigorix-verifier==$tag not installable from PyPI"; exit 1; }
+          # PyPI/CDN propagation can lag well past publication. Wait up to
+          # 15 minutes (45 x 20s). Only "version not visible" errors are
+          # retried; a visible-but-broken artifact fails fast. On give-up the
+          # helper reports a distinct PROPAGATION TIMEOUT (published, smoke
+          # unverified) instead of a generic failure.
+          "$GITHUB_WORKSPACE/.github/scripts/wait-for-registry.sh" pypi \
+            "$RUNNER_TEMP/py/bin/pip" install --quiet --no-cache-dir "rigorix-verifier==$tag"
           unset RIGORIX_SDK_SCHEMAS
           "$RUNNER_TEMP/py/bin/python" "$GITHUB_WORKSPACE/python/scripts/pack_smoke.py"
 
@@ -172,20 +168,13 @@ jobs:
           cp "$GITHUB_WORKSPACE/typescript/scripts/pack-smoke.mjs" "$RUNNER_TEMP/npm/smoke.mjs"
           cd "$RUNNER_TEMP/npm"
           npm init -y >/dev/null
-          # npm registry propagation can lag after publish — MEASURED at ~95s on
-          # the v0.5.0 release (the npm-client job reported success at 17:31:58 but
-          # `rigorix-client@0.5.0` only became installable at 17:33:33). The previous
-          # window was 5 x 15s = 75s, which is SHORTER than that lag, so the smoke
-          # gate failed on a perfectly good release. Keep a window well above the
-          # observed lag: 12 x 20s = 4 minutes.
-          installed=no
-          for attempt in {1..12}; do
-            if npm install "rigorix-verifier@$tag" "rigorix-client@$tag" --no-audit --no-fund; then
-              installed=yes; break
-            fi
-            echo "npm install attempt $attempt: not yet available; retrying in 20s"
-            sleep 20
-          done
-          test "$installed" = yes || { echo "FAIL: rigorix-verifier@$tag / rigorix-client@$tag not installable from npm"; exit 1; }
+          # npm propagation lag is measured in minutes (v0.5.0: ~95s), so the
+          # window must not sit inside it. Wait up to 15 minutes (45 x 20s).
+          # ETARGET/E404 (not visible) retry; anything else means the artifact
+          # is visible but broken and fails fast. Give-up is reported as a
+          # distinct propagation timeout, not a generic failure. Re-running this
+          # job does not re-publish: it only installs.
+          "$GITHUB_WORKSPACE/.github/scripts/wait-for-registry.sh" npm \
+            npm install "rigorix-verifier@$tag" "rigorix-client@$tag" --no-audit --no-fund --prefer-online
           unset RIGORIX_SDK_SCHEMAS
           node smoke.mjs
