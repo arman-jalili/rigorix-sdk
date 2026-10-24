@@ -23,6 +23,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Cross-channel, so it runs from the repo root rather than under rust/: five
+      # registries ship one version, and nothing compared them until this existed
+      # (the Java artifact had drifted to 0.2.0 while the rest were at 0.6.0).
+      - name: Publication channels agree
+        working-directory: .
+        run: |
+          bash .pi/scripts/validate-channel-versions.sh
+          bash .pi/scripts/validate-channel-versions.sh --self-test
+
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:

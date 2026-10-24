@@ -6,10 +6,35 @@
 
   <groupId>dev.rigorix</groupId>
   <artifactId>rigorix-verifier</artifactId>
-  <version>0.2.0</version>
+  <version>0.7.0</version>
   <packaging>jar</packaging>
   <name>rigorix-verifier</name>
   <description>Protocol-only verification of Rigorix audit envelopes and ADR-016 anchor artifacts (HMAC, JSON Schema, chains, Ed25519).</description>
+
+  <url>https://github.com/arman-jalili/rigorix-sdk</url>
+
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <id>rigorix</id>
+      <name>Rigorix</name>
+      <url>https://rigorix.dev</url>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:https://github.com/arman-jalili/rigorix-sdk.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/arman-jalili/rigorix-sdk.git</developerConnection>
+    <url>https://github.com/arman-jalili/rigorix-sdk</url>
+    <tag>v0.7.0</tag>
+  </scm>
 
   <properties>
     <maven.compiler.release>17</maven.compiler.release>
@@ -62,4 +87,79 @@
       </plugin>
     </plugins>
   </build>
+    <profiles>
+      <!-- Publication only. Kept out of the default build so `mvn verify` stays
+           offline-capable and fast: the Central plugin and GPG are needed only when
+           deploying, and both require credentials a developer does not have.
+
+           Requires, in ~/.m2/settings.xml, a server with id `central` holding the
+           Central Portal token (username = token user, password = token), and a GPG
+           key whose passphrase is in `MAVEN_GPG_PASSPHRASE` (CI) or prompted locally:
+
+             mvn -Prelease -B deploy
+      -->
+      <profile>
+        <id>release</id>
+        <build>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-source-plugin</artifactId>
+              <version>3.3.1</version>
+              <executions>
+                <execution>
+                  <id>attach-sources</id>
+                  <goals><goal>jar-no-fork</goal></goals>
+                </execution>
+              </executions>
+            </plugin>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-javadoc-plugin</artifactId>
+              <version>3.10.1</version>
+              <executions>
+                <execution>
+                  <id>attach-javadocs</id>
+                  <goals><goal>jar</goal></goals>
+                </execution>
+              </executions>
+            </plugin>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-gpg-plugin</artifactId>
+              <version>3.2.7</version>
+              <executions>
+                <execution>
+                  <id>sign-artifacts</id>
+                  <phase>verify</phase>
+                  <goals><goal>sign</goal></goals>
+                  <configuration>
+                    <gpgArguments>
+                      <arg>--pinentry-mode</arg>
+                      <arg>loopback</arg>
+                    </gpgArguments>
+                  </configuration>
+                </execution>
+              </executions>
+            </plugin>
+            <plugin>
+              <groupId>org.sonatype.central</groupId>
+              <artifactId>central-publishing-maven-plugin</artifactId>
+              <version>0.12.0</version>
+              <extensions>true</extensions>
+              <configuration>
+                <publishingServerId>central</publishingServerId>
+                <!-- A deployment is a release decision: publish it, do not park it
+                     in the Portal for someone to find later. -->
+                <autoPublish>true</autoPublish>
+                <!-- Fail the job if the bundle does not become visible, so "green"
+                     means "consumable", not "uploaded". -->
+                <waitUntil>published</waitUntil>
+              </configuration>
+            </plugin>
+          </plugins>
+        </build>
+      </profile>
+    </profiles>
+
 </project>

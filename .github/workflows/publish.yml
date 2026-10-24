@@ -7,9 +7,18 @@ name: Publish
 #   - PyPI: Trusted Publishing (OIDC) for repo `arman-jalili/rigorix-sdk`,
 #           workflow `publish.yml` — no secret (uses `id-token: write`).
 #   - npm:  `NPM_TOKEN` automation token (repo secret), 2FA bypass.
+#   - Maven Central: namespace `dev.rigorix` (verified on the Central Portal),
+#           `MAVEN_CENTRAL_USERNAME` + `MAVEN_CENTRAL_TOKEN` (Portal token),
+#           `MAVEN_GPG_PRIVATE_KEY` + `MAVEN_GPG_PASSPHRASE` (signing). The job
+#           fails by name when any of them is absent — never silently skips.
 #   - Publish the shared version first: `python/pyproject.toml`,
-#     `typescript/package.json`, `typescript-client/package.json` (+ their
-#     lockfiles). Each job asserts the tag matches the artifact version.
+#     `typescript/package.json`, `typescript-client/package.json`,
+#     `java/pom.xml` (+ their lockfiles). Each job asserts the tag matches the
+#     artifact version.
+#   - Go is tag-only: the module lives in `go/`, so its release tag is `go/vX.Y.Z`
+#     (a root `vX.Y.Z` tag does not version it). There is nothing to upload;
+#     `go get` reads the repo by tag, which requires the repository to be
+#     publicly readable.
 #
 # Dry run (build only, no upload): Actions → Publish → Run workflow.
 
@@ -129,9 +138,58 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  maven:
+    name: ☕ rigorix-verifier → Maven Central
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: java
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          # Creates the `central` server entry in settings.xml that the
+          # `central-publishing-maven-plugin` in the pom's `release` profile expects.
+          server-id: central
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_TOKEN
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+      - name: Assert the tag matches the pom version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(mvn -B -q help:evaluate -Dexpression=project.version -DforceStdout)"
+          echo "tag=$tag pom=$ver"
+          test "$tag" = "$ver"
+      - name: Fail loudly when publication credentials are absent
+        env:
+          HAS_USER: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          HAS_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
+          HAS_KEY: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+        run: |
+          missing=""
+          [ -n "$HAS_USER" ] || missing="$missing MAVEN_CENTRAL_USERNAME"
+          [ -n "$HAS_TOKEN" ] || missing="$missing MAVEN_CENTRAL_TOKEN"
+          [ -n "$HAS_KEY" ] || missing="$missing MAVEN_GPG_PRIVATE_KEY"
+          if [ -n "$missing" ]; then
+            echo "❌ Missing publication secrets:$missing"
+            echo "   Maven Central needs a verified namespace (dev.rigorix) and a signing key."
+            echo "   This job fails rather than skipping: a tag that publishes to some registries"
+            echo "   and not others is exactly the drift this job exists to prevent."
+            exit 1
+          fi
+      - name: Deploy with sources, javadoc and signatures
+        run: mvn -B -Prelease deploy
+        env:
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+
   smoke:
     name: 🔎 registry install + anchored-fixture smoke
-    needs: [python, npm-verifier, npm-client]
+    needs: [python, npm-verifier, npm-client, maven]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     # Worst case is two propagation windows (15 min each) + setup/install.
