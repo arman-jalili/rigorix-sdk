@@ -83,6 +83,17 @@ if pom.exists():
     v = next((c.text for c in project if c.tag.rsplit("}", 1)[-1] == "version"), None)
     add("Maven Central", "java/pom.xml", v)
 
+# Intra-workspace pins. These are not publication channels, but a stale one stops
+# the workspace resolving at all — rigorix-client still required ^0.7.0 while the
+# crates were at 0.8.0, and only `cargo publish` found it. A version guard that
+# does not read them is checking the outside and ignoring the inside.
+pin_re = re.compile(
+    r'\brigorix-(?:schemas|verifier|client)\s*=\s*\{[^}]*?version\s*=\s*"[=^~]?([0-9][^"]*)"'
+)
+for member in sorted(root.glob("rust/*/Cargo.toml")):
+    for m in pin_re.finditer(member.read_text()):
+        add(f"pin {member.parent.name}", str(member.relative_to(root)), m.group(1))
+
 print(json.dumps({"versions": out, "problems": problems}))
 PY
 }
@@ -116,8 +127,9 @@ PY
 
 self_test() {
     local tmp; tmp="$(mktemp -d "${TMPDIR:-/tmp}/channel-versions.XXXXXX")"
-    for p in rust/Cargo.toml python/pyproject.toml python/rigorix_verifier/__init__.py \
-             typescript/package.json typescript-client/package.json java/pom.xml; do
+    for p in rust/Cargo.toml rust/rigorix-client/Cargo.toml python/pyproject.toml \
+             python/rigorix_verifier/__init__.py typescript/package.json \
+             typescript-client/package.json java/pom.xml; do
         mkdir -p "$tmp/$(dirname "$p")"; cp "$ROOT/$p" "$tmp/$p"
     done
 
@@ -142,14 +154,27 @@ PY
         echo "❌ self-test: an empty root was accepted"
     else bad=$((bad+1)); fi
 
+    # Third seed, from a real failure: reset the Java drift, then leave an
+    # intra-workspace pin behind. `cargo publish` was the only thing that noticed.
+    cp "$ROOT/java/pom.xml" "$tmp/java/pom.xml"
+    python3 - "$tmp/rust/rigorix-client/Cargo.toml" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+s = re.sub(r'(rigorix-schemas\s*=\s*\{[^}]*?version\s*=\s*"[=^~]?)([0-9][^"]*)', r'\g<1>0.1.0', s, count=1)
+open(p, "w").write(s)
+PY
+    if check "$tmp" >/dev/null 2>&1; then
+        echo "❌ self-test: a stale intra-workspace pin was accepted"
+    else bad=$((bad+1)); fi
+
     find "$tmp" -type f -delete 2>/dev/null || true
     find "$tmp" -depth -type d -empty -delete 2>/dev/null || true
 
-    if [ "$ok" -eq 1 ] && [ "$bad" -eq 2 ]; then
-        echo "✅ PASS Channel version self-test: consistent accepted, drift rejected, empty root rejected"
+    if [ "$ok" -eq 1 ] && [ "$bad" -eq 3 ]; then
+        echo "✅ PASS Channel version self-test: consistent accepted, channel drift rejected, stale pin rejected, empty root rejected"
         return 0
     fi
-    echo "❌ FAIL Channel version self-test: ok=$ok rejected=$bad (expected ok=1 rejected=2)"
+    echo "❌ FAIL Channel version self-test: ok=$ok rejected=$bad (expected ok=1 rejected=3)"
     return 1
 }
 
