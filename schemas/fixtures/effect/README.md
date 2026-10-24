@@ -38,3 +38,11 @@ A record is **not** bound to a signed audit envelope: it carries no signature an
 the intent digest is not derivable from the envelope. Authenticity rests on the
 signed envelope chain and the provider receipt. The readback level only proves
 that the carried evidence matches the carried provider bytes.
+
+## Pinned to the tests
+
+Both sets are pinned in `rust/rigorix-verifier/src/lib.rs`:
+`ACCEPTED_EFFECT_FIXTURES` and `REJECTED_EFFECT_FIXTURES` must equal the files in
+this directory. Adding a `rejected-*.json` without a case, or a case without a
+fixture, fails `effect_record_rejected_fixtures_are_pinned_and_rejected`. A
+rejected fixture that no test names is inert coverage, not evidence.

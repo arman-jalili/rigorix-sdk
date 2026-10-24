@@ -2084,16 +2084,95 @@ mod tests {
         (text, artifact)
     }
 
-    /// Every accepted fixture validates against the frozen schema and passes
-    /// both verification levels (readback only when the bytes are present).
+    /// The accepted fixture set is pinned exactly: deleting a fixture or adding
+    /// an unverified one fails. A lower-bound count (`>= 5`) would let the loop
+    /// silently shrink, which is the same defect as an unpinned rejection.
+    const ACCEPTED_EFFECT_FIXTURES: &[&str] = &[
+        "ambiguous-unsettled.json",
+        "committed-l1-l3.json",
+        "dispatched-with-deadline.json",
+        "not-committed-l2-l3.json",
+        "resolved-ambiguous.json",
+    ];
+
+    /// Where a rejected fixture must be stopped. `Schema` cases are also
+    /// asserted to fail the structural verifier, so the independent re-check is
+    /// exercised even when the schema catches the violation first.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum RejectionLayer {
+        Schema,
+        Structural,
+        ReadbackDigestMismatch,
+        ReadbackMissing,
+    }
+
+    /// Every rejected fixture, and the layer that must reject it. This table and
+    /// the `rejected-*.json` files must be equal as sets: a fixture without a
+    /// case is inert coverage, and a case without a fixture is a stale claim.
+    const REJECTED_EFFECT_FIXTURES: &[(&str, RejectionLayer)] = &[
+        (
+            "rejected-terminal-without-evidence.json",
+            RejectionLayer::Schema,
+        ),
+        (
+            "rejected-nonterminal-with-settlement.json",
+            RejectionLayer::Schema,
+        ),
+        (
+            "rejected-dispatched-without-deadline.json",
+            RejectionLayer::Schema,
+        ),
+        ("rejected-verdict-mismatch.json", RejectionLayer::Schema),
+        (
+            "rejected-readback-mismatch.json",
+            RejectionLayer::ReadbackDigestMismatch,
+        ),
+        (
+            "rejected-readback-missing.json",
+            RejectionLayer::ReadbackMissing,
+        ),
+        (
+            "rejected-settlement-with-none-level.json",
+            RejectionLayer::Structural,
+        ),
+    ];
+
+    fn accepted_fixture_names() -> Vec<String> {
+        fixture_json_names("effect")
+            .into_iter()
+            .filter(|name| !name.starts_with("rejected-"))
+            .collect()
+    }
+
+    fn rejected_fixture_names() -> Vec<String> {
+        fixture_json_names("effect")
+            .into_iter()
+            .filter(|name| name.starts_with("rejected-"))
+            .collect()
+    }
+
+    fn sorted(mut names: Vec<String>) -> Vec<String> {
+        names.sort();
+        names
+    }
+
+    /// Every accepted fixture is pinned, validates against the frozen schema,
+    /// and passes both verification levels (readback only when bytes are present).
     #[test]
     fn effect_record_fixtures_verify() {
-        let mut found = 0;
-        for name in fixture_json_names("effect") {
-            if name.starts_with("rejected-") {
-                continue;
-            }
-            let (text, artifact) = read_effect(&name);
+        let on_disk = sorted(accepted_fixture_names());
+        let pinned: Vec<String> = ACCEPTED_EFFECT_FIXTURES
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect();
+        assert_eq!(
+            on_disk,
+            sorted(pinned),
+            "every accepted fixture must be pinned and every pinned fixture must exist"
+        );
+
+        for name in ACCEPTED_EFFECT_FIXTURES {
+            let (text, artifact) = read_effect(name);
             validate_schema_file("api/effect-record.json", &text)
                 .unwrap_or_else(|e| panic!("{name}: schema: {e}"));
             verify_effect_record(&artifact).unwrap_or_else(|e| panic!("{name}: structural: {e}"));
@@ -2105,12 +2184,7 @@ mod tests {
                 verify_settlement_evidence(&artifact)
                     .unwrap_or_else(|e| panic!("{name}: readback: {e}"));
             }
-            found += 1;
         }
-        assert!(
-            found >= 5,
-            "expected ≥5 accepted effect fixtures, found {found}"
-        );
     }
 
     /// The two axes are independent: `l1` durability + `l3` settlement is legal
@@ -2123,103 +2197,67 @@ mod tests {
         verify_settlement_evidence(&artifact).expect("valid l1 + l3 artifact");
     }
 
-    /// A terminal record without evidence is rejected by the schema and by the
-    /// structural verifier — `committed` is not a field a caller can assert.
+    /// Every rejected fixture is pinned to a case, and every case rejects at the
+    /// layer it claims. Adding `rejected-zzz-probe.json` without a case fails
+    /// the set equality below; adding a case without a fixture fails too.
     #[test]
-    fn effect_record_rejects_terminal_without_evidence() {
-        let (text, artifact) = read_effect("rejected-terminal-without-evidence.json");
-        assert!(
-            validate_schema_file("api/effect-record.json", &text).is_err(),
-            "schema must require settlement on a terminal record"
+    fn effect_record_rejected_fixtures_are_pinned_and_rejected() {
+        let on_disk = sorted(rejected_fixture_names());
+        let pinned: Vec<String> = REJECTED_EFFECT_FIXTURES
+            .iter()
+            .map(|(name, _)| (*name).to_string())
+            .collect();
+        assert_eq!(
+            on_disk,
+            sorted(pinned),
+            "every rejected fixture must have a case and every case must have a fixture"
         );
-        let err = verify_effect_record(&artifact).expect_err("structural must reject");
-        assert!(
-            matches!(err, VerifyError::EffectInvariant { .. }),
-            "{err:?}"
-        );
-    }
 
-    /// A dispatched record carrying an outcome (or resolver) is rejected.
-    #[test]
-    fn effect_record_rejects_nonterminal_with_settlement() {
-        let (text, artifact) = read_effect("rejected-nonterminal-with-settlement.json");
-        assert!(
-            validate_schema_file("api/effect-record.json", &text).is_err(),
-            "schema must forbid settlement on a non-terminal record"
-        );
-        let err = verify_effect_record(&artifact).expect_err("structural must reject");
-        assert!(
-            matches!(err, VerifyError::EffectInvariant { .. }),
-            "{err:?}"
-        );
-    }
+        for (name, layer) in REJECTED_EFFECT_FIXTURES {
+            let (text, artifact) = read_effect(name);
 
-    /// `dispatched` without a deadline is rejected: without one, nothing can
-    /// decide when the attempt has no live owner.
-    #[test]
-    fn effect_record_rejects_dispatched_without_deadline() {
-        let (text, artifact) = read_effect("rejected-dispatched-without-deadline.json");
-        assert!(
-            validate_schema_file("api/effect-record.json", &text).is_err(),
-            "schema must require a deadline on dispatched"
-        );
-        let err = verify_effect_record(&artifact).expect_err("structural must reject");
-        assert!(
-            matches!(err, VerifyError::EffectInvariant { .. }),
-            "{err:?}"
-        );
-    }
+            let schema = validate_schema_file("api/effect-record.json", &text);
+            let structural = verify_effect_record(&artifact);
 
-    /// The verdict and the terminal state must agree.
-    #[test]
-    fn effect_record_rejects_verdict_mismatch() {
-        let (text, artifact) = read_effect("rejected-verdict-mismatch.json");
-        assert!(
-            validate_schema_file("api/effect-record.json", &text).is_err(),
-            "schema must couple verdict to the terminal state"
-        );
-        let err = verify_effect_record(&artifact).expect_err("structural must reject");
-        assert!(
-            matches!(err, VerifyError::EffectInvariant { .. }),
-            "{err:?}"
-        );
-    }
-
-    /// A receipt whose digest does not match the carried readback bytes fails
-    /// the readback level even though the schema and structure are valid.
-    #[test]
-    fn effect_record_rejects_readback_mismatch() {
-        let (text, artifact) = read_effect("rejected-readback-mismatch.json");
-        validate_schema_file("api/effect-record.json", &text).expect("shape is valid");
-        verify_effect_record(&artifact).expect("structure is valid");
-        let err = verify_settlement_evidence(&artifact).expect_err("digest must not match");
-        assert!(
-            matches!(err, VerifyError::ReadbackDigestMismatch { .. }),
-            "{err:?}"
-        );
-    }
-
-    /// Without the raw bytes, the readback claim is refused — not silently
-    /// downgraded to "structurally fine".
-    #[test]
-    fn effect_record_requires_readback_bytes_for_the_readback_claim() {
-        let (text, artifact) = read_effect("rejected-readback-missing.json");
-        validate_schema_file("api/effect-record.json", &text).expect("shape is valid");
-        verify_effect_record(&artifact).expect("structure is valid");
-        let err = verify_settlement_evidence(&artifact).expect_err("no bytes to verify");
-        assert!(matches!(err, VerifyError::ReadbackMissing), "{err:?}");
-    }
-
-    /// Evidence is only honest when the deployment's settlement axis says it
-    /// can prove settlement.
-    #[test]
-    fn effect_record_rejects_evidence_with_none_settlement_level() {
-        let (_, artifact) = read_effect("rejected-settlement-with-none-level.json");
-        let err = verify_effect_record(&artifact).expect_err("levels contradict evidence");
-        assert!(
-            matches!(err, VerifyError::EffectInvariant { .. }),
-            "{err:?}"
-        );
+            match layer {
+                RejectionLayer::Schema => {
+                    assert!(schema.is_err(), "{name}: schema must reject");
+                    let err = structural.expect_err("structural must also reject");
+                    assert!(
+                        matches!(err, VerifyError::EffectInvariant { .. }),
+                        "{name}: {err:?}"
+                    );
+                }
+                RejectionLayer::Structural => {
+                    schema.unwrap_or_else(|e| panic!("{name}: schema should accept: {e}"));
+                    let err = structural.expect_err("structural must reject");
+                    assert!(
+                        matches!(err, VerifyError::EffectInvariant { .. }),
+                        "{name}: {err:?}"
+                    );
+                }
+                RejectionLayer::ReadbackDigestMismatch => {
+                    schema.unwrap_or_else(|e| panic!("{name}: schema should accept: {e}"));
+                    structural.unwrap_or_else(|e| panic!("{name}: structural should accept: {e}"));
+                    let err = verify_settlement_evidence(&artifact)
+                        .expect_err("readback digest must not match");
+                    assert!(
+                        matches!(err, VerifyError::ReadbackDigestMismatch { .. }),
+                        "{name}: {err:?}"
+                    );
+                }
+                RejectionLayer::ReadbackMissing => {
+                    schema.unwrap_or_else(|e| panic!("{name}: schema should accept: {e}"));
+                    structural.unwrap_or_else(|e| panic!("{name}: structural should accept: {e}"));
+                    let err = verify_settlement_evidence(&artifact)
+                        .expect_err("readback bytes must be required");
+                    assert!(
+                        matches!(err, VerifyError::ReadbackMissing),
+                        "{name}: {err:?}"
+                    );
+                }
+            }
+        }
     }
 
     /// Regenerates the three anchor-artifact fixtures. The envelope chain
