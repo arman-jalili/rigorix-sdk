@@ -23,6 +23,18 @@ verifier release (#55); `rigorix-schemas` must be published **before** the
 verifier. The client follows the compatible range (`0.7.0`) because it is a
 protocol client, not a verification trust boundary.
 
+## 0.8.0 — the schema identity is `rigorix.eu` (breaking for $id consumers)
+
+Every schema `$id` and `$ref` moves from `https://rigorix.dev/schemas/...` to `https://rigorix.eu/schemas/...`.
+The domain is `rigorix.eu`; the old identifiers named a host that is not ours to claim.
+
+> **Breaking, and on purpose a minor bump.** A consumer that registers schemas by `$id` (the enterprise
+> conformance does exactly this) resolves nothing until its keys move too. Nothing is published under the
+> old identity that we can recall, so the cost of moving now is smaller than the cost of two identities.
+
+Consumer chain, in order: SDK 0.8.0 → any consumer that pins `rigorix-schemas` must update its URI
+references in the same bump (`core/tests/conformance/events.rs`, `catalog.rs` in rigorix-enterprise).
+
 ## 0.7.1 — the same contract, republished so the version means one thing
 
 `0.7.0` was uploaded to crates.io and npm, and then two fixes landed on `main` under the same version:
