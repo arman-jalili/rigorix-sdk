@@ -1,9 +1,9 @@
-package dev.rigorix.sdk.client;
+package eu.rigorix.sdk.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import dev.rigorix.sdk.Canonical;
-import dev.rigorix.sdk.Corpus;
+import eu.rigorix.sdk.Canonical;
+import eu.rigorix.sdk.Corpus;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;

@@ -1,4 +1,4 @@
-package dev.rigorix.sdk;
+package eu.rigorix.sdk;
 
 /** Verifier error taxonomy (mirrors the Rust `VerifyError`). */
 public class VerifyException extends RuntimeException {

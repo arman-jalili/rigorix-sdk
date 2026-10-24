@@ -1,4 +1,4 @@
-package dev.rigorix.sdk;
+package eu.rigorix.sdk;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;

@@ -1,4 +1,4 @@
-package dev.rigorix.sdk.client;
+package eu.rigorix.sdk.client;
 
 /** A JSON-RPC 2.0 error object surfaced as an exception. */
 public class RpcException extends RuntimeException {

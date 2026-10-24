@@ -1,4 +1,4 @@
-package dev.rigorix.sdk;
+package eu.rigorix.sdk;
 
 import java.io.File;
 import java.io.IOException;

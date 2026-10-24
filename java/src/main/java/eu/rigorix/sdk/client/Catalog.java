@@ -1,4 +1,4 @@
-package dev.rigorix.sdk.client;
+package eu.rigorix.sdk.client;
 
 import java.util.List;
 import java.util.Optional;

@@ -1,4 +1,4 @@
-package dev.rigorix.sdk;
+package eu.rigorix.sdk;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;

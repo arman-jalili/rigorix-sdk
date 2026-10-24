@@ -10,7 +10,7 @@ while every other channel was at `0.6.0`, and nothing noticed).
 | **crates.io** | `rigorix-schemas`, `rigorix-verifier` | manual `cargo publish`, schemas **first and indexed** | `$CRATES_TOKEN` | `rust-vX.Y.Z` |
 | **npm** | `rigorix-verifier`, `rigorix-client` | `npm publish --access public` (CI job, or manually) | `NPM_TOKEN` | `vX.Y.Z` |
 | **PyPI** | `rigorix-verifier` | CI job, **Trusted Publishing (OIDC)** — no long-lived token exists | — | `vX.Y.Z` |
-| **Maven Central** | `dev.rigorix:rigorix-verifier` | CI job, `mvn -Prelease deploy` (sources + javadoc + GPG) | `MAVEN_CENTRAL_USERNAME` / `_TOKEN`, `MAVEN_GPG_PRIVATE_KEY` / `_PASSPHRASE` | `vX.Y.Z` |
+| **Maven Central** | `eu.rigorix:rigorix-verifier` | CI job, `mvn -Prelease deploy` (sources + javadoc + GPG) | `MAVEN_CENTRAL_USERNAME` / `_TOKEN`, `MAVEN_GPG_PRIVATE_KEY` / `_PASSPHRASE` | `vX.Y.Z` |
 | **Go** | `github.com/arman-jalili/rigorix-sdk/go` | **tag only** — nothing is uploaded | public repo visibility | `go/vX.Y.Z` |
 
 `rigorix-client` (Rust) is an independent cadence: bumped with the train, published separately.
@@ -51,7 +51,7 @@ installs from the registries afterwards.
   spending limit is reached, which looks like a normal red workflow and publishes nothing. PyPI
   cannot be published any other way (OIDC only), so a `vX.Y.Z` tag is *staged*, not released, until
   billing is restored — then re-run the failed publish run rather than re-tagging.
-- **Maven Central needs a namespace and a signing key.** `dev.rigorix` must be verified on the
+- **Maven Central needs a namespace and a signing key.** `eu.rigorix` must be verified on the
   Central Portal, and the GPG key must be published. The CI job fails by name when a secret is
   missing rather than skipping: a tag that reaches three registries of five is the drift the version
   guard exists to prevent.

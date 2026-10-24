@@ -1,4 +1,4 @@
-package dev.rigorix.sdk.client;
+package eu.rigorix.sdk.client;
 
 import java.io.IOException;
 import java.net.URI;

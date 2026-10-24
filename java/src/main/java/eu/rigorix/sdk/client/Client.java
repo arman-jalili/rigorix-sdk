@@ -1,9 +1,9 @@
-package dev.rigorix.sdk.client;
+package eu.rigorix.sdk.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import dev.rigorix.sdk.Canonical;
+import eu.rigorix.sdk.Canonical;
 
 import java.io.IOException;
 

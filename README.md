@@ -9,7 +9,7 @@ a standalone repo whose job is to make the Rigorix boundary speakable from any s
 |------|---------|
 | `schemas/` | **Single source of truth** for Rigorix contracts: envelope v2, policy/config model, identity claim format, native `rigorix.*` API method catalog. Drift-tested against rigorix-oss (CI). |
 | `rust/` | `rigorix-schemas` + `rigorix-verifier` (published **0.2.0**) + `rigorix-client` — typed JSON-RPC client + envelope/chain/anchor verifier (protocol-only, **no** `rigorix-engine` dependency) |
-| `python/` · `typescript/` · `java/` · `go/` | The same verifier + catalog client, byte-exact on the shared fixtures (`rigorix-verifier` on PyPI/npm; Maven `dev.rigorix:rigorix-verifier`; Go module) |
+| `python/` · `typescript/` · `java/` · `go/` | The same verifier + catalog client, byte-exact on the shared fixtures (`rigorix-verifier` on PyPI/npm; Maven `eu.rigorix:rigorix-verifier`; Go module) |
 | `docs/` | Strategy freezes + contract-sync design (this repo is also the planning home for server mode) |
 
 ## Strategy (frozen 2026-09-06 — see `docs/strategy-freeze-2026-09-06.md`)

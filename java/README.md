@@ -10,7 +10,7 @@ protocol-only** Java verifier + client. No `rigorix-engine` dependency.
   accepted only when covered by a valid signed compaction checkpoint.
 - **Ed25519 anchor artifacts** (BouncyCastle): ledger receipt, history slice,
   compaction checkpoint.
-- **Client** (`dev.rigorix.sdk.client`): JSON-RPC 2.0 over a transport seam,
+- **Client** (`eu.rigorix.sdk.client`): JSON-RPC 2.0 over a transport seam,
   binding every frozen `rigorix.*` catalog method (drift-tested).
 
 ## Contract corpus
@@ -22,8 +22,8 @@ the published jar is self-contained. `Corpus.schema` / `Corpus.fixture` read it.
 ## Usage
 
 ```java
-import dev.rigorix.sdk.Corpus;
-import dev.rigorix.sdk.Envelope;
+import eu.rigorix.sdk.Corpus;
+import eu.rigorix.sdk.Envelope;
 
 String anchored = Corpus.fixture("envelope/envelope-anchored-signed.json");
 Envelope.verifySignature(anchored, "fixture-hmac-key-2026"); // byte-exact HMAC
