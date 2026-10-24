@@ -20,6 +20,7 @@ Contract changes are DECISIONS (see AGENTS.md + docs/strategy-freeze).
 | `api/history-slice.json` | **v1** (2026-09-24, FROZEN) | ADR-016 (Contract); engine `HistoryAction` | Anchor-signed history projection `{ scope, since, actions[], head_hash, sig }` the guard consumes in `anchored` mode; actions mirror `HistoryAction` (no parameter values). Fixture in `fixtures/integrity/`. |
 | `api/compaction-checkpoint.json` | **v1** (2026-09-24, FROZEN) | ADR-016 (Contract, GDPR/compaction) | Anchor-signed compaction proof `{ sequence_from, sequence_to, reason, prior_head, new_head, sig }`; a verifier accepts a chain gap iff covered by a valid checkpoint. Fixture in `fixtures/integrity/`. |
 | `api/authority-fact-bundle.json` | **v1** (2026-10-13, FROZEN) | rigorix-oss `engine/src/audit/domain/authority_fact.rs` (`AuthorityFactBundle`/`AuthorityFactProjection`/`AuthorityFact`) + `docs/spec/consequence-gating-v1.md` §4.3 | The authority-fact projection bundle: projection + the signed history it was derived from + `subjects_without_record`. `envelopes[]` `$ref`s `envelope.json` by `$id` (no second dialect). Verified by re-derivation, not signature (§4.3.1). `generated_at` is not compared. |
+| `api/effect-record.json` | **v1** (2026-10-24, FROZEN) | rigorix-oss `effect_commitment/domain/{state,outcome}.rs` + `infrastructure/provider_receipt.rs`; rigorix-enterprise `effect_commitment/interfaces/http/dto.rs` (`EffectRecordResponse`) | Effect-commitment artifact = the frozen wire record + the provider evidence that settled it (`ObservedOutcome` + the raw read-back bytes + optional resolver) + two independent deployment axes (`durability` l1/l2, `settlement` none/l3). Terminal ⇒ evidence, non-terminal ⇒ none, dispatched ⇒ deadline. Verified structurally and by re-deriving `readback_digest`; **no envelope binding**. Fixtures in `fixtures/effect/`. |
 | `api/method-catalog.md` | sketch (2026-09-06, historical) | — | Pre-freeze sketch. **Superseded by `api/catalog.json` + ADR-0001**; kept as history. |
 
 ## Conformance fixtures (milestone 1)
@@ -34,6 +35,11 @@ HMAC-verifiable by `rigorix-verifier` from any language.
 fixtures (ledger receipt / history slice / compaction checkpoint, Ed25519-signed
 with a documented test-only key). `rigorix-verifier` verifies the chain, rejects
 a broken one, and accepts a gap iff covered by a valid signed checkpoint.
+
+`fixtures/effect/` (ADR-019 / SDK 0.7.0) holds the effect-commitment artifact
+cases: five accepted (including `l1` durability + `l3` settlement) and one
+rejected fixture per invariant, plus readback mismatches. Contract-first until
+the engine exports the artifact.
 
 ## Verifier
 

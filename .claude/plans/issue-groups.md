@@ -1,8 +1,29 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-10-18 (updated)
-**Open issues:** 1 (#50) — #43/#44/#47 merged
+**Generated:** 2026-10-24 (updated)
+**Open issues:** 1 (#52) — #43/#44/#47/#50 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
+
+---
+
+## Series: effect-commitment contract (2026-10-24)
+
+| # | ID | Priority | Component | Branch | Blocked by |
+|---|----|----------|-----------|--------|-----------|
+| 52 | effect-record artifact + verifier | critical (release-trailing) | `schemas/api/effect-record.json`, `rust/rigorix-verifier` | `issue/52` | OSS 1.11.0 tag for the 0.7.0 *release* (contract unblocked) |
+
+### Group: effect-commitment contract (single) — actionable
+
+**Branch:** `issue/52`
+**Decisions (review-confirmed):**
+1. Artifact = frozen wire `EffectRecordResponse` + sibling `settlement`
+   (`ObservedOutcome` + raw readback bytes + optional resolver).
+2. `levels` describes the producing deployment on two independent axes
+   (`durability` l1/l2, `settlement` none/l3) — not a per-record label.
+
+**Deliverables:** schema + 12 fixtures (5 accepted, 7 rejected), typed mirror,
+`verify_effect_record` + `verify_settlement_evidence`, contract-sync note.
+The 0.7.0 publish waits for OSS 1.11.0 to be tagged.
 
 ---
 

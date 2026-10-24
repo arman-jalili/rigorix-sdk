@@ -12,6 +12,7 @@ recorded in [`docs/adr/ADR-0001-native-api-catalog.md`](../../docs/adr/ADR-0001-
 | `ledger-receipt.json` | ADR-016 anchor-signed ledger receipt (`ledger_id`, `envelope_hash`, `sequence`, `recorded_at`, Ed25519 `sig`). |
 | `history-slice.json` | ADR-016 anchor-signed history projection (`scope`, `since`, `actions[]`, `head_hash`, Ed25519 `sig`) the guard consumes in `anchored` mode. |
 | `authority-fact-bundle.json` | Consequence-gating §4.3 bundle: the authority-fact projection + the signed envelopes it was derived from + `subjects_without_record`. `envelopes[]` `$ref`s the one canonical `envelope.json` by `$id` (no second dialect); verified by re-derivation, not signature. |
+| `effect-record.json` | Effect-commitment artifact: the frozen wire record (`EffectRecordResponse`) + the provider evidence that settled it (`ObservedOutcome` + raw read-back bytes + optional resolver) + two independent deployment axes (`durability` l1/l2, `settlement` none/l3). Verified structurally and by re-deriving `readback_digest`; no envelope binding. |
 | `compaction-checkpoint.json` | ADR-016 anchor-signed compaction proof (`sequence_from`, `sequence_to`, `reason`, `prior_head`, `new_head`, Ed25519 `sig`); a verifier accepts a chain gap iff covered by a valid checkpoint. |
 | `method-catalog.md` | The 2026-09-06 pre-freeze sketch (historical; superseded by `catalog.json`). |
 

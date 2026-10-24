@@ -1,0 +1,18 @@
+{
+  "record": {
+    "id": "0191f3a0-0000-7000-8000-000000000009",
+    "intent_key": "3333333333333333333333333333333333333333333333333333333333333333",
+    "dag_id": "dag-checkout-1",
+    "node_id": "node-charge-1",
+    "attempt": 0,
+    "state": "dispatched",
+    "dispatched_by": "engine-1",
+    "deadline": null,
+    "reason": null,
+    "created_at": "2026-10-24T12:00:00Z"
+  },
+  "levels": {
+    "durability": "l1",
+    "settlement": "none"
+  }
+}
