@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/policy.json",
+  "$id": "https://rigorix.eu/schemas/policy.json",
   "title": "Rigorix Policy & Configuration Model v1",
   "description": "v1 (2026-09-07) \u2014 grounded in rigorix-oss engine code (code is truth): sequence-policy rules from engine/src/sequence_policy/domain/rule.rs + config.rs (SequenceRule, StepPredicate, ParamPredicate, HistoryPredicate, RuleAction, SequencePolicyConfig, SafetyCaps) and the root rigorix.toml surface from engine/src/configuration/domain/config.rs (permission_mode, audit HMAC knobs). Root validates the OPERATOR-authored sequence-policy file (`[sequence_policy]` with `[[rules]]`, as consumed from .rigorix/sequence-policy.toml). The root config surface (rigorix.toml) is represented at $defs.rootConfigSurface for cross-tool alignment \u2014 permission_mode is a runtime-validated string (engine: Option<String>); known values documented. Enterprise policy_engine bundles must emit rule semantics in this shape (id/action/window/history/step predicates) \u2014 extension slots (approval policy, scope roles) are enterprise-only and land in the delta map. ADR-015: additive root `requirements` (StepRequirement/RequirementAction) + SafetyCaps `max_requirements_per_file` / `max_required_params_per_requirement`. ADR-017: additive root `preconditions` (dispatch-time authority checks) + `gating` (step-outcome gating), and `require_companion_step` on `[[requirements]]` (closes the ADR-015 companion-step non-goal).",
   "type": "object",

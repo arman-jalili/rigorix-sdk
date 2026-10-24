@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/api/history-slice-v1.json",
+  "$id": "https://rigorix.eu/schemas/api/history-slice-v1.json",
   "title": "Rigorix History Slice v1",
   "description": "ADR-016 anchor-signed history projection: the narrow, verifiable read the cross-run guard consumes in `anchored` mode. The engine's `ExecutionHistory` port returns this projection after the anchor's Ed25519 `sig` verifies; a forged slice is rejected and consequential runs fail closed. Actions mirror the engine `HistoryAction` (never parameter values — SpanPrivacy).",
   "type": "object",

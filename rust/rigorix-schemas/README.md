@@ -23,7 +23,7 @@ let chain    = fixture("integrity/chain.json").expect("ADR-016 chain fixture");
 
 // Resolve an `$id` for cross-file `$ref` registration.
 assert_eq!(
-    schema_by_id("https://rigorix.dev/schemas/envelope-v2.json"),
+    schema_by_id("https://rigorix.eu/schemas/envelope-v2.json"),
     Some("envelope.json"),
 );
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/api/errors-v1.json",
+  "$id": "https://rigorix.eu/schemas/api/errors-v1.json",
   "title": "Rigorix Native API — error model v1",
   "description": "JSON-RPC 2.0 error objects for the native rigorix.* API (ADR-0001 D6). `data.type` is the stable machine identifier; `message` is human text and may change. `denied_by_sequence` MUST carry data.rule_id and data.step when known. ADR-017 R1: a dispatch-time precondition refusal is a `policy_violation` carrying `data.precondition_id` + `data.step` + `data.outcome`, and is never retryable (`retryable: false`).",
   "type": "object",

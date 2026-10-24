@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/api/catalog.schema.json",
+  "$id": "https://rigorix.eu/schemas/api/catalog.schema.json",
   "title": "Rigorix Native API — catalog document schema",
   "description": "Shape of catalog.json (the frozen rigorix.* method catalog, ADR-0001). catalog.json is DATA; this document describes it. params/result schemas live in catalog.json $defs.",
   "type": "object",

@@ -9,7 +9,7 @@
 | Artifact | Change |
 |---|---|
 | `schemas/api/catalog.json` | Additive method `rigorix.audit.authorityFacts` (query, auth `session`, `mcpTool` `rigorix_audit_authority_facts`), params `#/$defs/authorityFactsParams`, result `#/$defs/authorityFactsResult`. Method count 23 → 24. |
-| `schemas/api/authority-fact-bundle.json` | **New** frozen schema, `$id` `https://rigorix.dev/schemas/api/authority-fact-bundle-v1.json`. |
+| `schemas/api/authority-fact-bundle.json` | **New** frozen schema, `$id` `https://rigorix.eu/schemas/api/authority-fact-bundle-v1.json`. |
 | `apiVersion` | Unchanged (`1.0.0`). Additive within the major (ADR-0001 D3). |
 
 No existing method, field, type, or requirement changed. No envelope canonical-form

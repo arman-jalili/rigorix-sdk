@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/api/authority-fact-bundle-v1.json",
+  "$id": "https://rigorix.eu/schemas/api/authority-fact-bundle-v1.json",
   "title": "Rigorix Authority Fact Bundle v1",
   "description": "The consequence-gating §4.3 authority-fact projection bundle: the projection, the signed history it was derived from, and the subjects the consumer asked about (`subjects_without_record`). Rigorix exports its own hash-chained history as attributable present-state facts for an external determination consumer; the projection reports what was established, when, and how it can be verified, and SHALL NOT assert present standing (NC-4). Verification is by RE-DERIVATION, not by signature (spec §4.3.1): a verifier checks the envelope chain, re-derives the projection from that verified history, and compares the facts and anchor reference exactly (the `generated_at` timestamp is not compared). The `envelopes[]` items are `$ref`-addressed to the one canonical envelope dialect (`envelope-v2.json`) — this schema never re-declares envelope fields. DISCLOSURE: a bundle carries the envelopes, so a caller receives the signed history, not a summary; that is inherent to re-derivation and is declared, not discovered.",
   "type": "object",
@@ -13,7 +13,7 @@
       "type": "array",
       "description": "The signed history the projection was derived from. Each item is the ONE canonical envelope dialect (`envelope.json`, `$id` `envelope-v2.json`) — referenced, never re-declared, so there is no second envelope shape.",
       "items": {
-        "$ref": "https://rigorix.dev/schemas/envelope-v2.json"
+        "$ref": "https://rigorix.eu/schemas/envelope-v2.json"
       }
     },
     "subjects_without_record": {

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/api/effect-record-v1.json",
+  "$id": "https://rigorix.eu/schemas/api/effect-record-v1.json",
   "title": "Rigorix Effect Record v1",
   "description": "The effect-commitment artifact: one effect record PLUS the provider evidence that settled it (two sections, one document). The record section mirrors the frozen enterprise wire shape (`EffectRecordResponse`, `interfaces/http/dto.rs`), not the richer engine aggregate; the settlement section mirrors the engine's `ObservedOutcome` plus the raw provider read-back bytes that the digest was computed over. The record alone cannot prove settlement: there is no evidence field on the wire record, and settlement arrives out of band. CEILING: this artifact does NOT bind a record to a signed audit envelope. The record carries no signature and the intent digest is not derivable from the envelope, so authenticity rests on (a) the signed envelope chain and (b) the provider receipt. A verifier makes two honest claims: STRUCTURAL (closed state vocabulary, terminal states carry evidence, non-terminal states carry none, `dispatched` carries a deadline, verdict agrees with the terminal state) and READBACK (re-derive `readback_digest` from the exact provider bytes in `settlement.readback`). It cannot prove that the record was produced by a particular engine.",
   "type": "object",

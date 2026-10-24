@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/api/ledger-receipt-v1.json",
+  "$id": "https://rigorix.eu/schemas/api/ledger-receipt-v1.json",
   "title": "Rigorix Ledger Receipt v1",
   "description": "ADR-016 anchor-signed ledger receipt: the anchor's durable acknowledgement that it verified and appended an envelope at a given per-producer sequence. Clients verify the Ed25519 `sig` with the anchor's PUBLIC key — the agent host cannot forge it (HMAC stays the local cache mechanism and is not an authority signal). No policy/matcher/verdict lives in the anchor.",
   "type": "object",

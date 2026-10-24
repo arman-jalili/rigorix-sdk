@@ -3,7 +3,7 @@
 **Date:** 2026-10-24
 **Issue:** #52
 **Status:** frozen (`schemas/api/effect-record.json`, `$id`
-`https://rigorix.dev/schemas/api/effect-record-v1.json`)
+`https://rigorix.eu/schemas/api/effect-record-v1.json`)
 **Upstream:** rigorix-oss 1.11.0 (engine + ADR-019), rigorix-enterprise
 (`EffectRecordResponse`)
 

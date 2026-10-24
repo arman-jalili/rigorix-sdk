@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/api/compaction-checkpoint-v1.json",
+  "$id": "https://rigorix.eu/schemas/api/compaction-checkpoint-v1.json",
   "title": "Rigorix Compaction Checkpoint v1",
   "description": "ADR-016 anchor-signed compaction checkpoint: the proof that a contiguous range of a producer's chain was deliberately erased (GDPR / retention). A verifier accepts a chain gap IF AND ONLY IF it is covered by a checkpoint whose `prior_head`/`new_head` are the hashes bracketing the gap and whose `sequence_from..sequence_to` is exactly the missing range; an uncovered gap is a failure. Deletion becomes a recorded, provable compaction rather than a silent absence.",
   "type": "object",

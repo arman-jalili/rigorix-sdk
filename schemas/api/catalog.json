@@ -821,7 +821,7 @@
           "$ref": "#/$defs/planTemplate"
         },
         "identity": {
-          "$ref": "https://rigorix.dev/schemas/claims.json#/$defs/identityRef",
+          "$ref": "https://rigorix.eu/schemas/claims.json#/$defs/identityRef",
           "description": "Server-injected attested identity; ignored if supplied by the caller (D5)."
         }
       },
@@ -1462,7 +1462,7 @@
     },
     "auditHistoryResult": {
       "description": "Anchor-signed history projection. Reuses the frozen `api/history-slice.json` shape by `$id` (no second dialect).",
-      "$ref": "https://rigorix.dev/schemas/api/history-slice-v1.json"
+      "$ref": "https://rigorix.eu/schemas/api/history-slice-v1.json"
     },
     "auditOverdueParams": {
       "type": "object",
@@ -1501,7 +1501,7 @@
     },
     "authorityFactsResult": {
       "description": "The consequence-gating §4.3 authority-fact bundle. Reuses the frozen `api/authority-fact-bundle.json` shape by `$id` (no second dialect); the bundle `envelopes[]` in turn `$ref`s the one canonical `envelope.json`. Verified by re-derivation, not by signature.",
-      "$ref": "https://rigorix.dev/schemas/api/authority-fact-bundle-v1.json"
+      "$ref": "https://rigorix.eu/schemas/api/authority-fact-bundle-v1.json"
     },
     "auditOverdueResult": {
       "type": "object",
@@ -1883,7 +1883,7 @@
       ],
       "properties": {
         "claim": {
-          "$ref": "https://rigorix.dev/schemas/claims.json#/$defs/identityClaim"
+          "$ref": "https://rigorix.eu/schemas/claims.json#/$defs/identityClaim"
         }
       },
       "additionalProperties": false

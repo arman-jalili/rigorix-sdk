@@ -22,7 +22,7 @@
 //!
 //! let envelope = schema("envelope.json").expect("envelope schema");
 //! let chain = fixture("integrity/chain.json").expect("integrity fixture");
-//! let id = schema_by_id("https://rigorix.dev/schemas/envelope-v2.json");
+//! let id = schema_by_id("https://rigorix.eu/schemas/envelope-v2.json");
 //! assert_eq!(id, Some("envelope.json"));
 //! # let _ = (envelope, chain);
 //! ```
@@ -55,7 +55,7 @@ pub fn fixture(rel_path: &str) -> Option<&'static str> {
     schema(&key)
 }
 
-/// Resolve a schema `$id` (e.g. `https://rigorix.dev/schemas/envelope-v2.json`)
+/// Resolve a schema `$id` (e.g. `https://rigorix.eu/schemas/envelope-v2.json`)
 /// to its embedded path — for registering cross-file `$ref` resources.
 pub fn schema_by_id(id: &str) -> Option<&'static str> {
     IDS.iter()
@@ -156,11 +156,11 @@ mod tests {
         assert!(fixture("does/not/exist.json").is_none());
 
         assert_eq!(
-            schema_by_id("https://rigorix.dev/schemas/envelope-v2.json"),
+            schema_by_id("https://rigorix.eu/schemas/envelope-v2.json"),
             Some("envelope.json")
         );
         assert_eq!(
-            schema_by_id("https://rigorix.dev/schemas/claims.json"),
+            schema_by_id("https://rigorix.eu/schemas/claims.json"),
             Some("claims.json")
         );
         assert!(schema_ids()

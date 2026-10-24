@@ -188,7 +188,7 @@ still be expressible by an MCP tool if a client needs them.
 
 `schemas/envelope.json` describes the **envelope format v2** (the format that
 carries the additive approval / identity / sequence-policy findings blocks).
-Its `$id` is `https://rigorix.dev/schemas/envelope-v2.json` and its title is
+Its `$id` is `https://rigorix.eu/schemas/envelope-v2.json` and its title is
 "Rigorix Audit Envelope v2". The `description` string's "v1 (2026-09-07)" refers
 to the **schema-document revision**, not the format. The catalog's
 `rigorix.audit.read` result and the push-channel payloads reference this

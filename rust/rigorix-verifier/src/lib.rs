@@ -996,22 +996,22 @@ pub fn verify_catalog_subset(candidate: &[&str]) -> VerifyResult<()> {
 
 /// The `$id` of the canonical envelope schema — a cross-file `$ref` target on
 /// the contract surface (`api/events.json` → `envelope.json`).
-const ENVELOPE_SCHEMA_ID: &str = "https://rigorix.dev/schemas/envelope-v2.json";
+const ENVELOPE_SCHEMA_ID: &str = "https://rigorix.eu/schemas/envelope-v2.json";
 
 /// The `$id` of the canonical claims schema — the home of the shared identity
 /// shapes, a cross-file `$ref` target from the catalog
 /// (`api/catalog.json` → `claims.json#/$defs/identityRef|identityClaim`).
-const CLAIMS_SCHEMA_ID: &str = "https://rigorix.dev/schemas/claims.json";
+const CLAIMS_SCHEMA_ID: &str = "https://rigorix.eu/schemas/claims.json";
 
 /// The `$id` of the ADR-016 history-slice schema — the result shape of
 /// `rigorix.audit.history`, referenced cross-file from the catalog.
-const HISTORY_SLICE_SCHEMA_ID: &str = "https://rigorix.dev/schemas/api/history-slice-v1.json";
+const HISTORY_SLICE_SCHEMA_ID: &str = "https://rigorix.eu/schemas/api/history-slice-v1.json";
 
 /// The `$id` of the consequence-gating §4.3 authority-fact bundle schema — the
 /// result shape of `rigorix.audit.authorityFacts`, referenced cross-file from
 /// the catalog. It in turn `$ref`s the one canonical envelope dialect.
 const AUTHORITY_FACT_BUNDLE_SCHEMA_ID: &str =
-    "https://rigorix.dev/schemas/api/authority-fact-bundle-v1.json";
+    "https://rigorix.eu/schemas/api/authority-fact-bundle-v1.json";
 
 /// Build a JSON Schema validator, registering sibling contract schemas so
 /// cross-file `$ref`s resolve offline (`events.json` → `envelope.json`;
@@ -1709,11 +1709,11 @@ mod tests {
 
         assert_eq!(
             catalog["$defs"]["validatePlanParams"]["properties"]["identity"]["$ref"],
-            "https://rigorix.dev/schemas/claims.json#/$defs/identityRef"
+            "https://rigorix.eu/schemas/claims.json#/$defs/identityRef"
         );
         assert_eq!(
             catalog["$defs"]["authVerifyResult"]["properties"]["claim"]["$ref"],
-            "https://rigorix.dev/schemas/claims.json#/$defs/identityClaim"
+            "https://rigorix.eu/schemas/claims.json#/$defs/identityClaim"
         );
 
         // Unresolvable cross-file refs fail compilation — so this proves

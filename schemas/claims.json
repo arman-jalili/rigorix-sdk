@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/claims.json",
+  "$id": "https://rigorix.eu/schemas/claims.json",
   "title": "Rigorix Identity Claims v1",
   "description": "v1 (2026-09-07) — grounded in rigorix-oss engine/src/identity/domain/claim.rs (code is truth, contract frozen: serde-stable field names, round-trip preserves every field). Root validates the FULL attributed claim (IdentityClaim) — the output of claim verification on local surfaces (run author, approval service, MCP auth, enterprise JWKS verification). $defs.identityRef is the REDACTED form carried in audit envelopes (never token_ref/auth_method/raw token). IdentitySource serializes snake_case (idp_token | local_principal | unverified) — degradation is a first-class state, never a silent fallback. All Option fields are always serialized (no skip_serializing_if on IdentityClaim): absent values are null, never omitted keys. Raw IdP/JWT claim sets are the INPUT to verification and are not schema-bound here (extension slot: enterprise delta map).",
   "$ref": "#/$defs/identityClaim",

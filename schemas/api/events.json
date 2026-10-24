@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rigorix.dev/schemas/api/events-v1.json",
+  "$id": "https://rigorix.eu/schemas/api/events-v1.json",
   "title": "Rigorix Native API — SSE push events v1",
   "description": "The three ADR-0001 D8 server-push events on `GET /events` (SSE), frozen before either server is built (ADR-0002, SDK-C1). The logical event is a discriminated union on the SSE `event:` name; each `data` payload REUSES `envelope.json` `$defs.executionEventRef` (event_type / summary / occurred_at / status / payload) — there is no second envelope dialect. The wire framing (`id:` / `event:` / `data:` lines, keep-alive comments) is specified in docs/adr/ADR-0002-sse-push-channel.md; this schema models the reconstructed logical event (what the OSS `rigorix-server` publishes as `ServerEvent` and a client applies to the stream).",
   "oneOf": [
@@ -37,7 +37,7 @@
   "$defs": {
     "envelopeEventRef": {
       "$comment": "Reuse, don't redefine — the envelope event-ref shape lives in envelope.json.",
-      "$ref": "https://rigorix.dev/schemas/envelope-v2.json#/$defs/executionEventRef"
+      "$ref": "https://rigorix.eu/schemas/envelope-v2.json#/$defs/executionEventRef"
     },
     "eventEnvelope": {
       "type": "object",
