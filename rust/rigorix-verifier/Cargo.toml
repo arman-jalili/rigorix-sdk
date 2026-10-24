@@ -18,7 +18,7 @@ include = ["src/**/*", "README.md"]
 # EXACT pin: a schemas patch must not change what an already-published verifier
 # accepts without a verifier release (#55). Publish rigorix-schemas first —
 # Cargo now enforces the order instead of relying on memory.
-rigorix-schemas = { version = "=0.7.0", path = "../rigorix-schemas" }
+rigorix-schemas = { version = "=0.7.1", path = "../rigorix-schemas" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 hmac = "0.12"

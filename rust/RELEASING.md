@@ -23,6 +23,18 @@ verifier release (#55); `rigorix-schemas` must be published **before** the
 verifier. The client follows the compatible range (`0.7.0`) because it is a
 protocol client, not a verification trust boundary.
 
+## 0.7.1 — the same contract, republished so the version means one thing
+
+`0.7.0` was uploaded to crates.io and npm, and then two fixes landed on `main` under the same version:
+the rejected-fixture table that pins every fixture to a test (#54) and an exact `rigorix-schemas` pin so a
+schema patch cannot change an already-published verifier (#55). A version number that denotes two different
+artifacts is not a smaller problem than a broken build: `cargo add rigorix-verifier@0.7.0` and `git checkout
+9c1b96f` no longer describe the same code.
+
+0.7.1 is that content, under a version that exists only once. The schema is unchanged in substance; it is
+republished because every channel moves together, and `rigorix-schemas` must be published and indexed
+before `rigorix-verifier`, whose dependency on it is now exact.
+
 ## 0.7.0 — the effect-record artifact and the commitment-evidence verifier
 
 New artifact, new verifier entry points. `schemas/api/effect-record.json` (v1, frozen) is **one document

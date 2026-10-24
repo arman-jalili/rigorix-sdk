@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rigorix-verifier"
-version = "0.7.0"
+version = "0.7.1"
 description = "Protocol-only verification of Rigorix audit envelopes: HMAC, JSON Schema, per-producer chains, and Ed25519 anchor artifacts. Consumes the canonical rigorix-schemas corpus."
 readme = "README.md"
 license = { text = "Apache-2.0" }

@@ -954,7 +954,7 @@ dependencies = [
 
 [[package]]
 name = "rigorix-client"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "rigorix-schemas",
  "serde",
@@ -964,14 +964,14 @@ dependencies = [
 
 [[package]]
 name = "rigorix-schemas"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "rigorix-verifier"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "chrono",
  "ed25519-dalek",
