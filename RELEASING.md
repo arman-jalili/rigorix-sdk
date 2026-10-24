@@ -51,10 +51,14 @@ installs from the registries afterwards.
   spending limit is reached, which looks like a normal red workflow and publishes nothing. PyPI
   cannot be published any other way (OIDC only), so a `vX.Y.Z` tag is *staged*, not released, until
   billing is restored — then re-run the failed publish run rather than re-tagging.
-- **Maven Central needs a namespace and a signing key.** `eu.rigorix` must be verified on the
-  Central Portal, and the GPG key must be published. The CI job fails by name when a secret is
-  missing rather than skipping: a tag that reaches three registries of five is the drift the version
-  guard exists to prevent.
+- **Maven Central is configured and publishing.** Recorded because getting here cost a detour worth not
+  repeating: the namespace `eu.rigorix` (domain `rigorix.eu`) verifies with a TXT record at the **apex**,
+  `rigorix.eu` — a record on a subdomain such as `maven.rigorix.eu` fails with *"Verification result could
+  not be found"*, which reads like a propagation problem and is not one. The signing key
+  `CA59BA9B24180611F16DC829D78D7E6E67BBCAFF` (Rigorix Releases, RSA 4096, expires 2028-10-24) is published
+  to keys.openpgp.org, whose UID must be reachable at `release@rigorix.eu` or the key is uploaded but never
+  served. Deployment ids `9727d513` (0.8.0) is the first successful one; artifacts appear under
+  `repo1.maven.org/maven2/eu/rigorix/`.
 - **Go needs repository visibility.** `go get` reads the repo through the module proxy, which cannot
   see a private repository. A `go/vX.Y.Z` tag on a private repo is a correct release of nothing
   consumable.
