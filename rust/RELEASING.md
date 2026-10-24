@@ -20,6 +20,34 @@ workspace member (`version.workspace = true`). The verifier + client pin
 `rigorix-schemas` to the **same exact version**, and `rigorix-schemas` must be
 published **before** the verifier.
 
+## 0.7.0 — the effect-record artifact and the commitment-evidence verifier
+
+New artifact, new verifier entry points. `schemas/api/effect-record.json` (v1, frozen) is **one document
+with two sections**: the record (mirroring the enterprise wire shape `EffectRecordResponse`, not the richer
+engine aggregate) **plus** the settlement evidence that settled it (the engine's `ObservedOutcome` and the
+exact provider read-back bytes the digest was computed over), and the two deployment axes as a claim.
+
+> **The record alone cannot prove settlement.** There is no evidence field on the wire record; settlement
+> arrives out of band on `POST /v1/effects/{id}/settle`. A schema that modelled only the record would let a
+> `committed` claim pass with no receipt behind it, which is why the artifact is a pair.
+
+> **CEILING — this artifact does not bind a record to a signed audit envelope.** The record carries no
+> signature and the intent digest is not derivable from the envelope, so authenticity rests on (a) the
+> signed envelope chain and (b) the provider receipt. The verifier makes exactly two claims: STRUCTURAL
+> (closed state vocabulary; terminal states carry evidence, non-terminal states carry none; `dispatched`
+> carries a deadline; verdict agrees with the terminal state) and READBACK (re-derive `readback_digest`
+> from the exact provider bytes). It cannot prove which engine produced the record.
+
+> **`levels` is a deployment claim on two orthogonal axes** — durability `l1`/`l2`, settlement `none`/`l3`.
+> `l1 + l3` is legal: a receipt reader can prove `committed` even when the record is in-process, because the
+> provider is the authority for the effect, not the ledger. A `dispatched` record from an `l3` deployment
+> may say `l3` without carrying evidence; the evidence lives in the settlement section, not the level.
+
+Fixtures: `schemas/fixtures/effect/` — 5 accepted (including `l1+l3` orthogonality and a resolved
+`ambiguous`) and 7 rejected, one per invariant the verifier enforces.
+
+Contract delta: `docs/contract-sync-2026-10-24-effect-record.md`.
+
 ## 0.6.0 — `anchored_pending` integrity regime (additive to the schema, breaking for verifiers)
 
 `$defs.historyIntegrity` gains a third value: `local_unanchored` | `anchored` |
