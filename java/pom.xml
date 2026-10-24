@@ -33,7 +33,10 @@
     <connection>scm:git:https://github.com/arman-jalili/rigorix-sdk.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/arman-jalili/rigorix-sdk.git</developerConnection>
     <url>https://github.com/arman-jalili/rigorix-sdk</url>
-    <tag>v0.7.0</tag>
+    <!-- No <tag>: a release tag written into a static POM is a claim that goes
+         stale on the next release (this one said v0.7.0 while the artifact was
+         0.7.1). Central does not require it; <connection> already identifies the
+         repository. -->
   </scm>
 
   <properties>
