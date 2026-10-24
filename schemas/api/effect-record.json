@@ -1,0 +1,320 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rigorix.dev/schemas/api/effect-record-v1.json",
+  "title": "Rigorix Effect Record v1",
+  "description": "The effect-commitment artifact: one effect record PLUS the provider evidence that settled it (two sections, one document). The record section mirrors the frozen enterprise wire shape (`EffectRecordResponse`, `interfaces/http/dto.rs`), not the richer engine aggregate; the settlement section mirrors the engine's `ObservedOutcome` plus the raw provider read-back bytes that the digest was computed over. The record alone cannot prove settlement: there is no evidence field on the wire record, and settlement arrives out of band. CEILING: this artifact does NOT bind a record to a signed audit envelope. The record carries no signature and the intent digest is not derivable from the envelope, so authenticity rests on (a) the signed envelope chain and (b) the provider receipt. A verifier makes two honest claims: STRUCTURAL (closed state vocabulary, terminal states carry evidence, non-terminal states carry none, `dispatched` carries a deadline, verdict agrees with the terminal state) and READBACK (re-derive `readback_digest` from the exact provider bytes in `settlement.readback`). It cannot prove that the record was produced by a particular engine.",
+  "type": "object",
+  "required": ["record", "levels"],
+  "properties": {
+    "record": {
+      "$ref": "#/$defs/record"
+    },
+    "settlement": {
+      "$ref": "#/$defs/settlement"
+    },
+    "levels": {
+      "$ref": "#/$defs/levels"
+    }
+  },
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "description": "A dispatched record must carry the store-clock deadline after which it has no live owner (`EffectRecordView.deadline`, set only while `dispatched`).",
+      "if": {
+        "properties": {
+          "record": {
+            "properties": {
+              "state": {
+                "const": "dispatched"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "record": {
+            "properties": {
+              "deadline": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": ["deadline"]
+          }
+        }
+      }
+    },
+    {
+      "description": "A non-terminal record (dispatched / ambiguous) must not carry an observed outcome or a resolver. This is the engine's `Contended` invariant re-checked independently: settlement evidence is only legal on a terminal record.",
+      "if": {
+        "properties": {
+          "record": {
+            "properties": {
+              "state": {
+                "enum": ["dispatched", "ambiguous"]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": ["settlement"]
+        }
+      }
+    },
+    {
+      "description": "A terminal record (committed / not_committed) must carry the evidence that settled it. This is the engine's `EvidenceMissing` invariant re-checked independently: a `committed` claim with no receipt behind it is unrepresentable.",
+      "if": {
+        "properties": {
+          "record": {
+            "properties": {
+              "state": {
+                "enum": ["committed", "not_committed"]
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": ["settlement"]
+      }
+    },
+    {
+      "description": "The verdict must authorise the terminal state it is recorded against (`OutcomeVerdict::terminal_state`).",
+      "if": {
+        "required": ["settlement"],
+        "properties": {
+          "record": {
+            "properties": {
+              "state": {
+                "const": "committed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "settlement": {
+            "properties": {
+              "verdict": {
+                "const": "committed"
+              }
+            },
+            "required": ["verdict"]
+          }
+        }
+      }
+    },
+    {
+      "description": "The verdict must authorise the terminal state it is recorded against (`OutcomeVerdict::terminal_state`).",
+      "if": {
+        "required": ["settlement"],
+        "properties": {
+          "record": {
+            "properties": {
+              "state": {
+                "const": "not_committed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "settlement": {
+            "properties": {
+              "verdict": {
+                "const": "not_committed"
+              }
+            },
+            "required": ["verdict"]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "record": {
+      "type": "object",
+      "description": "The frozen wire record (`EffectRecordResponse`). Field names and nullability are the client's, not a cleaner version of them; `deadline` and `reason` serialize as `null` when absent.",
+      "required": [
+        "id",
+        "intent_key",
+        "dag_id",
+        "node_id",
+        "attempt",
+        "state",
+        "dispatched_by",
+        "deadline",
+        "reason",
+        "created_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "description": "The attempt identity (one record per dispatch attempt)."
+        },
+        "intent_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "`H(dag_id, node_id, intent_digest)` — 64 lowercase hex. Shared identity with the capacity ledger; derived, never chosen (`IntentKey`)."
+        },
+        "dag_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The DAG that proposes the effect."
+        },
+        "node_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The node proposing the effect."
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "0-based attempt index. Diagnostics only; never part of the intent key."
+        },
+        "state": {
+          "type": "string",
+          "enum": ["dispatched", "committed", "not_committed", "ambiguous"],
+          "description": "The four frozen lifecycle words (`EffectState`). `dispatched` and `ambiguous` are non-terminal; `committed` and `not_committed` are terminal for this attempt."
+        },
+        "dispatched_by": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The engine identity that dispatched the attempt."
+        },
+        "deadline": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Store-clock deadline, present while `dispatched`; `null` once the attempt is terminal or ambiguous. Required by this schema when `state` is `dispatched`."
+        },
+        "reason": {
+          "type": ["string", "null"],
+          "maxLength": 512,
+          "description": "Why the record is in its current state (e.g. the ambiguous vocabulary `response_lost`); `null` when there is nothing to explain."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the write-ahead intent was recorded."
+        }
+      },
+      "additionalProperties": false
+    },
+    "settlement": {
+      "type": "object",
+      "description": "Provider evidence that settled the attempt (the engine's `ObservedOutcome`, plus the raw read-back bytes and the optional resolver). Legality is state-dependent: terminal states require it, non-terminal states forbid it.",
+      "required": [
+        "receipt_id",
+        "readback_digest",
+        "observed_at",
+        "source",
+        "verdict"
+      ],
+      "properties": {
+        "receipt_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "description": "The provider receipt identity the evidence came from."
+        },
+        "readback_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "SHA-256 (hex) of the exact provider read-back bytes in `readback` — the SAME value the engine computes (`provider_receipt.rs`: `hex(Sha256::digest(body))`)."
+        },
+        "observed_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the provider's record says the outcome happened (not when it was read)."
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The provider/read-back surface that produced the evidence (the engine's `source`, never the engine's own guess)."
+        },
+        "verdict": {
+          "type": "string",
+          "enum": ["committed", "not_committed"],
+          "description": "What the provider read-back proved (`OutcomeVerdict`). Must agree with the record's terminal state."
+        },
+        "readback": {
+          "type": "string",
+          "description": "The exact provider response bytes, as UTF-8 (provider receipt bodies are JSON, so this is lossless). The readback verifier recomputes `readback_digest` over these bytes. OPTIONAL: when absent, only the structural claim is available; `verify_settlement_evidence` refuses with a distinct error."
+        },
+        "resolver": {
+          "$ref": "#/$defs/resolver"
+        }
+      },
+      "additionalProperties": false
+    },
+    "resolver": {
+      "type": "object",
+      "description": "Who settled an `ambiguous` attempt (`ResolverIdentity`). Only legal on a terminal record; nested inside `settlement` so a non-terminal record cannot carry it.",
+      "required": ["actor", "kind"],
+      "properties": {
+        "actor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "The resolving identity, in the same namespace as `dispatched_by`."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["operator", "reconciler", "break_glass"],
+          "description": "The resolver class (`ResolverKind`)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "levels": {
+      "type": "object",
+      "description": "What the PRODUCING DEPLOYMENT can do, on two independent axes. `durability` says how long the record survives (l1 in-process, l2 shared/durable); `settlement` says whether provider evidence can prove the effect settled (none, l3). These are orthogonal: an in-process ledger with a receipt reader is legitimately `l1` durability + `l3` settlement. Never collapse them into one label — that is the defect #1182, where a deployment with no durable record printed `L3`. These axes describe the deployment, not this record: a `dispatched` record from an L3-capable deployment may say `settlement: l3` while carrying no `settlement` object.",
+      "required": ["durability", "settlement"],
+      "properties": {
+        "durability": {
+          "type": "string",
+          "enum": ["l1", "l2"],
+          "description": "l1 = fences in this process only; l2 = records/fences survive process death through a shared store."
+        },
+        "settlement": {
+          "type": "string",
+          "enum": ["none", "l3"],
+          "description": "none = the deployment can prove not-settled, never settled; l3 = a configured provider read-back can prove settlement. L3 does not require L2."
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "x-verification": {
+    "structural": [
+      "state is one of the four frozen words",
+      "a terminal state carries settlement; a non-terminal state carries none (no outcome, no resolver)",
+      "dispatched carries a non-null deadline",
+      "settlement.verdict agrees with the terminal state",
+      "settlement evidence implies levels.settlement is l3 (a deployment that produced evidence can prove settlement)"
+    ],
+    "readback": "hex(SHA-256(UTF-8 bytes of settlement.readback)) == settlement.readback_digest",
+    "ceiling": "No envelope binding. The record is unsigned and its intent is not derivable from the audit envelope; authenticity rests on the signed envelope chain and the provider receipt, never on this artifact alone."
+  },
+  "x-levels": {
+    "durability": {
+      "l1": "in-process only: after a restart there is no record, no fence, and no sweep",
+      "l2": "shared/durable: records and fences survive process death"
+    },
+    "settlement": {
+      "none": "no provider evidence path; not-settled can be proven, settled cannot",
+      "l3": "a configured provider read-back can prove the effect settled"
+    },
+    "note": "Two independent axes, never a single ladder. l1 + l3 is legitimate (#1182)."
+  }
+}

@@ -77,6 +77,12 @@ pub enum VerifyError {
          (ADR-0001 D3 — the namespace is closed; a server implements a subset)"
     )]
     UndeclaredMethod(String),
+    #[error("effect record invariant violated: {detail}")]
+    EffectInvariant { detail: String },
+    #[error("settlement evidence has no readback bytes to verify")]
+    ReadbackMissing,
+    #[error("readback digest mismatch: expected {expected}, got {got}")]
+    ReadbackDigestMismatch { expected: String, got: String },
 }
 
 pub type VerifyResult<T> = Result<T, VerifyError>;
@@ -548,6 +554,168 @@ pub struct CompactionCheckpoint {
     pub sig: Option<String>,
 }
 
+// ─── Effect commitment (ADR-019 / SDK 0.7.0) ────────────────────────────────
+//
+// Mirrors rigorix-oss `effect_commitment` (state machine, ObservedOutcome) and
+// the frozen enterprise wire record (`EffectRecordResponse`). The artifact is
+// the PAIR — record + the evidence that settled it — because the wire record
+// alone carries no evidence and a `committed` claim with no receipt behind it
+// must not verify.
+
+/// Lifecycle state of a recorded effect (mirrors rigorix-oss `EffectState`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectState {
+    /// Durable intent recorded; the effect has been (or is being) sent.
+    Dispatched,
+    /// Provider evidence proves the effect committed (terminal for this attempt).
+    Committed,
+    /// Provider evidence proves the effect did not commit (terminal for this attempt).
+    NotCommitted,
+    /// The outcome is unknown until a resolver presents provider evidence.
+    /// Deliberately NOT terminal.
+    Ambiguous,
+}
+
+impl EffectState {
+    /// Whether no further transition is legal for this attempt.
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::Committed | Self::NotCommitted)
+    }
+
+    /// The canonical snake_case wire label.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Dispatched => "dispatched",
+            Self::Committed => "committed",
+            Self::NotCommitted => "not_committed",
+            Self::Ambiguous => "ambiguous",
+        }
+    }
+}
+
+impl std::fmt::Display for EffectState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// What a provider read-back proved (mirrors rigorix-oss `OutcomeVerdict`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OutcomeVerdict {
+    Committed,
+    NotCommitted,
+}
+
+impl OutcomeVerdict {
+    /// The terminal state this verdict authorises.
+    pub fn terminal_state(&self) -> EffectState {
+        match self {
+            Self::Committed => EffectState::Committed,
+            Self::NotCommitted => EffectState::NotCommitted,
+        }
+    }
+
+    /// The canonical snake_case wire label.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Committed => "committed",
+            Self::NotCommitted => "not_committed",
+        }
+    }
+}
+
+/// The class of a resolver (mirrors enterprise `ResolverKind`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ResolverKind {
+    Operator,
+    Reconciler,
+    BreakGlass,
+}
+
+/// Who settled an ambiguous attempt (`ResolverIdentity`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResolverIdentity {
+    pub actor: String,
+    pub kind: ResolverKind,
+}
+
+/// The frozen wire record (mirrors enterprise `EffectRecordResponse`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectRecord {
+    pub id: uuid::Uuid,
+    pub intent_key: String,
+    pub dag_id: String,
+    pub node_id: String,
+    pub attempt: u32,
+    pub state: EffectState,
+    pub dispatched_by: String,
+    pub deadline: Option<DateTime<Utc>>,
+    pub reason: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// Provider evidence that settled an attempt (mirrors OSS `ObservedOutcome`),
+/// plus the exact read-back bytes and the optional resolver.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SettlementEvidence {
+    pub receipt_id: String,
+    pub readback_digest: String,
+    pub observed_at: DateTime<Utc>,
+    pub source: String,
+    pub verdict: OutcomeVerdict,
+    /// Exact provider response bytes (UTF-8). Optional: absent means only the
+    /// structural claim is available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub readback: Option<String>,
+    /// Present only when an `ambiguous` attempt was settled by a resolver.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolver: Option<ResolverIdentity>,
+}
+
+/// Durability axis: how long the record survives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Durability {
+    /// In-process only: after a restart there is no record, no fence, no sweep.
+    L1,
+    /// Shared/durable: records and fences survive process death.
+    L2,
+}
+
+/// Settlement axis: whether provider evidence can prove the effect settled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SettlementLevel {
+    /// The deployment can prove not-settled, never settled.
+    None,
+    /// A configured provider read-back can prove settlement.
+    L3,
+}
+
+/// What the producing deployment can do, on two independent axes.
+///
+/// `l1` durability + `l3` settlement is legitimate (an in-process ledger with a
+/// receipt reader). Never collapse the axes into one label (#1182).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClaimLevels {
+    pub durability: Durability,
+    pub settlement: SettlementLevel,
+}
+
+/// The effect-commitment artifact: record + settlement evidence + levels.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EffectRecordArtifact {
+    pub record: EffectRecord,
+    /// Legality is state-dependent: terminal states require it, non-terminal
+    /// states forbid it (`verify_effect_record`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub settlement: Option<SettlementEvidence>,
+    pub levels: ClaimLevels,
+}
+
 /// Canonical signing bytes for a ledger receipt (`sig` nulled).
 pub fn ledger_receipt_signing_bytes(receipt: &LedgerReceipt) -> VerifyResult<Vec<u8>> {
     let mut unsigned = receipt.clone();
@@ -623,6 +791,98 @@ pub fn verify_compaction_checkpoint(
         &sig,
         public_key_hex,
     )
+}
+
+/// Structural verification of an effect-commitment artifact.
+///
+/// Independently re-checks what the engine's `EffectRecord::hydrate` enforces:
+///
+/// - a terminal state carries settlement evidence (`EvidenceMissing`);
+/// - a non-terminal state carries none — no outcome, no resolver (`Contended`);
+/// - `dispatched` carries a deadline;
+/// - the verdict authorises the record's terminal state;
+/// - evidence implies the deployment's settlement level is `l3`.
+///
+/// It does NOT bind the record to a signed envelope: the record is unsigned and
+/// its intent is not derivable from the envelope (see the schema ceiling).
+pub fn verify_effect_record(artifact: &EffectRecordArtifact) -> VerifyResult<()> {
+    let record = &artifact.record;
+
+    if record.state == EffectState::Dispatched && record.deadline.is_none() {
+        return Err(VerifyError::EffectInvariant {
+            detail: "dispatched record must carry a deadline".to_string(),
+        });
+    }
+
+    match (record.state.is_terminal(), artifact.settlement.as_ref()) {
+        (true, None) => {
+            return Err(VerifyError::EffectInvariant {
+                detail: format!(
+                    "terminal state `{}` must carry settlement evidence (EvidenceMissing)",
+                    record.state
+                ),
+            });
+        }
+        (false, Some(_)) => {
+            return Err(VerifyError::EffectInvariant {
+                detail: format!(
+                    "non-terminal state `{}` must not carry settlement evidence (Contended)",
+                    record.state
+                ),
+            });
+        }
+        _ => {}
+    }
+
+    if let Some(settlement) = artifact.settlement.as_ref() {
+        let authorised = settlement.verdict.terminal_state();
+        if authorised != record.state {
+            return Err(VerifyError::EffectInvariant {
+                detail: format!(
+                    "settlement verdict `{}` authorises `{}`, but the record is `{}`",
+                    settlement.verdict.as_str(),
+                    authorised,
+                    record.state
+                ),
+            });
+        }
+        if artifact.levels.settlement != SettlementLevel::L3 {
+            return Err(VerifyError::EffectInvariant {
+                detail: "settlement evidence is present but levels.settlement is `none`"
+                    .to_string(),
+            });
+        }
+    }
+
+    Ok(())
+}
+
+/// Readback verification: re-derive `readback_digest` from the exact provider
+/// bytes carried in `settlement.readback` (`hex(SHA-256(bytes))`).
+///
+/// This is the level that makes "settled" a claim rather than a field: the
+/// provider is the authority for the effect, the record is not. A missing body
+/// is refused rather than silently downgraded to the structural claim.
+pub fn verify_settlement_evidence(artifact: &EffectRecordArtifact) -> VerifyResult<()> {
+    verify_effect_record(artifact)?;
+    let settlement = artifact
+        .settlement
+        .as_ref()
+        .ok_or_else(|| VerifyError::EffectInvariant {
+            detail: "no settlement evidence to verify".to_string(),
+        })?;
+    let readback = settlement
+        .readback
+        .as_ref()
+        .ok_or(VerifyError::ReadbackMissing)?;
+    let got = hex::encode(Sha256::digest(readback.as_bytes()));
+    if got != settlement.readback_digest {
+        return Err(VerifyError::ReadbackDigestMismatch {
+            expected: settlement.readback_digest.clone(),
+            got,
+        });
+    }
+    Ok(())
 }
 
 /// Compute the HMAC-SHA256 hex signature over the canonical form.
@@ -1336,6 +1596,7 @@ mod tests {
             "api/history-slice.json",
             "api/compaction-checkpoint.json",
             "api/authority-fact-bundle.json",
+            "api/effect-record.json",
         ] {
             let text = schema_text(name).unwrap_or_else(|e| panic!("{name}: {e}"));
             let schema: serde_json::Value =
@@ -1808,6 +2069,157 @@ mod tests {
         let mut forged = receipt.clone();
         forged.envelope_hash = "0".repeat(64);
         assert!(verify_ledger_receipt(&forged, &anchor_public_hex()).is_err());
+    }
+
+    // ─── Effect commitment artifact (ADR-019 / SDK 0.7.0) ────────────────
+    //
+    // Contract-first fixtures: the engine does not emit this artifact yet, so
+    // the read-back bodies are fixed inputs and the digests are recomputed by
+    // `verify_settlement_evidence` exactly as the engine computes them.
+
+    fn read_effect(name: &str) -> (String, EffectRecordArtifact) {
+        let text = fixture_text(&format!("effect/{name}"));
+        let artifact: EffectRecordArtifact =
+            serde_json::from_str(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
+        (text, artifact)
+    }
+
+    /// Every accepted fixture validates against the frozen schema and passes
+    /// both verification levels (readback only when the bytes are present).
+    #[test]
+    fn effect_record_fixtures_verify() {
+        let mut found = 0;
+        for name in fixture_json_names("effect") {
+            if name.starts_with("rejected-") {
+                continue;
+            }
+            let (text, artifact) = read_effect(&name);
+            validate_schema_file("api/effect-record.json", &text)
+                .unwrap_or_else(|e| panic!("{name}: schema: {e}"));
+            verify_effect_record(&artifact).unwrap_or_else(|e| panic!("{name}: structural: {e}"));
+            if artifact
+                .settlement
+                .as_ref()
+                .is_some_and(|s| s.readback.is_some())
+            {
+                verify_settlement_evidence(&artifact)
+                    .unwrap_or_else(|e| panic!("{name}: readback: {e}"));
+            }
+            found += 1;
+        }
+        assert!(
+            found >= 5,
+            "expected ≥5 accepted effect fixtures, found {found}"
+        );
+    }
+
+    /// The two axes are independent: `l1` durability + `l3` settlement is legal
+    /// and must round-trip. This is the #1182 regression in schema form.
+    #[test]
+    fn effect_record_keeps_durability_and_settlement_orthogonal() {
+        let (_, artifact) = read_effect("committed-l1-l3.json");
+        assert_eq!(artifact.levels.durability, Durability::L1);
+        assert_eq!(artifact.levels.settlement, SettlementLevel::L3);
+        verify_settlement_evidence(&artifact).expect("valid l1 + l3 artifact");
+    }
+
+    /// A terminal record without evidence is rejected by the schema and by the
+    /// structural verifier — `committed` is not a field a caller can assert.
+    #[test]
+    fn effect_record_rejects_terminal_without_evidence() {
+        let (text, artifact) = read_effect("rejected-terminal-without-evidence.json");
+        assert!(
+            validate_schema_file("api/effect-record.json", &text).is_err(),
+            "schema must require settlement on a terminal record"
+        );
+        let err = verify_effect_record(&artifact).expect_err("structural must reject");
+        assert!(
+            matches!(err, VerifyError::EffectInvariant { .. }),
+            "{err:?}"
+        );
+    }
+
+    /// A dispatched record carrying an outcome (or resolver) is rejected.
+    #[test]
+    fn effect_record_rejects_nonterminal_with_settlement() {
+        let (text, artifact) = read_effect("rejected-nonterminal-with-settlement.json");
+        assert!(
+            validate_schema_file("api/effect-record.json", &text).is_err(),
+            "schema must forbid settlement on a non-terminal record"
+        );
+        let err = verify_effect_record(&artifact).expect_err("structural must reject");
+        assert!(
+            matches!(err, VerifyError::EffectInvariant { .. }),
+            "{err:?}"
+        );
+    }
+
+    /// `dispatched` without a deadline is rejected: without one, nothing can
+    /// decide when the attempt has no live owner.
+    #[test]
+    fn effect_record_rejects_dispatched_without_deadline() {
+        let (text, artifact) = read_effect("rejected-dispatched-without-deadline.json");
+        assert!(
+            validate_schema_file("api/effect-record.json", &text).is_err(),
+            "schema must require a deadline on dispatched"
+        );
+        let err = verify_effect_record(&artifact).expect_err("structural must reject");
+        assert!(
+            matches!(err, VerifyError::EffectInvariant { .. }),
+            "{err:?}"
+        );
+    }
+
+    /// The verdict and the terminal state must agree.
+    #[test]
+    fn effect_record_rejects_verdict_mismatch() {
+        let (text, artifact) = read_effect("rejected-verdict-mismatch.json");
+        assert!(
+            validate_schema_file("api/effect-record.json", &text).is_err(),
+            "schema must couple verdict to the terminal state"
+        );
+        let err = verify_effect_record(&artifact).expect_err("structural must reject");
+        assert!(
+            matches!(err, VerifyError::EffectInvariant { .. }),
+            "{err:?}"
+        );
+    }
+
+    /// A receipt whose digest does not match the carried readback bytes fails
+    /// the readback level even though the schema and structure are valid.
+    #[test]
+    fn effect_record_rejects_readback_mismatch() {
+        let (text, artifact) = read_effect("rejected-readback-mismatch.json");
+        validate_schema_file("api/effect-record.json", &text).expect("shape is valid");
+        verify_effect_record(&artifact).expect("structure is valid");
+        let err = verify_settlement_evidence(&artifact).expect_err("digest must not match");
+        assert!(
+            matches!(err, VerifyError::ReadbackDigestMismatch { .. }),
+            "{err:?}"
+        );
+    }
+
+    /// Without the raw bytes, the readback claim is refused — not silently
+    /// downgraded to "structurally fine".
+    #[test]
+    fn effect_record_requires_readback_bytes_for_the_readback_claim() {
+        let (text, artifact) = read_effect("rejected-readback-missing.json");
+        validate_schema_file("api/effect-record.json", &text).expect("shape is valid");
+        verify_effect_record(&artifact).expect("structure is valid");
+        let err = verify_settlement_evidence(&artifact).expect_err("no bytes to verify");
+        assert!(matches!(err, VerifyError::ReadbackMissing), "{err:?}");
+    }
+
+    /// Evidence is only honest when the deployment's settlement axis says it
+    /// can prove settlement.
+    #[test]
+    fn effect_record_rejects_evidence_with_none_settlement_level() {
+        let (_, artifact) = read_effect("rejected-settlement-with-none-level.json");
+        let err = verify_effect_record(&artifact).expect_err("levels contradict evidence");
+        assert!(
+            matches!(err, VerifyError::EffectInvariant { .. }),
+            "{err:?}"
+        );
     }
 
     /// Regenerates the three anchor-artifact fixtures. The envelope chain

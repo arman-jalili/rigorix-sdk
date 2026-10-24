@@ -1,0 +1,26 @@
+{
+  "record": {
+    "id": "0191f3a0-0000-7000-8000-000000000002",
+    "intent_key": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "dag_id": "dag-checkout-1",
+    "node_id": "node-charge-2",
+    "attempt": 0,
+    "state": "not_committed",
+    "dispatched_by": "engine-1",
+    "deadline": null,
+    "reason": null,
+    "created_at": "2026-10-24T12:04:00Z"
+  },
+  "settlement": {
+    "receipt_id": "prov-receipt-0002",
+    "readback_digest": "9e5080b6470de0b8c38f31e954e1d4713b46c19f4b9df5c9f938c7bd0a2707b2",
+    "observed_at": "2026-10-24T12:05:00Z",
+    "source": "provider-a",
+    "verdict": "not_committed",
+    "readback": "{\"receipt_id\":\"prov-receipt-0002\",\"status\":\"declined\",\"observed_at\":\"2026-10-24T12:05:00Z\"}"
+  },
+  "levels": {
+    "durability": "l2",
+    "settlement": "l3"
+  }
+}
