@@ -1,6 +1,7 @@
 # Releasing the SDK
 
-Two distribution channels share one version (`0.7.0`):
+The SDK ships one version, taken from `rust/Cargo.toml` `[workspace.package] version`.
+There are five publication channels; `RELEASING.md` at the repository root lists them all.
 
 - **Rust crates (crates.io)** — `rigorix-schemas`, `rigorix-verifier`
   (`rigorix-client` is a typed protocol client, independent cadence). Published
@@ -17,11 +18,14 @@ Two distribution channels share one version (`0.7.0`):
 
 `rust/Cargo.toml` `[workspace.package] version` is the single source for every
 workspace member (`version.workspace = true`). The **verifier** pins
-`rigorix-schemas` to the **same exact version** (`=0.7.0`) in its manifest, so a
-schemas patch cannot change what an already-published verifier accepts without a
-verifier release (#55); `rigorix-schemas` must be published **before** the
-verifier. The client follows the compatible range (`0.7.0`) because it is a
-protocol client, not a verification trust boundary.
+`rigorix-schemas` to the **exact** workspace version — `=` in the manifest, and no
+number written here, because a literal in prose goes stale on the next release (that
+is how #55's own fix was re-broken one bump later) — so a schemas patch cannot change
+what an already-published verifier accepts without a verifier release;
+`rigorix-schemas` must be published **before** the verifier, and the exact pin is what
+makes Cargo enforce that order. The client follows the compatible range because it is
+a protocol client, not a verification trust boundary. `validate-channel-versions.sh`
+checks every one of those pins against the workspace version.
 
 ## 0.8.0 — the schema identity is `rigorix.eu` (breaking for $id consumers)
 
