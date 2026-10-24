@@ -1,8 +1,25 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-10-24 (updated)
-**Open issues:** 1 (#52) — #43/#44/#47/#50 merged
+**Generated:** 2026-10-25 (updated)
+**Open issues:** 2 (#54, #55) — #43/#44/#47/#50/#52 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
+
+---
+
+## Series: verifier integrity (2026-10-25)
+
+| # | ID | Priority | Component | Branch | Blocked by |
+|---|----|----------|-----------|--------|-----------|
+| 54 | rejected fixtures pinned to tests | high | `rust/rigorix-verifier` tests | `feature/verifier-integrity-54-55` | — |
+| 55 | exact `rigorix-schemas` pin | high | `rust/rigorix-verifier/Cargo.toml`, `rust/RELEASING.md` | same | — |
+
+### Group: verifier integrity (component batch, 2 issues) — actionable
+
+Both issues are the same class: a verification claim that is not mechanically
+pinned. #54 pins the rejected-fixture set to the tests; #55 pins the schema
+dependency so a patch cannot change acceptance under an unchanged verifier.
+
+**Order:** #54 (test table + set equality) → #55 (manifest pin + doc correction).
 
 ---
 
