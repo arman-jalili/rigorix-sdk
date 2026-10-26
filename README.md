@@ -8,7 +8,7 @@ a standalone repo whose job is to make the Rigorix boundary speakable from any s
 | Path | Purpose |
 |------|---------|
 | `schemas/` | **Single source of truth** for Rigorix contracts: envelope v2, policy/config model, identity claim format, native `rigorix.*` API method catalog. Drift-tested against rigorix-oss (CI). |
-| `rust/` | `rigorix-schemas` + `rigorix-verifier` (published **0.2.0**) + `rigorix-client` — typed JSON-RPC client + envelope/chain/anchor verifier (protocol-only, **no** `rigorix-engine` dependency) |
+| `rust/` | `rigorix-schemas` + `rigorix-verifier` (published **0.8.0**) + `rigorix-client` — typed JSON-RPC client + envelope/chain/anchor verifier (protocol-only, **no** `rigorix-engine` dependency) |
 | `python/` · `typescript/` · `java/` · `go/` | The same verifier + catalog client, byte-exact on the shared fixtures (`rigorix-verifier` on PyPI/npm; Maven `eu.rigorix:rigorix-verifier`; Go module) |
 | `docs/` | Strategy freezes + contract-sync design (this repo is also the planning home for server mode) |
 
@@ -42,7 +42,7 @@ rigorix-governed once v0 lands (dogfood demo #2).
 - [x] ADR-017 / consequence-gating §4.3 — `rigorix.audit.authorityFacts` + `api/authority-fact-bundle.json` (SDK #44)
 - [x] SSE push channel — ADR-0002 + `events.json` + fixtures
 - [x] ADR-016 integrity contract — `api/history-slice.json`, `api/ledger-receipt.json`, `api/compaction-checkpoint.json`
-- [x] `rust/` **0.2.0** (`rigorix-schemas`, `rigorix-verifier`, `rigorix-client`) — published to crates.io
+- [x] `rust/` **0.8.0** (`rigorix-schemas`, `rigorix-verifier`, `rigorix-client`) — published to crates.io and npm; PyPI is **0.6.0** and cannot yet verify effect-commitment evidence
 - [x] Python / TypeScript / Java / Go verifiers + catalog clients — fixtures green in each language
 
 *Last verified: 2026-09-29 against `rigorix-oss@f94718d7` + `rigorix-enterprise@13463c5`.*
