@@ -202,6 +202,13 @@
       },
       "description": "Post-execution scope violations \u2014 non-blocking evidence (ADR-011 R5). Omitted when empty."
     },
+    "scope_check": {
+      "oneOf": [
+        { "enum": ["checked", "not_declared", "unavailable"] },
+        { "type": "null" }
+      ],
+      "description": "Whether the R5 effect-scope check ran, separate from what it found (#1189): checked | not_declared | unavailable. Omitted on legacy envelopes (no claim either way). Declared struct position: after scope_violations, before sequence_policy_findings."
+    },
     "sequence_policy_findings": {
       "type": "array",
       "items": {

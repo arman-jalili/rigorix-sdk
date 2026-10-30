@@ -157,6 +157,13 @@ pub struct AuditEnvelope {
     pub approval_events: Vec<ApprovalRecordRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scope_violations: Vec<ScopeViolationRef>,
+    /// #1189: whether the R5 scope check actually ran. `None` on legacy
+    /// envelopes. MUST stay in the engine's struct position (after
+    /// `scope_violations`, before `sequence_policy_findings`) or canonical
+    /// bytes diverge; 0.8.0 omitted the field, which made every envelope
+    /// carrying it fail verification (#1222).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scope_check: Option<ScopeCheckStatus>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sequence_policy_findings: Vec<SequencePolicyFindingRef>,
     /// R9/ADR-015 operator step-requirement findings. MUST stay after
@@ -169,6 +176,15 @@ pub struct AuditEnvelope {
     pub precondition_findings: Vec<PreconditionFindingRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_context_ref: Option<String>,
+}
+
+/// Whether the R5 effect-scope check ran, separate from what it found (#1189).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScopeCheckStatus {
+    Checked,
+    NotDeclared,
+    Unavailable,
 }
 
 /// ADR-016: which integrity regime produced an envelope's evidence.
@@ -2421,5 +2437,31 @@ mod tests {
     fn semver_ok(s: &str) -> bool {
         let parts: Vec<&str> = s.split('.').collect();
         parts.len() == 3 && parts.iter().all(|p| p.parse::<u64>().is_ok())
+    }
+
+    /// #1222: `scope_check` is part of the envelope dialect. Unknown fields are
+    /// dropped on re-serialization, so a verifier that lacks the field produces
+    /// different canonical bytes and rejects a correctly signed envelope.
+    #[test]
+    fn scope_check_survives_canonicalization() {
+        let raw = r#"{
+            "execution_id": "8c1d5eac-8935-4960-82cf-199df61d2539",
+            "timestamp": "2026-10-30T12:00:00Z",
+            "template_id": "t",
+            "planning_hash": "h",
+            "total_tokens": 0,
+            "duration_ms": 0,
+            "events": [],
+            "signature": null,
+            "evidence_degraded": false,
+            "scope_check": "checked"
+        }"#;
+        let envelope: AuditEnvelope = serde_json::from_str(raw).expect("parse");
+        assert_eq!(envelope.scope_check, Some(ScopeCheckStatus::Checked));
+        let canonical = String::from_utf8(canonical_bytes(raw).expect("canonical")).expect("utf8");
+        assert!(
+            canonical.contains(r#""scope_check":"checked""#),
+            "the field must be in the signed bytes: {canonical}"
+        );
     }
 }
