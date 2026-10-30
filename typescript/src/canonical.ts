@@ -27,6 +27,7 @@ const SKIP_NONE = new Set([
   "history_policy",
   "anchor_head",
   "decision_context_ref",
+  "scope_check",
   "payload",
   "check_digest",
   "authority_digest",

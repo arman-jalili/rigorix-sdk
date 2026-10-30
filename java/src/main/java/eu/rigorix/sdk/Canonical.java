@@ -37,7 +37,7 @@ public final class Canonical {
     private static final Set<String> SKIP_NONE = Set.of(
             "identity", "effect_key", "producer_id", "sequence", "prev_hash",
             "history_integrity", "history_policy", "anchor_head",
-            "decision_context_ref", "payload", "sig",
+            "decision_context_ref", "scope_check", "payload", "sig",
             "check_digest", "authority_digest", "check_writable", "attribution");
 
     private static final Set<String> SKIP_EMPTY = Set.of(

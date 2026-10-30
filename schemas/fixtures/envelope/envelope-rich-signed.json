@@ -1,6 +1,6 @@
 {
-  "execution_id": "fea81e17-ddd6-49ec-bec5-aab5eae3ae3a",
-  "timestamp": "2026-09-08T10:53:34.275508404Z",
+  "execution_id": "24993157-bac4-4431-a563-6d2d41c40d27",
+  "timestamp": "2026-10-30T22:03:26.871048Z",
   "template_id": "conference-registration",
   "planning_hash": "274f5bcc379aac58d1396434ab45ae48941977de9601ec608d84a1ebe47c88b1",
   "source": "rigorix_action",
@@ -11,7 +11,7 @@
     "issuer": "https://idp.example.com",
     "source": "idp_token",
     "authority": "admin",
-    "expires_at": "2026-09-08T11:23:34.275414508Z"
+    "expires_at": "2026-10-30T22:33:26.870848Z"
   },
   "total_tokens": 3200,
   "duration_ms": 48200,
@@ -27,28 +27,28 @@
     {
       "event_type": "approval_recorded",
       "summary": "Approval recorded: risky_step by user@org",
-      "occurred_at": "2026-09-08T10:53:34.275417453Z",
-      "correlation_id": "0ccda49b-7fcd-4b8f-9b54-7b69582a047d",
+      "occurred_at": "2026-10-30T22:03:26.870861Z",
+      "correlation_id": "a57ccb18-edf1-413a-b09b-c2a1d3fb9b30",
       "status": "Success",
       "payload": {
         "approver_id": "user@org",
         "authority": "role:operator",
-        "decided_at": "2026-09-08T10:53:34.275436358+00:00",
+        "decided_at": "2026-10-30T22:03:26.870877+00:00",
         "decision_context_ref": "deploy to prod",
         "intent_hash": "abc123",
-        "node_id": "f4e8de38-9336-409d-827d-b2eaecedc7f0",
+        "node_id": "8044cbba-9b15-459d-b49e-f0869e0788e9",
         "step_name": "risky_step"
       }
     },
     {
       "event_type": "scope_violation_recorded",
       "summary": "Effects outside declared scope",
-      "occurred_at": "2026-09-08T10:53:34.275449994Z",
-      "correlation_id": "b950893c-325b-408a-a076-18e3e29082c3",
+      "occurred_at": "2026-10-30T22:03:26.870880Z",
+      "correlation_id": "ccfed58a-3e2a-4b5a-9a17-52c4bc1441dc",
       "status": "Failure",
       "payload": {
-        "detected_at": "2026-09-08T10:53:34.275455865+00:00",
-        "node_id": "cf04f156-7083-4344-9ce2-1be653e9793c",
+        "detected_at": "2026-10-30T22:03:26.870884+00:00",
+        "node_id": "253a8a43-f5cf-4384-abbb-d613f2decb75",
         "out_of_scope": [
           "src/injected.rs"
         ],
@@ -58,7 +58,7 @@
     {
       "event_type": "sequence_rule_matched",
       "summary": "remove-then-reassign matched",
-      "occurred_at": "2026-09-08T10:53:34.275462187Z",
+      "occurred_at": "2026-10-30T22:03:26.870885Z",
       "correlation_id": null,
       "status": "Skipped",
       "payload": {
@@ -70,6 +70,16 @@
         ],
         "rule_id": "no-remove-then-reassign",
         "summary": "step 3 promoted for human approval"
+      }
+    },
+    {
+      "event_type": "effect_scope_checked",
+      "summary": "effect scope checked",
+      "occurred_at": "2026-10-30T22:03:26.870898Z",
+      "correlation_id": null,
+      "status": "Success",
+      "payload": {
+        "status": "checked"
       }
     }
   ],
@@ -94,28 +104,30 @@
       "duration_ms": 1200
     }
   },
-  "signature": "02ff230719633a6d959743ac65a7982e7c69bdc53b70b8502d22c722b57b08a3",
+  "signature": "339aa47f28800e007b6cdd047a9618e63e7785cf68cc96f60afe0a14b78c07d2",
   "evidence_degraded": false,
+  "history_integrity": "local_unanchored",
   "approval_events": [
     {
-      "node_id": "f4e8de38-9336-409d-827d-b2eaecedc7f0",
+      "node_id": "8044cbba-9b15-459d-b49e-f0869e0788e9",
       "step_name": "risky_step",
       "intent_hash": "abc123",
       "approver_id": "user@org",
       "authority": "role:operator",
-      "decided_at": "2026-09-08T10:53:34.275436358Z"
+      "decided_at": "2026-10-30T22:03:26.870877Z"
     }
   ],
   "scope_violations": [
     {
-      "node_id": "cf04f156-7083-4344-9ce2-1be653e9793c",
+      "node_id": "253a8a43-f5cf-4384-abbb-d613f2decb75",
       "step_name": "run_command",
       "out_of_scope": [
         "src/injected.rs"
       ],
-      "detected_at": "2026-09-08T10:53:34.275455865Z"
+      "detected_at": "2026-10-30T22:03:26.870884Z"
     }
   ],
+  "scope_check": "checked",
   "sequence_policy_findings": [
     {
       "rule_id": "no-remove-then-reassign",
