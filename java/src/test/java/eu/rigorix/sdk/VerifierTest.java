@@ -98,4 +98,14 @@ class VerifierTest {
         assertFalse(legacy.contains("precondition_findings"));
         Envelope.verifySignature(legacy, KEY);
     }
+
+    @Test
+    void scopeCheckFixtureVerifies() throws Exception {
+        String json = Corpus.fixture("envelope/envelope-rich-signed.json");
+        JsonNode node = Canonical.MAPPER.readTree(json);
+        assertEquals("checked", node.get("scope_check").asText());
+        Envelope.verifySignature(json, KEY);
+        Envelope.validateEnvelope(json);
+    }
+
 }

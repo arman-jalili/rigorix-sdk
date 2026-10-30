@@ -134,3 +134,10 @@ test("precondition findings fixture verifies (ADR-017)", () => {
   assert.ok(!minimalText.includes("precondition_findings"));
   verifySignature(minimalText, KEY);
 });
+
+test("scope_check fixture verifies", () => {
+  const path = join(schemasRoot(), "fixtures", "envelope", "envelope-rich-signed.json");
+  const text = readFileSync(path, "utf8");
+  assert.equal(JSON.parse(text).scope_check, "checked");
+  verifySignature(text, KEY);
+});

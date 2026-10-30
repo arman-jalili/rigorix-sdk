@@ -153,3 +153,12 @@ def test_precondition_findings_fixture():
     minimal = next(p for p in _envelope_paths() if "minimal" in p.name)
     assert "precondition_findings" not in json.loads(minimal.read_text())
     rv.verify_signature(minimal.read_text(), FIXTURE_KEY)
+
+
+def test_scope_check_fixture_verifies_in_every_language():
+    """#1222 / rigorix-sdk#57: the shared rich fixture carries scope_check."""
+    path = corpus.schemas_root() / "fixtures" / "envelope" / "envelope-rich-signed.json"
+    text = path.read_text(encoding="utf-8")
+    data = json.loads(text)
+    assert data["scope_check"] == "checked"
+    rv.verify_signature(text, FIXTURE_KEY)
