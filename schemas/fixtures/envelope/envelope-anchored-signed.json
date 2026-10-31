@@ -94,7 +94,7 @@
       "duration_ms": 1200
     }
   },
-  "signature": "c946f1d582ea0075cf024aa8c1c803c5bba815184a895553a32d98db7d9ed3f9",
+  "signature": "e29916f934fc5f5c58f731da9e6570eb35ee8c31d6f0255d5400456399917a62",
   "evidence_degraded": false,
   "history_integrity": "anchored",
   "anchor_head": "3f2a9c1e7b4d5f6081a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
@@ -103,6 +103,7 @@
       "node_id": "5a03141a-2c2f-45b6-bd6b-44053b23fa17",
       "step_name": "risky_step",
       "intent_hash": "abc123",
+      "intent_hash_provenance": "derived",
       "approver_id": "user@org",
       "authority": "role:operator",
       "decided_at": "2026-09-25T17:34:17.059128Z"

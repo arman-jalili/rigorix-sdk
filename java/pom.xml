@@ -6,7 +6,7 @@
 
   <groupId>eu.rigorix</groupId>
   <artifactId>rigorix-verifier</artifactId>
-  <version>0.8.1</version>
+  <version>0.9.0</version>
   <packaging>jar</packaging>
   <name>rigorix-verifier</name>
   <description>Protocol-only verification of Rigorix audit envelopes and ADR-016 anchor artifacts (HMAC, JSON Schema, chains, Ed25519).</description>

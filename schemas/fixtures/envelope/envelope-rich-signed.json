@@ -1,6 +1,6 @@
 {
-  "execution_id": "24993157-bac4-4431-a563-6d2d41c40d27",
-  "timestamp": "2026-10-30T22:03:26.871048Z",
+  "execution_id": "46a110aa-6101-4c2b-9959-b66881e971f1",
+  "timestamp": "2026-10-31T09:43:39.951254Z",
   "template_id": "conference-registration",
   "planning_hash": "274f5bcc379aac58d1396434ab45ae48941977de9601ec608d84a1ebe47c88b1",
   "source": "rigorix_action",
@@ -11,7 +11,7 @@
     "issuer": "https://idp.example.com",
     "source": "idp_token",
     "authority": "admin",
-    "expires_at": "2026-10-30T22:33:26.870848Z"
+    "expires_at": "2026-10-31T10:13:39.951081Z"
   },
   "total_tokens": 3200,
   "duration_ms": 48200,
@@ -27,28 +27,28 @@
     {
       "event_type": "approval_recorded",
       "summary": "Approval recorded: risky_step by user@org",
-      "occurred_at": "2026-10-30T22:03:26.870861Z",
-      "correlation_id": "a57ccb18-edf1-413a-b09b-c2a1d3fb9b30",
+      "occurred_at": "2026-10-31T09:43:39.951093Z",
+      "correlation_id": "c15491de-942b-4e02-9874-51483bbfa1c2",
       "status": "Success",
       "payload": {
         "approver_id": "user@org",
         "authority": "role:operator",
-        "decided_at": "2026-10-30T22:03:26.870877+00:00",
+        "decided_at": "2026-10-31T09:43:39.951110+00:00",
         "decision_context_ref": "deploy to prod",
         "intent_hash": "abc123",
-        "node_id": "8044cbba-9b15-459d-b49e-f0869e0788e9",
+        "node_id": "667dadca-d6d8-4e90-90f9-f461beda3828",
         "step_name": "risky_step"
       }
     },
     {
       "event_type": "scope_violation_recorded",
       "summary": "Effects outside declared scope",
-      "occurred_at": "2026-10-30T22:03:26.870880Z",
-      "correlation_id": "ccfed58a-3e2a-4b5a-9a17-52c4bc1441dc",
+      "occurred_at": "2026-10-31T09:43:39.951112Z",
+      "correlation_id": "4fa2714f-1484-435d-aac0-69f089d1d67c",
       "status": "Failure",
       "payload": {
-        "detected_at": "2026-10-30T22:03:26.870884+00:00",
-        "node_id": "253a8a43-f5cf-4384-abbb-d613f2decb75",
+        "detected_at": "2026-10-31T09:43:39.951116+00:00",
+        "node_id": "86d887ad-095f-4712-92b6-cab6e0332ea6",
         "out_of_scope": [
           "src/injected.rs"
         ],
@@ -58,7 +58,7 @@
     {
       "event_type": "sequence_rule_matched",
       "summary": "remove-then-reassign matched",
-      "occurred_at": "2026-10-30T22:03:26.870885Z",
+      "occurred_at": "2026-10-31T09:43:39.951118Z",
       "correlation_id": null,
       "status": "Skipped",
       "payload": {
@@ -75,7 +75,7 @@
     {
       "event_type": "effect_scope_checked",
       "summary": "effect scope checked",
-      "occurred_at": "2026-10-30T22:03:26.870898Z",
+      "occurred_at": "2026-10-31T09:43:39.951130Z",
       "correlation_id": null,
       "status": "Success",
       "payload": {
@@ -104,27 +104,28 @@
       "duration_ms": 1200
     }
   },
-  "signature": "339aa47f28800e007b6cdd047a9618e63e7785cf68cc96f60afe0a14b78c07d2",
+  "signature": "9d49dae8ac05895727cc24beb2b8bfcb5902f819da29b70d380e420002d1c9bc",
   "evidence_degraded": false,
   "history_integrity": "local_unanchored",
   "approval_events": [
     {
-      "node_id": "8044cbba-9b15-459d-b49e-f0869e0788e9",
+      "node_id": "667dadca-d6d8-4e90-90f9-f461beda3828",
       "step_name": "risky_step",
       "intent_hash": "abc123",
+      "intent_hash_provenance": "derived",
       "approver_id": "user@org",
       "authority": "role:operator",
-      "decided_at": "2026-10-30T22:03:26.870877Z"
+      "decided_at": "2026-10-31T09:43:39.951110Z"
     }
   ],
   "scope_violations": [
     {
-      "node_id": "253a8a43-f5cf-4384-abbb-d613f2decb75",
+      "node_id": "86d887ad-095f-4712-92b6-cab6e0332ea6",
       "step_name": "run_command",
       "out_of_scope": [
         "src/injected.rs"
       ],
-      "detected_at": "2026-10-30T22:03:26.870884Z"
+      "detected_at": "2026-10-31T09:43:39.951116Z"
     }
   ],
   "scope_check": "checked",

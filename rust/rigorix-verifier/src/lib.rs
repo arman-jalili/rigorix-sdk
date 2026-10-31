@@ -247,11 +247,24 @@ pub enum EventStatus {
     Cancelled,
 }
 
+/// How an approval's `intent_hash` came to exist (#1243).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IntentHashProvenance {
+    /// The re-deriving engine computed it from the sealed graph (RS-011).
+    Derived,
+    /// A caller asserted it; the attestation covers who said it, not the graph.
+    Asserted,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalRecordRef {
     pub node_id: uuid::Uuid,
     pub step_name: String,
     pub intent_hash: String,
+    /// Required: a verifier can distinguish RS-011 binding from RS-013
+    /// attribution. The field sits after `intent_hash` in the signed bytes.
+    pub intent_hash_provenance: IntentHashProvenance,
     pub approver_id: String,
     pub authority: Option<String>,
     pub decided_at: DateTime<Utc>,
@@ -1321,6 +1334,52 @@ mod tests {
         assert!(
             found >= 3,
             "expected ≥3 committed engine fixtures, found {found}"
+        );
+    }
+
+    /// #1243: an approval ref states whether its intent hash was derived by
+    /// the engine or asserted by a caller. The field is required and sits in
+    /// the signed bytes immediately after `intent_hash`.
+    #[test]
+    fn approval_ref_provenance_is_required_and_signed() {
+        let json = fixture_text("envelope/envelope-rich-signed.json");
+        let envelope: AuditEnvelope = serde_json::from_str(&json).expect("fixture parses");
+        let approval = envelope
+            .approval_events
+            .first()
+            .expect("rich fixture carries an approval");
+        assert_eq!(
+            approval.intent_hash_provenance,
+            IntentHashProvenance::Derived,
+            "the OSS engine emits derived intent hashes"
+        );
+
+        let mut value: serde_json::Value = serde_json::from_str(&json).expect("json");
+        let refs = value["approval_events"]
+            .as_array_mut()
+            .expect("approval_events");
+        refs[0]["intent_hash_provenance"] = serde_json::json!("asserted");
+        let asserted = serde_json::to_string(&value).expect("serialize");
+        validate_schema(&asserted).expect("asserted is a valid, weaker kind");
+        let asserted_envelope: AuditEnvelope =
+            serde_json::from_value(value.clone()).expect("asserted parses");
+        assert_eq!(
+            asserted_envelope.approval_events[0].intent_hash_provenance,
+            IntentHashProvenance::Asserted
+        );
+
+        value["approval_events"][0]
+            .as_object_mut()
+            .expect("approval ref")
+            .remove("intent_hash_provenance");
+        let missing = serde_json::to_string(&value).expect("serialize");
+        assert!(
+            validate_schema(&missing).is_err(),
+            "schema must reject an approval ref that does not state provenance"
+        );
+        assert!(
+            serde_json::from_value::<AuditEnvelope>(value).is_err(),
+            "deserialization must reject a missing provenance, not default it"
         );
     }
 

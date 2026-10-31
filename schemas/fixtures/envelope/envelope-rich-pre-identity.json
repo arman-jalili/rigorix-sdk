@@ -1,6 +1,6 @@
 {
-  "execution_id": "1bd514a1-6fa1-4660-ac56-cdc8eb88736e",
-  "timestamp": "2026-10-30T22:03:26.871580Z",
+  "execution_id": "680f24aa-ff1f-49d0-a69b-6a6227adb811",
+  "timestamp": "2026-10-31T09:43:39.951722Z",
   "template_id": "conference-registration",
   "planning_hash": "274f5bcc379aac58d1396434ab45ae48941977de9601ec608d84a1ebe47c88b1",
   "source": "rigorix_action",
@@ -20,28 +20,28 @@
     {
       "event_type": "approval_recorded",
       "summary": "Approval recorded: risky_step by user@org",
-      "occurred_at": "2026-10-30T22:03:26.871551Z",
-      "correlation_id": "9a03b998-8696-48bd-b1b2-4f96c4686567",
+      "occurred_at": "2026-10-31T09:43:39.951695Z",
+      "correlation_id": "91eaa121-90a3-4160-8f5c-078fb2d4d636",
       "status": "Success",
       "payload": {
         "approver_id": "user@org",
         "authority": "role:operator",
-        "decided_at": "2026-10-30T22:03:26.871556+00:00",
+        "decided_at": "2026-10-31T09:43:39.951700+00:00",
         "decision_context_ref": "deploy to prod",
         "intent_hash": "abc123",
-        "node_id": "a0190399-1cda-4269-a2a6-bc9d2f90a735",
+        "node_id": "6d5eb75a-48ac-4fc5-8282-0830a324f862",
         "step_name": "risky_step"
       }
     },
     {
       "event_type": "scope_violation_recorded",
       "summary": "Effects outside declared scope",
-      "occurred_at": "2026-10-30T22:03:26.871558Z",
-      "correlation_id": "98f96d3a-75c8-4c49-8bce-2bd0d857279c",
+      "occurred_at": "2026-10-31T09:43:39.951703Z",
+      "correlation_id": "d2bc0b9d-68dc-42f8-a20b-7ba0696b73c1",
       "status": "Failure",
       "payload": {
-        "detected_at": "2026-10-30T22:03:26.871565+00:00",
-        "node_id": "15400325-5d06-4ded-aee1-1a0a9cd95088",
+        "detected_at": "2026-10-31T09:43:39.951707+00:00",
+        "node_id": "2b0b4a8f-4bde-4440-9700-756b84debf9f",
         "out_of_scope": [
           "src/injected.rs"
         ],
@@ -51,7 +51,7 @@
     {
       "event_type": "sequence_rule_matched",
       "summary": "remove-then-reassign matched",
-      "occurred_at": "2026-10-30T22:03:26.871566Z",
+      "occurred_at": "2026-10-31T09:43:39.951708Z",
       "correlation_id": null,
       "status": "Skipped",
       "payload": {
@@ -68,7 +68,7 @@
     {
       "event_type": "effect_scope_checked",
       "summary": "effect scope checked",
-      "occurred_at": "2026-10-30T22:03:26.871568Z",
+      "occurred_at": "2026-10-31T09:43:39.951711Z",
       "correlation_id": null,
       "status": "Success",
       "payload": {
@@ -97,27 +97,28 @@
       "duration_ms": 1200
     }
   },
-  "signature": "8a24c676683008a7595c01b034fcc4e4e80108621ca958b298040a85281457a1",
+  "signature": "b1280ced760cd3cf7d6d326f597a7430745138713592dec4168e0f9861170702",
   "evidence_degraded": false,
   "history_integrity": "local_unanchored",
   "approval_events": [
     {
-      "node_id": "a0190399-1cda-4269-a2a6-bc9d2f90a735",
+      "node_id": "6d5eb75a-48ac-4fc5-8282-0830a324f862",
       "step_name": "risky_step",
       "intent_hash": "abc123",
+      "intent_hash_provenance": "derived",
       "approver_id": "user@org",
       "authority": "role:operator",
-      "decided_at": "2026-10-30T22:03:26.871556Z"
+      "decided_at": "2026-10-31T09:43:39.951700Z"
     }
   ],
   "scope_violations": [
     {
-      "node_id": "15400325-5d06-4ded-aee1-1a0a9cd95088",
+      "node_id": "2b0b4a8f-4bde-4440-9700-756b84debf9f",
       "step_name": "run_command",
       "out_of_scope": [
         "src/injected.rs"
       ],
-      "detected_at": "2026-10-30T22:03:26.871565Z"
+      "detected_at": "2026-10-31T09:43:39.951707Z"
     }
   ],
   "scope_check": "checked",

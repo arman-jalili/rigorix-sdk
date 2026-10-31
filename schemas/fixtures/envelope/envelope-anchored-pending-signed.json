@@ -94,7 +94,7 @@
       "duration_ms": 1200
     }
   },
-  "signature": "53d28700913cc5cc639ab42fd89cc22635ecb2b8f36a9e10884e8a44371d25f1",
+  "signature": "07ddc3161e1164d966384bb503381cf0a887628ec45a3730be64cb13a1790b03",
   "evidence_degraded": false,
   "history_integrity": "anchored_pending",
   "approval_events": [
@@ -102,6 +102,7 @@
       "node_id": "5a03141a-2c2f-45b6-bd6b-44053b23fa17",
       "step_name": "risky_step",
       "intent_hash": "abc123",
+      "intent_hash_provenance": "derived",
       "approver_id": "user@org",
       "authority": "role:operator",
       "decided_at": "2026-09-25T17:34:17.059128Z"
