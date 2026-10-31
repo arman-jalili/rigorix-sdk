@@ -1,9 +1,13 @@
 # Releasing the SDK
 
-One version, five publication channels. The version lives in six manifests and
-`.pi/scripts/validate-channel-versions.sh` fails the build when they disagree — it also has a
-`--self-test` that seeds the drift this repo actually shipped (the Java artifact sat at `0.2.0`
-while every other channel was at `0.6.0`, and nothing noticed).
+One version for the verifier's **lockstep channels**: crates.io `rigorix-verifier`, npm
+`rigorix-verifier`, PyPI, and Maven Central. `rigorix-schemas`, `rigorix-client` and the npm client
+are an independent cadence: they carry the workspace version and must stay pin-consistent, but a
+verifier patch does not force a schema/client release. `.pi/scripts/validate-channel-versions.sh`
+fails the build when the verifier channels disagree, when a required manifest is missing, or when
+an intra-workspace pin does not match the workspace version. Its `--self-test` seeds the drift this
+repo actually shipped: the Java artifact at `0.2.0`, the #57 three-behind npm verifier, and a stale
+PyPI `__version__`.
 
 | channel | artifact | how it publishes | auth | tag |
 |---|---|---|---|---|
@@ -14,6 +18,12 @@ while every other channel was at `0.6.0`, and nothing noticed).
 | **Go** | `github.com/arman-jalili/rigorix-sdk/go` | **tag only** — nothing is uploaded | public repo visibility | `go/vX.Y.Z` |
 
 `rigorix-client` (Rust) is an independent cadence: bumped with the train, published separately.
+
+**Lockstep set:** crates.io `rigorix-verifier`, npm `rigorix-verifier`, PyPI, Maven Central. The
+schema/client crates are reported by the guard but not locked to the verifier version; their
+`rigorix-schemas` pins must match the workspace version. The verifier exact-pins
+`rigorix-schemas` (`=X.Y.Z`), which is the one place the two cadences touch — publish the schema
+first, or Cargo refuses the verifier.
 
 ## Order
 
@@ -37,7 +47,7 @@ Each channel is confirmed by resolving the artifact from the registry, not by re
 cargo add rigorix-verifier@X.Y.Z --dry-run     # or a scratch crate that builds
 npm view rigorix-verifier version
 pip index versions rigorix-verifier
-# https://repo1.maven.org/maven2/dev/rigorix/rigorix-verifier/X.Y.Z/
+# https://repo1.maven.org/maven2/eu/rigorix/rigorix-verifier/X.Y.Z/
 go get github.com/arman-jalili/rigorix-sdk/go@vX.Y.Z
 ```
 
