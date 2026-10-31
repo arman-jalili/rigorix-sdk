@@ -1,8 +1,23 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-10-25 (updated)
-**Open issues:** 2 (#54, #55) — #43/#44/#47/#50/#52 merged
+**Generated:** 2026-10-30 (updated)
+**Open issues:** 1 (#57) — #43/#44/#47/#50/#52/#54/#55 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
+
+---
+
+## Series: scope_check release integrity (2026-10-30)
+
+| # | ID | Priority | Component | Branch | Blocked by |
+|---|----|----------|-----------|--------|-----------|
+| 57 | scope_check every verifier + channel guard | high | release / verifier | `issue/57` | Maven GPG/pinentry; PyPI Actions billing |
+
+### Group: scope_check release integrity (single) — partially actionable
+
+The code fix (`aa6f563`, `8ce4223`, `00fc015`) and npm 0.8.1 are already live. This PR fixes the
+stale PyPI `__version__` and narrows the channel guard to the four verifier channels, with self-test
+seeds for the three-behind state. Maven (0.8.0) and PyPI (0.6.0) publishes remain blocked, so the
+issue stays open until both resolve 0.8.1.
 
 ---
 
