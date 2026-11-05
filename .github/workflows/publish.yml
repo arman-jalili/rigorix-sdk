@@ -99,9 +99,20 @@ jobs:
 
       - run: npm run build
 
-      - name: Publish to npm (prepack re-bundles the corpus)
+      # Replayable by construction: a channel that already carries this version is done,
+      # not broken. The verifier reached npm 0.9.0 before PyPI and Maven did, so re-running
+      # this step failed on "cannot publish over 0.9.0" — a release reading as broken while
+      # the artifact is present.
+      - name: Publish to npm (skip when the version already exists)
         if: github.event_name == 'push'
-        run: npm publish --access public
+        run: |
+          pkg="$(node -p "require('./package.json').name")"
+          ver="$(node -p "require('./package.json').version")"
+          if npm view "$pkg@$ver" version >/dev/null 2>&1; then
+            echo "✅ $pkg@$ver is already published — nothing to publish"
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -132,9 +143,20 @@ jobs:
           echo "tag=$tag package=$ver"
           test "$tag" = "$ver"
 
-      - name: Publish to npm (prepack builds dist/)
+      # Replayable by construction: a channel that already carries this version is done,
+      # not broken. The verifier reached npm 0.9.0 before PyPI and Maven did, so re-running
+      # this step failed on "cannot publish over 0.9.0" — a release reading as broken while
+      # the artifact is present.
+      - name: Publish to npm (skip when the version already exists)
         if: github.event_name == 'push'
-        run: npm publish --access public
+        run: |
+          pkg="$(node -p "require('./package.json').name")"
+          ver="$(node -p "require('./package.json').version")"
+          if npm view "$pkg@$ver" version >/dev/null 2>&1; then
+            echo "✅ $pkg@$ver is already published — nothing to publish"
+          else
+            npm publish --access public
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

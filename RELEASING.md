@@ -32,6 +32,9 @@ first, or Cargo refuses the verifier.
 2. Tag `vX.Y.Z` → npm, PyPI and Maven Central.
 3. Tag `go/vX.Y.Z` for the Go module (a root `vX.Y.Z` tag does **not** version a module in `go/`).
 4. `rust-vX.Y.Z` marker tag for the crates.
+5. The npm **client** (`typescript-client`) has its own tag: `client-vX.Y.Z`. A verifier tag
+   (`vX.Y.Z`) does not publish it, and does not fail on it either — the two cadences are
+   independent, and the workflow checks each against the tag that names it.
 
 ## Why the order is load-bearing
 
