@@ -135,10 +135,13 @@ jobs:
 
       - run: npm ci
 
+      # The client is an independent cadence: versioned with the train, published on its own tag.
+      # Comparing it to the verifier's `vX.Y.Z` made a verifier release fail on a package that was
+      # never meant to move (client 0.8.0 against tag 0.9.0).
       - name: Assert the tag matches the package version
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/client-v')
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${GITHUB_REF_NAME#client-v}"
           ver="$(node -p "require('./package.json').version")"
           echo "tag=$tag package=$ver"
           test "$tag" = "$ver"
@@ -148,7 +151,7 @@ jobs:
       # this step failed on "cannot publish over 0.9.0" — a release reading as broken while
       # the artifact is present.
       - name: Publish to npm (skip when the version already exists)
-        if: github.event_name == 'push'
+        if: startsWith(github.ref, 'refs/tags/client-v')
         run: |
           pkg="$(node -p "require('./package.json').name")"
           ver="$(node -p "require('./package.json').version")"
