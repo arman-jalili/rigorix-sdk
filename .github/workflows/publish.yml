@@ -219,14 +219,20 @@ jobs:
           [ -n "$HAS_KEY" ] || missing="$missing MAVEN_GPG_PRIVATE_KEY"
           if [ -n "$missing" ]; then
             echo "❌ Missing publication secrets:$missing"
-            echo "   Maven Central needs a verified namespace (dev.rigorix) and a signing key."
+            echo "   Maven Central needs a verified namespace (eu.rigorix) and a signing key."
             echo "   This job fails rather than skipping: a tag that publishes to some registries"
             echo "   and not others is exactly the drift this job exists to prevent."
             exit 1
           fi
       - name: Deploy with sources, javadoc and signatures
+        # setup-java writes `${env.MAVEN_CENTRAL_USERNAME}` / `${env.MAVEN_CENTRAL_TOKEN}`
+        # into settings.xml. They MUST be exported here or Maven sends empty
+        # credentials and the Portal answers `401 Invalid request` (which looks
+        # like a revoked token, but is a missing env var).
         run: mvn -B -Prelease deploy
         env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_TOKEN: ${{ secrets.MAVEN_CENTRAL_TOKEN }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
 
   smoke:
