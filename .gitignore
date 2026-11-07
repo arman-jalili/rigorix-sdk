@@ -1,6 +1,7 @@
 target/
 node_modules/
 typescript/dist/
+typescript/src/browser/corpus.generated.ts
 typescript-client/dist/
 typescript/_schemas/
 python/rigorix_verifier/_schemas/

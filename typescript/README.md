@@ -1,20 +1,20 @@
 # rigorix-verifier (TypeScript)
 
 Strategy A parity for the Rigorix signed audit trail: an **independent,
-protocol-only** verifier for Node. No engine dependency.
+protocol-only** verifier for Node **and the browser**. No engine dependency.
 
 - **HMAC-SHA256** over the canonical form (`signature` nulled) — byte-exact
   with the rigorix-oss engine and the Rust verifier.
 - **JSON Schema** conformance (draft 2020-12 via `ajv`).
 - **ADR-016 chains**: per-producer sequence + `prev_hash` continuity, gaps
   accepted only when covered by a valid signed compaction checkpoint.
-- **Ed25519 anchor artifacts** (`node:crypto`): ledger receipt, history slice,
-  compaction checkpoint.
+- **Ed25519 anchor artifacts** (`node:crypto` in Node, WebCrypto in the browser):
+  ledger receipt, history slice, compaction checkpoint.
 
 ## Install
 
 ```bash
-npm install rigorix-verifier@0.2.0   # published artifact (embedded corpus)
+npm install rigorix-verifier@0.9.0   # published artifact (embedded corpus)
 npm install && npm run build          # from source
 ```
 
@@ -32,6 +32,30 @@ validateEnvelope(JSON.parse(text));             // schema conformance
 const chain = parse(readFileSync("chain.json", "utf8")) as any;
 verifyChain(chain);                              // ADR-016 local chain
 ```
+
+## Browser entry
+
+`rigorix-verifier/browser` is a second entry with **no Node built-in imports**.
+It exports the same verification surface, implemented with the platform's own
+WebCrypto (no polyfill):
+
+```ts
+import { verifySignature } from "rigorix-verifier/browser";
+
+await verifySignature(envelope, "<hmac key>"); // HMAC-SHA256 via crypto.subtle
+```
+
+Async where the platform crypto is async: `verifySignature`, `envelopeHash`,
+`verifyChain`, `verifyChainWithCheckpoints`, `verifyLedgerReceipt`,
+`verifyHistorySlice`, `verifyCompactionCheckpoint`. `canonicalBytes` returns
+`Uint8Array` (the Node entry returns `Buffer`); `validateEnvelope` and
+`validateSchema` stay synchronous.
+
+The canonical schemas are emitted as string constants
+(`src/browser/corpus.generated.ts`) because a page has no filesystem. The build
+fails if anything under `dist/src/browser/` contains `node:`. A page still needs
+a bundler for the bare specifiers (`ajv`, `lossless-json`), as with any npm
+package; the test bundles the emitted entry with esbuild.
 
 ## Canonical form
 
@@ -63,5 +87,12 @@ pack gate (`npm pack` → install the tarball into a clean project → verify wi
 ## Test
 
 ```bash
-npm test          # tsc + node --test
+npm run test:node     # tsc + node --test (the Node entry)
+npm run test:browser  # build + esbuild bundle + real Chrome (WebCrypto entry)
 ```
+
+`test:browser` uses `playwright-core` with the installed Google Chrome; set
+`PLAYWRIGHT_CHANNEL` (for example `chrome` or `msedge`) if it lives elsewhere.
+The browser run compares every verdict with the Node entry: canonical bytes,
+HMAC (including a flipped byte and a one-byte-different key), chains, Ed25519
+anchors, and schema validation.
