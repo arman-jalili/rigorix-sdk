@@ -154,6 +154,11 @@ jobs:
         # ADR-016 chain/checkpoint, Ed25519 anchor verification.
         run: npm test
 
+      - name: Browser entry conformance (real Chrome, WebCrypto)
+        # The emitted `dist/src/browser/**` must have no Node imports, and every
+        # verdict must equal the Node entry's on the same fixtures.
+        run: npm run test:browser
+
       - name: Pack → install → smoke (no RIGORIX_SDK_SCHEMAS)
         # SDK-C6-PACKAGING: `npm pack` must ship a REAL corpus (npm does not
         # follow the repo symlink), and the installed tarball must verify with

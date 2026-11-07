@@ -9,6 +9,11 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
+    },
+    "./browser": {
+      "types": "./dist/src/browser/index.d.ts",
+      "import": "./dist/src/browser/index.js",
+      "browser": "./dist/src/browser/index.js"
     }
   },
   "files": ["dist/src", "_schemas", "README.md"],
@@ -25,9 +30,12 @@
   },
   "scripts": {
     "bundle": "node scripts/bundle-schemas.mjs",
-    "build": "npm run bundle && tsc -p tsconfig.json",
+    "guard:browser": "node scripts/check-browser-no-node.mjs",
+    "build": "npm run bundle && tsc -p tsconfig.json && npm run guard:browser",
     "prepack": "node scripts/bundle-schemas.mjs",
-    "test": "npm run build && node --test dist/test/*.test.js"
+    "test": "npm run test:node",
+    "test:node": "npm run build && node --test dist/test/*.test.js",
+    "test:browser": "npm run build && node test/browser/run.mjs"
   },
   "dependencies": {
     "ajv": "^8.17.1",
@@ -36,6 +44,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.0",
+    "playwright-core": "^1.65.0",
     "typescript": "^5.6.0"
   }
 }

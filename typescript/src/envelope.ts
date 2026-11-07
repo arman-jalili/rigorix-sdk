@@ -1,28 +1,27 @@
-/** Envelope HMAC verification + JSON Schema conformance. */
+/** Envelope HMAC verification + JSON Schema conformance (Node entry). */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-
 import { createRequire } from "node:module";
 
-import { Ajv2020 } from "ajv/dist/2020.js";
 import { parse } from "lossless-json";
 
 import { canonicalBytes } from "./canonical.js";
 import { schemaFiles, schemaText } from "./corpus.js";
-import {
-  SchemaViolation,
-  SignatureMismatch,
-  UnsignedNotDegraded,
-  VerifyError,
-} from "./errors.js";
+import { SignatureMismatch, UnsignedNotDegraded } from "./errors.js";
+import { createSchemaValidator, type AddFormats } from "./schema-core.js";
 
 type Json = any;
 
 // `ajv-formats` is CJS; require it directly so the plugin function is callable
 // under an ESM package (`tsc` mis-types its CJS default export as a namespace).
-const addFormats = createRequire(import.meta.url)("ajv-formats") as (
-  ajv: Ajv2020,
-) => unknown;
+const addFormats = createRequire(import.meta.url)("ajv-formats") as AddFormats;
+
+const { validateSchema, validateEnvelope } = createSchemaValidator(
+  { schemaText, schemaFiles },
+  addFormats,
+);
+
+export { validateSchema, validateEnvelope };
 
 export function verifySignature(envelope: string | Record<string, Json>, key: string): void {
   const obj = (typeof envelope === "string" ? parse(envelope) : envelope) as Record<string, Json>;
@@ -42,45 +41,4 @@ export function verifySignature(envelope: string | Record<string, Json>, key: st
   ) {
     throw new SignatureMismatch(`signature mismatch: expected ${expected}, got ${signature}`);
   }
-}
-
-let ajvInstance: Ajv2020 | undefined;
-
-function ajv(): Ajv2020 {
-  if (!ajvInstance) {
-    const instance = new Ajv2020({ strict: false, allErrors: true });
-    addFormats(instance);
-    for (const rel of schemaFiles()) {
-      let doc: Json;
-      try {
-        doc = JSON.parse(schemaText(rel));
-      } catch {
-        continue;
-      }
-      if (doc && typeof doc.$id === "string") {
-        try {
-          instance.addSchema(doc);
-        } catch {
-          // duplicate `$id` — first wins
-        }
-      }
-    }
-    ajvInstance = instance;
-  }
-  return ajvInstance;
-}
-
-export function validateSchema(schemaRel: string, instance: string | Json): void {
-  const schema = JSON.parse(schemaText(schemaRel));
-  const validator =
-    typeof schema.$id === "string" ? ajv().getSchema(schema.$id) : ajv().compile(schema);
-  if (!validator) throw new VerifyError(`schema ${schemaRel} is not registered`);
-  const value = typeof instance === "string" ? JSON.parse(instance) : instance;
-  if (!validator(value)) {
-    throw new SchemaViolation(ajv().errorsText(validator.errors ?? undefined));
-  }
-}
-
-export function validateEnvelope(instance: string | Json): void {
-  validateSchema("envelope.json", instance);
 }

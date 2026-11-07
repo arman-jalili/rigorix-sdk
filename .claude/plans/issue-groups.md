@@ -1,8 +1,23 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-10-30 (updated)
-**Open issues:** 1 (#57) — #43/#44/#47/#50/#52/#54/#55 merged
+**Generated:** 2026-11-06 (updated)
+**Open issues:** 2 (#57, #59) — #43/#44/#47/#50/#52/#54/#55 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
+
+---
+
+## Series: browser verifier (2026-11-06)
+
+| # | ID | Priority | Component | Branch | Blocked by |
+|---|----|----------|-----------|--------|-----------|
+| 59 | browser entry for the verifier | high | `typescript` verifier | `issue/59` | — |
+
+### Group: browser entry (single) — actionable
+
+`rigorix-verifier@0.9.0` cannot be imported by a page (every entry reaches for a
+Node built-in). Adds `rigorix-verifier/browser` with WebCrypto, a generated schema
+corpus, a `node:` build guard, and a real-Chrome cross-entry conformance test.
+Blocks rigorix-gtm #33.
 
 ---
 
