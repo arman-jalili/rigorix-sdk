@@ -64,8 +64,25 @@ jobs:
           python -m pip install --upgrade build
           python -m build --outdir dist
 
+      # Replayable by construction: a version already on the index is done, not
+      # broken. The 0.9.0 replay reached PyPI before Maven and failed with
+      # "400 File already exists" — a release reading as broken while the
+      # artifact is present.
+      - name: Check whether this version is already on PyPI
+        id: pypi-exists
+        run: |
+          ver="$(python -c 'import tomllib;print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          status="$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/rigorix-verifier/${ver}/json")"
+          if [ "$status" = "200" ]; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "✅ rigorix-verifier ${ver} is already on PyPI — nothing to publish"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+            echo "rigorix-verifier ${ver} is not on PyPI (HTTP ${status}); publishing"
+          fi
+
       - name: Publish to PyPI (Trusted Publishing)
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.pypi-exists.outputs.already != 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: python/dist
