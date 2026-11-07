@@ -50,7 +50,11 @@ Each channel is confirmed by resolving the artifact from the registry, not by re
 cargo add rigorix-verifier@X.Y.Z --dry-run     # or a scratch crate that builds
 npm view rigorix-verifier version
 pip index versions rigorix-verifier
-# https://repo1.maven.org/maven2/eu/rigorix/rigorix-verifier/X.Y.Z/
+# Maven: the coordinate's own metadata, never a directory URL. Central serves no
+# listings, so .../X.Y.Z/ answers 404 for a version that is fully published — asking
+# it produced a false "the channel is not live" on 0.9.0.
+curl -s https://repo1.maven.org/maven2/eu/rigorix/rigorix-verifier/maven-metadata.xml | grep '<release>'
+curl -sI https://repo1.maven.org/maven2/eu/rigorix/rigorix-verifier/X.Y.Z/rigorix-verifier-X.Y.Z.jar
 go get github.com/arman-jalili/rigorix-sdk/go@vX.Y.Z
 ```
 
@@ -75,3 +79,25 @@ installs from the registries afterwards.
 - **Go needs repository visibility.** `go get` reads the repo through the module proxy, which cannot
   see a private repository. A `go/vX.Y.Z` tag on a private repo is a correct release of nothing
   consumable.
+
+## When a channel says no
+
+Four answers that each look like a verdict and are not, each paid for once:
+
+- **`401 Invalid request` from the Central Portal is not a token verdict.** `setup-java` writes
+  `${env.MAVEN_CENTRAL_USERNAME}` and `${env.MAVEN_CENTRAL_TOKEN}` into `settings.xml`; a deploy step that
+  exports only the GPG passphrase sends *empty* credentials, and the Portal answers `401` exactly as it
+  would for a revoked token. Both must be exported to the step that runs `mvn deploy`. The second cause is
+  different again and only visible once the first is fixed: a valid token from an account without publish
+  rights answers `Namespace 'eu.rigorix' is not allowed`.
+- **A `404` on a directory is not an absent artifact.** Central serves no listings. Ask for
+  `maven-metadata.xml`, and for the `.pom` and `.jar` themselves.
+- **A replay that fails `400 File already exists` is a missing skip, not a broken release.** Every publish
+  step must query the index first and treat "already there" as success, or the re-run that fixes one
+  channel fails on the five that were fine.
+- **A green job is not a consumable version.** Hence the `smoke` job: it installs from the registries after
+  the publish job reports success.
+
+And one from the OSS train the same day: **a workflow job that has never executed is not a job that works.**
+The npm publication step had been wired for two releases and skipped both times; on its first real run it
+failed in 0.2 s on a toolchain prerequisite nothing had ever needed to notice.
