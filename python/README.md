@@ -51,6 +51,22 @@ plan = client.plan({"template_name": "attendance"})
 version = client.version()
 ```
 
+## In-process gate (WASI)
+
+`rigorix_verifier.binding.Gate` loads the vendored
+`rigorix_gate_wasi.wasm` through `wasmtime`; the decision is made inside the
+module. The six WASI prologue imports are answered with constants and counted,
+and any other import is a load-time refusal.
+
+```python
+from rigorix_verifier.binding import Gate
+
+gate = Gate.open(scenario=sc, fixtures=fx, clock=clk, seed=seed)
+out = gate.attempt({"name": "payment_execute", "params": {"amount": "184.20"}})
+out["steps"][0]["detail"]["overage"]          # 7420
+sealed = gate.export_artifact_set()
+```
+
 ## Canonical form
 
 The HMAC is over `serde_json::to_string(envelope with signature=None)` as the

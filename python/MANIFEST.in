@@ -1,3 +1,4 @@
 include README.md
 recursive-include scripts *
 recursive-include rigorix_verifier/_schemas *
+recursive-include rigorix_verifier/_wasm *

@@ -12,8 +12,8 @@
 |---|----|----------|-----------|--------|-----------|
 | 63 | Go protocol client | high | `go/client` | `issue/63` | — |
 | 64 | Python protocol client | high | `python/rigorix_verifier/client` | `issue/64` | — |
-| 65 | Python in-process gate | high | `python/rigorix_verifier/binding` | — | `rigorix-oss WASI-1` |
-| 66 | Go in-process gate | medium | `go/gate` | — | `rigorix-oss WASI-1`, #63 |
+| 65 | Python in-process gate | high | `python/rigorix_verifier/binding` | `issue/65` | — (WASI-1 resolved 2026-11-08) |
+| 66 | Go in-process gate | medium | `go/gate` | `issue/66` | — (#63 merged) |
 
 ### Groups
 
@@ -22,9 +22,19 @@
   one CI failure block both. The grouping rule for a component batch is "same
   module"; these are `go/client` vs `python/rigorix_verifier/client`. Land
   #63 first (it already has a base), then #64.
-- **#65 + #66 — blocked, no branch.** Both need the `rigorix-oss WASI-1`
-  `wasm32-wasip1` release asset and its ABI freeze; #66 also needs #63's client
-  types. Do not implement a gate against an artifact that does not exist.
+- **#65 + #66 — ready, not batched.** The WASI-1 blocker is resolved:
+  `rigorix-oss` builds `rigorix_gate_wasi.wasm` from `wasi/ci/build.sh`, and
+  `node wasi/ci/run-conformance.mjs` reproduces all five vectors through
+  `node:wasi` (four recorded + one recorded divergence).
+  - artifact sha256: `7414f8df8772c789b38aeae7460f2f50c816bdde2848bc99470e0b273010bc9c`
+  - size: 1,896,910 bytes; contract/engine `1.14.2`; `gate_evaluation: true`
+  - **contract correction:** the artifact imports **six** `wasi_snapshot_preview1`
+    prologue functions (`random_get`, `environ_get`, `environ_sizes_get`,
+    `clock_time_get`, `fd_write`, `proc_exit`), not zero. The embedder answers
+    each with a constant, counts `clock_time_get` / `random_get` / `fd_write`,
+    and refuses any other import at load. The binding tests assert the counters
+    stay zero across the vectors.
+  - #66's SDL-1 dependency is satisfied by #63 (`e11ef99`).
 
 ### Surface correction (code is truth)
 
