@@ -1,6 +1,41 @@
 # Issue Implementation Groups
 
-**Generated:** 2026-11-06 (updated)
+**Generated:** 2026-11-07 (updated)
+**Open issues:** 4 (#63, #64, #65, #66)
+**Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
+
+---
+
+## Series: protocol clients (2026-11-07)
+
+| # | ID | Priority | Component | Branch | Blocked by |
+|---|----|----------|-----------|--------|-----------|
+| 63 | Go protocol client | high | `go/client` | `issue/63` | — |
+| 64 | Python protocol client | high | `python/rigorix_verifier/client` | `issue/64` | — |
+| 65 | Python in-process gate | high | `python/rigorix_verifier/binding` | — | `rigorix-oss WASI-1` |
+| 66 | Go in-process gate | medium | `go/gate` | — | `rigorix-oss WASI-1`, #63 |
+
+### Groups
+
+- **#63 + #64 — NOT batched.** Different modules and languages, no shared files.
+  Batching would couple a brand-new Python package to the Go completion and make
+  one CI failure block both. The grouping rule for a component batch is "same
+  module"; these are `go/client` vs `python/rigorix_verifier/client`. Land
+  #63 first (it already has a base), then #64.
+- **#65 + #66 — blocked, no branch.** Both need the `rigorix-oss WASI-1`
+  `wasm32-wasip1` release asset and its ABI freeze; #66 also needs #63's client
+  types. Do not implement a gate against an artifact that does not exist.
+
+### Surface correction (code is truth)
+
+The issue YAML says "the same eight methods the TS client exposes" and lists
+`executeStep`. The current TS client exposes **18** typed methods, and
+`executeStep` is not in the frozen catalog and is forbidden by ADR-0001 D10
+(governed flows only). The plans mirror the 18 real methods; every one of the
+issue's named eight is included.
+
+---
+
 **Open issues:** 2 (#57, #59) — #43/#44/#47/#50/#52/#54/#55 merged
 **Fetched from:** `gh issue list --state open` → `.claude/plans/issues-fetched.json`
 

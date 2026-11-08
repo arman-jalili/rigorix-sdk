@@ -12,7 +12,8 @@ canonical `schemas/**` corpus is embedded at build time (generated).
 - **Ed25519 anchor artifacts** (`crypto/ed25519`): ledger receipt, history slice,
   compaction checkpoint.
 - **Client** (`.../go/client`): JSON-RPC 2.0 over a transport seam, binding every
-  frozen `rigorix.*` catalog method (drift-tested against `catalog.json`).
+  frozen `rigorix.*` catalog method (drift-tested against `catalog.json`) with
+  typed wrappers for the 18 methods the TS client exposes.
 
 ## Install
 
@@ -29,6 +30,30 @@ anchored, _ := rigorix.Fixture("envelope/envelope-anchored-signed.json")
 _ = rigorix.VerifySignature(anchored, "fixture-hmac-key-2026") // byte-exact HMAC
 _ = rigorix.ValidateEnvelope(anchored)                        // schema conformance
 ```
+
+## Protocol client (`go/client`)
+
+`client.New` takes a `Transport`; `client.NewHTTPTransport` is the `net/http`
+implementation. The 18 typed methods mirror
+`typescript-client/src/client.ts` over the frozen catalog; `Version` refuses an
+`api_version` major other than 1, and `CallRaw` rejects a response whose `id`
+is not the request's.
+
+```go
+import (
+    "context"
+
+    "github.com/arman-jalili/rigorix-sdk/go/client"
+)
+
+c := client.New(client.NewHTTPTransport("http://127.0.0.1:3001/rpc", nil))
+plan, err := c.Plan(context.Background(), client.PlanParams{TemplateName: "attendance"})
+version, err := c.Version(context.Background()) // *VersionMismatchError for a major != 1
+```
+
+`catalog_drift_test.go` pins the binding table to `schemas/api/catalog.json`
+(24 methods, none invented); `AssertNoRawStepExecution` keeps the governed-flow
+invariant. `TestLiveVersion` runs when `RIGORIX_SERVER_URL` is set.
 
 ## Regenerating the embedded corpus
 

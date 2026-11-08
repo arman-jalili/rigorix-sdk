@@ -41,3 +41,17 @@ func Call(id any, method string, params any) RPCRequest {
 func Notification(method string, params any) RPCRequest {
 	return RPCRequest{JSONRPC: "2.0", Method: method, Params: params}
 }
+
+// idMatches compares a decoded response id with the generated request id by
+// their JSON encoding, so `float64(1)` and `int(1)` match without type games.
+func idMatches(got any, want any) bool {
+	gotJSON, err := json.Marshal(got)
+	if err != nil {
+		return false
+	}
+	wantJSON, err := json.Marshal(want)
+	if err != nil {
+		return false
+	}
+	return string(gotJSON) == string(wantJSON)
+}
