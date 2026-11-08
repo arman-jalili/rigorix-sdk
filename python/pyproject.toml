@@ -16,7 +16,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Topic :: Security :: Cryptography",
 ]
-dependencies = ["jsonschema>=4.0", "cryptography>=41.0"]
+dependencies = ["jsonschema>=4.0", "cryptography>=41.0", "wasmtime>=20.0"]
 
 [project.urls]
 Homepage = "https://github.com/arman-jalili/rigorix-sdk"
@@ -26,10 +26,10 @@ Documentation = "https://github.com/arman-jalili/rigorix-sdk/tree/main/python"
 test = ["pytest>=7"]
 
 [tool.setuptools]
-packages = ["rigorix_verifier", "rigorix_verifier.client"]
+packages = ["rigorix_verifier", "rigorix_verifier.client", "rigorix_verifier.binding"]
 
 [tool.setuptools.package-data]
-rigorix_verifier = ["_schemas/**/*", "_schemas/*"]
+rigorix_verifier = ["_schemas/**/*", "_schemas/*", "_wasm/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -183,7 +183,10 @@ def test_catalog_parity_with_frozen_catalog():
 def test_client_adds_no_dependency():
     text = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     assert "requests" not in text and "httpx" not in text
-    assert 'dependencies = ["jsonschema>=4.0", "cryptography>=41.0"]' in text
+    assert (
+        'dependencies = ["jsonschema>=4.0", "cryptography>=41.0", "wasmtime>=20.0"]'
+        in text
+    )
 
 
 @pytest.fixture

@@ -1,0 +1,230 @@
+"""SDL-3: the gate in-process over the WASI artifact, through wasmtime."""
+
+from __future__ import annotations
+
+import base64
+import builtins
+import hashlib
+import json
+import os
+import platform
+import socket
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from rigorix_verifier.binding import (
+    ARTIFACT_SHA256,
+    ARTIFACT_SIZE,
+    IMPORTS,
+    Gate,
+    GateClosed,
+    GateError,
+    NotWASIArtifact,
+    artifact_bytes,
+)
+from rigorix_verifier.binding import loader
+
+VECTORS = Path(__file__).resolve().parent / "binding" / "vectors"
+
+pytestmark = pytest.mark.skipif(
+    platform.system() == "Darwin" and os.environ.get("RIGORIX_WASMTIME_JIT") != "1",
+    reason=(
+        "wasmtime's JIT is blocked by this macOS sandbox (even a trivial "
+        "i32.const is SIGKILLed); Linux CI runs the binding tests"
+    ),
+)
+
+
+def _vector(name: str) -> dict:
+    return json.loads((VECTORS / f"{name}.json").read_text(encoding="utf-8"))
+
+
+def _open(vector: dict, **kwargs) -> Gate:
+    return Gate.open(
+        scenario=vector["scenario"],
+        fixtures=vector["fixtures"],
+        clock=vector["clock"],
+        seed=vector["seed"],
+        **kwargs,
+    )
+
+
+def _matches(outcome: dict, expected: dict) -> bool:
+    canonical = base64.b64encode(bytes.fromhex(expected["hex"])).decode("ascii")
+    return (
+        outcome["decision_digest"] == expected["sha256"]
+        and outcome["decision_canonical"] == canonical
+    )
+
+
+def test_all_five_vectors():
+    paths = sorted(VECTORS.glob("*.json"))
+    assert len(paths) == 5, "the artifact claims five vectors"
+
+    for path in paths:
+        vector = json.loads(path.read_text(encoding="utf-8"))
+        gate = _open(vector)
+        try:
+            outcome = gate.attempt(vector["scenario"]["action"])
+            matched = _matches(outcome, vector["expected_decision"])
+            if vector["seeded_divergence"]:
+                assert not matched, f"{vector['id']} must diverge from the recorded decision"
+            else:
+                assert matched, (
+                    f"{vector['id']}: digest {outcome['decision_digest']} != "
+                    f"{vector['expected_decision']['sha256']}"
+                )
+            gate.export_artifact_set()
+            # The #1477 invariant is the clock: the allow path must not read it.
+            # `random_get` may be called once by `std` while sealing (an inert
+            # prologue read); it is counted, and the decision digests above are
+            # the proof that no decision consumed it.
+            assert gate.counters.clock_time_get_calls == 0
+            assert gate.counters.fd_write_bytes == 0
+        finally:
+            gate.close()
+
+
+def test_capacity_operands():
+    vector = _vector("vec-0002")
+    gate = _open(vector)
+    try:
+        step = gate.attempt(vector["scenario"]["action"])["steps"][0]
+    finally:
+        gate.close()
+    assert step["kind"] == "capacity_exceeded"
+    assert step["detail"]["kind"] == "capacity"
+    assert step["detail"]["overage"] == 7420
+    assert step["detail"]["claimed"] == 1427420
+
+
+def test_duplicate_effect_operands():
+    vector = _vector("vec-0003")
+    gate = _open(vector)
+    try:
+        step = gate.attempt(vector["scenario"]["action"])["steps"][0]
+    finally:
+        gate.close()
+    assert step["kind"] == "duplicate_effect"
+    assert step["detail"]["kind"] == "duplicate_effect"
+    assert step["detail"]["record_id"] == "QR-2041"
+
+
+def test_no_io_at_decision_time(monkeypatch):
+    vector = _vector("vec-0001")
+    gate = _open(vector)
+    try:
+        def refuse(*args, **kwargs):  # noqa: ARG001
+            raise AssertionError("the decision touched the host")
+
+        monkeypatch.setattr(builtins, "open", refuse)
+        monkeypatch.setattr(socket, "socket", refuse)
+        monkeypatch.setattr(subprocess, "Popen", refuse)
+        outcome = gate.attempt(vector["scenario"]["action"])
+        assert outcome["status"] == "allowed"
+    finally:
+        gate.close()
+
+
+def test_sealed_session_refuses_a_stale_handle():
+    vector = _vector("vec-0001")
+    gate = _open(vector)
+    try:
+        gate.attempt(vector["scenario"]["action"])
+        gate.export_artifact_set()
+        with pytest.raises(GateClosed):
+            gate.attempt(vector["scenario"]["action"])
+        with pytest.raises(GateClosed):
+            gate.export_artifact_set()
+    finally:
+        gate.close()
+
+
+def test_truncated_request_is_request_invalid_and_instance_survives():
+    vector = _vector("vec-0001")
+    gate = _open(vector)
+    try:
+        with pytest.raises(GateError) as caught:
+            gate.call_raw('{"op":"attempt_run","handle":{"hand')
+        assert caught.value.kind == "request_invalid"
+        assert gate.contract_version()["contract"]
+    finally:
+        gate.close()
+
+
+def test_unknown_op_is_request_invalid():
+    vector = _vector("vec-0001")
+    gate = _open(vector)
+    try:
+        with pytest.raises(GateError) as caught:
+            gate.call_raw('{"op":"nope"}')
+        assert caught.value.kind == "request_invalid"
+    finally:
+        gate.close()
+
+
+def _module_with_import(module: str = "__wbindgen_placeholder__", name: str = "__wbindgen_throw") -> bytes:
+    mod = module.encode("utf-8")
+    field = name.encode("utf-8")
+    type_section = b"\x01\x04\x01\x60\x00\x00"
+    payload = b"\x01" + bytes([len(mod)]) + mod + bytes([len(field)]) + field + b"\x00\x00"
+    return b"\x00asm\x01\x00\x00\x00" + type_section + b"\x02" + bytes([len(payload)]) + payload
+
+
+def test_browser_module_is_refused_by_name():
+    vector = _vector("vec-0001")
+    with pytest.raises(NotWASIArtifact, match="__wbindgen_placeholder__"):
+        _open(vector, artifact=_module_with_import())
+
+
+def test_artifact_digest_and_size_are_recorded():
+    raw = artifact_bytes()
+    assert len(raw) == ARTIFACT_SIZE
+    assert hashlib.sha256(raw).hexdigest() == ARTIFACT_SHA256
+
+
+def test_the_record_is_six_imports():
+    assert len(IMPORTS) == 6
+    vector = _vector("vec-0001")
+    gate = _open(vector)
+    try:
+        version = gate.contract_version()
+        assert version["gate_evaluation"] is True
+        assert version["contract"] == "1.14.2"
+    finally:
+        gate.close()
+
+
+def test_a_wrong_digest_is_named():
+    vector = _vector("vec-0001")
+    gate = _open(vector)
+    try:
+        outcome = gate.attempt(vector["scenario"]["action"])
+    finally:
+        gate.close()
+    edited = dict(vector["expected_decision"])
+    edited["sha256"] = "sha256:" + "0" * 64
+    matched = _matches(outcome, edited)
+    assert not matched
+    with pytest.raises(AssertionError, match="vec-0001"):
+        assert matched, (
+            f"{vector['id']}: digest {outcome['decision_digest']} != "
+            f"{edited['sha256']}"
+        )
+
+
+def test_no_policy_in_python():
+    forbidden = (
+        "payment_execute",
+        "capacity_exceeded",
+        "duplicate_effect",
+        "overage",
+        "eligibility.check",
+        "budget.check",
+    )
+    for path in Path(loader.__file__).resolve().parent.glob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        for term in forbidden:
+            assert term not in text, f"{path.name} contains policy term {term!r}"
