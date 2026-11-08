@@ -15,7 +15,7 @@ shelling out to Rust. No engine dependency.
 ## Install
 
 ```bash
-pip install rigorix-verifier==0.2.0   # published artifact (embedded corpus)
+pip install rigorix-verifier==0.9.0   # published artifact (embedded corpus)
 pip install .                          # or: pip install -e ".[test]" (from source)
 ```
 
@@ -34,6 +34,21 @@ validate_envelope(envelope)                            # schema conformance
 
 chain = json.load(open("chain.json"))
 verify_chain(chain)                                    # ADR-016 local chain
+```
+
+## Protocol client
+
+`rigorix_verifier.client` speaks JSON-RPC 2.0 over the frozen catalog with
+`urllib.request` (no new dependency). It exposes the same 18 typed methods as
+the TypeScript client; `version()` refuses an `api_version` major other than 1,
+and a transport timeout is a `TransportError`, not an `RpcError`.
+
+```python
+from rigorix_verifier.client import Client, HTTPTransport
+
+client = Client(HTTPTransport("http://127.0.0.1:3001/rpc"))
+plan = client.plan({"template_name": "attendance"})
+version = client.version()
 ```
 
 ## Canonical form
