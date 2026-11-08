@@ -55,6 +55,28 @@ version, err := c.Version(context.Background()) // *VersionMismatchError for a m
 (24 methods, none invented); `AssertNoRawStepExecution` keeps the governed-flow
 invariant. `TestLiveVersion` runs when `RIGORIX_SERVER_URL` is set.
 
+## In-process gate (`go/gate`)
+
+`gate.Open` embeds the vendored `rigorix_gate_wasi.wasm` and loads it with
+wazero (pure Go; `CGO_ENABLED=0`). The six WASI prologue imports are answered
+with constants; the clock must stay zero (#1477), while randomness/stdout are
+counted. Any other import is refused at load, by name.
+
+```go
+g, err := gate.Open(ctx, gate.World{
+    Scenario: sc, Fixtures: fx, Clock: clk, Seed: seed,
+})
+out, err := g.Attempt(ctx, gate.Action{
+    Name: "payment_execute", Params: map[string]any{"amount": "184.20"},
+})
+// out["steps"].([]any)[0].(map[string]any)["detail"].(map[string]any)["overage"] == float64(7420)
+sealed, err := g.ExportArtifactSet(ctx)
+_ = sealed
+```
+
+`testdata/PROVENANCE.md` records the source commit, sha256 and the five
+vectors; `TestArtifactDigest` and `TestImportRecordIsSix` pin the artifact.
+
 ## Regenerating the embedded corpus
 
 `internal/corpus/corpus_gen.go` is generated from the repo-root `schemas/` (the
