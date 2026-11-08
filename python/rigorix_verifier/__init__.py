@@ -21,6 +21,7 @@ from .anchor import (
 )
 from .canonical import canonical_bytes, envelope_hash
 from .chain import verify_chain, verify_chain_with_checkpoints
+from . import client
 from .corpus import fixture_text, schema_files, schema_text, schemas_root
 from .envelope import validate_envelope, validate_schema, verify_signature
 from .errors import (
@@ -40,6 +41,7 @@ __all__ = [
     "UnsignedNotDegraded",
     "VerifyError",
     "canonical_bytes",
+    "client",
     "envelope_hash",
     "fixture_text",
     "schema_files",
