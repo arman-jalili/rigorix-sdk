@@ -14,7 +14,7 @@ Two invariants are enforced in code and CI:
 ## Install
 
 ```bash
-npm install rigorix-client@0.2.0
+npm install rigorix-client@0.8.0
 ```
 
 ## Usage
