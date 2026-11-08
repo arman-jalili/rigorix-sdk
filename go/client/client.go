@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // ClientAPI* mirror `catalog.json` (`apiVersion`).
@@ -35,7 +37,8 @@ func (c *Client) id() int {
 
 // CallRaw calls a method and returns the raw `result`.
 func (c *Client) CallRaw(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	body, err := json.Marshal(Call(c.id(), method, params))
+	id := c.id()
+	body, err := json.Marshal(Call(id, method, params))
 	if err != nil {
 		return nil, err
 	}
@@ -45,13 +48,16 @@ func (c *Client) CallRaw(ctx context.Context, method string, params any) (json.R
 	}
 	var response RPCResponse
 	if err := json.Unmarshal(responseBody, &response); err != nil {
-		return nil, err
+		return nil, &ProtocolError{Message: fmt.Sprintf("invalid JSON-RPC response: %v", err)}
 	}
 	if response.Error != nil {
 		return nil, response.Error
 	}
+	if !idMatches(response.ID, id) {
+		return nil, &ProtocolError{Message: fmt.Sprintf("response id %v does not match request id %v", response.ID, id)}
+	}
 	if len(response.Result) == 0 {
-		return nil, fmt.Errorf("response has neither `result` nor `error`")
+		return nil, &ProtocolError{Message: "response has neither `result` nor `error`"}
 	}
 	return response.Result, nil
 }
@@ -100,7 +106,28 @@ func (c *Client) BatchRaw(ctx context.Context, calls []BatchCall) ([]RPCResponse
 	return responses, nil
 }
 
-// Version calls `rigorix.system.version`.
+// Version calls `rigorix.system.version` and refuses a major other than v1.
 func (c *Client) Version(ctx context.Context) (VersionResult, error) {
-	return CallTyped[VersionResult](ctx, c, "rigorix.system.version", map[string]any{})
+	version, err := CallTyped[VersionResult](ctx, c, "rigorix.system.version", EmptyParams{})
+	if err != nil {
+		return version, err
+	}
+	major, err := apiMajor(version.APIVersion)
+	if err != nil {
+		return version, err
+	}
+	if major != ClientAPIMajor {
+		return version, &VersionMismatchError{Server: version.APIVersion, ClientMajor: ClientAPIMajor}
+	}
+	return version, nil
+}
+
+func apiMajor(version string) (int, error) {
+	head := strings.SplitN(version, ".", 2)[0]
+	head = strings.TrimPrefix(head, "v")
+	major, err := strconv.Atoi(head)
+	if err != nil {
+		return 0, &ProtocolError{Message: fmt.Sprintf("invalid api_version %q", version)}
+	}
+	return major, nil
 }

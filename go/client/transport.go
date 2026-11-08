@@ -49,7 +49,7 @@ func (t *HTTPTransport) Post(ctx context.Context, body []byte) ([]byte, error) {
 		return nil, err
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return data, fmt.Errorf("transport: HTTP %d", response.StatusCode)
+		return data, &TransportError{Message: fmt.Sprintf("transport: HTTP %d", response.StatusCode)}
 	}
 	return data, nil
 }
@@ -64,7 +64,7 @@ type MockTransport struct {
 func (m *MockTransport) Post(_ context.Context, body []byte) ([]byte, error) {
 	m.Requests = append(m.Requests, body)
 	if len(m.Responses) == 0 {
-		return nil, fmt.Errorf("mock transport: no queued response")
+		return nil, &TransportError{Message: "mock transport: no queued response"}
 	}
 	next := m.Responses[0]
 	m.Responses = m.Responses[1:]
