@@ -67,14 +67,21 @@ and `x/text v0.41.0` the scan is clean today.
 ## Validation
 
 GitHub Actions minutes are exhausted, so the gate is `.ci/local-ci.sh`, which now
-mirrors `audit.yml` as well. **32/32 green, exit 0**, with Go 1.26.10 on PATH:
+mirrors `audit.yml` as well. The runner prints how many steps it executed; the
+count below is copied from its verdict line, not typed by hand (it reads
+`35 step(s) executed`, exit 0), with Go 1.26.10 on PATH:
 
 ```
 artifact guard ✅ · rust (fmt, clippy, test, package, smoke, self-containment, no-engine) ✅
 python (linux docker) ✅ 50 passed, 1 skipped · ts-verifier (incl. real Chrome) ✅ · ts-client ✅
 go (corpus, vet, test, CGO_ENABLED=0) ✅ · java ✅ · publish-helper ✅
-audit: pins ✅ · pip-audit ✅ · govulncheck ✅
-validators ×7 ✅      LOCAL CI: GREEN
+audit: pins ✅ · pip-audit ✅ · govulncheck ✅ · the three seeds fire ✅
+validators ×7 ✅      LOCAL CI: GREEN — 35 step(s) executed
 ```
+
+The seeds are part of the runner (`--jobs-only` prints 28, `--validators-only`
+prints 7), so the planted range, the planted advisory and the planted vulnerable
+module are executed evidence on any machine with Docker and Go — not a claim
+about a workflow that has not started.
 
 Closes #69.

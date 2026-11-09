@@ -37,6 +37,9 @@ MODE="all"
 PYTHON_LOCAL=0
 ALLOW_SKIPS=0
 FAILED=0
+EXECUTED=0
+FAILED_COUNT=0
+SKIPPED_COUNT=0
 SKIPPED_STEPS=""
 
 while [ $# -gt 0 ]; do
@@ -87,20 +90,24 @@ run() {
             "$name" "$elapsed" "$skipped"
           SKIPPED_STEPS="$SKIPPED_STEPS
   - $name"
+          SKIPPED_COUNT=$(( SKIPPED_COUNT + 1 ))
           return 0
         fi
         printf '❌ %s (%ss) — the suite executed 0 tests (%s skipped); %s\n' \
           "$name" "$elapsed" "$skipped" "$log"
         grep -E '^SKIPPED' "$log" | head -3 | sed 's/^/   /'
         FAILED=1
+        FAILED_COUNT=$(( FAILED_COUNT + 1 ))
         return 0
       fi
     fi
+    EXECUTED=$(( EXECUTED + 1 ))
     printf '✅ %s%s (%ss)\n' "$name" "$detail" "$elapsed"
   else
     printf '❌ %s (%ss) — %s\n' "$name" "$(( $(date +%s) - start ))" "$log"
     tail -n 50 "$log" | sed 's/^/   /'
     FAILED=1
+    FAILED_COUNT=$(( FAILED_COUNT + 1 ))
   fi
 }
 
@@ -245,6 +252,61 @@ job_audit() {
   # toolchain it fails and names the fixed version — which is the point.
   run "audit: govulncheck" go \
     'go install golang.org/x/vuln/cmd/govulncheck@latest >/dev/null 2>&1 && "$(go env GOPATH)/bin/govulncheck" ./...'
+
+  # The seeds. A guard that has never refused anything is a claim, and the
+  # workflow that plants these is billing-blocked, so the runner plants them
+  # too: a planted range, a planted advisory, a planted vulnerable module. Each
+  # mutation happens in a temporary copy — the working tree is never the test
+  # subject.
+  run "audit: seeds fire (a planted range must fail)" . '
+    set -uo pipefail
+    seed="$(mktemp -d)"
+    mkdir -p "$seed/scripts" "$seed/python/rigorix_verifier/_wasm" "$seed/go/gate/testdata"
+    cp scripts/check-pins.py "$seed/scripts/"
+    cp python/pyproject.toml "$seed/python/"
+    cp go/go.mod "$seed/go/"
+    cp python/rigorix_verifier/_wasm/PROVENANCE.md "$seed/python/rigorix_verifier/_wasm/"
+    cp go/gate/testdata/PROVENANCE.md "$seed/go/gate/testdata/"
+    sed -i.bak "s/\"wasmtime==[0-9.]*\"/\"wasmtime>=20.0\"/" "$seed/python/pyproject.toml"
+    if out="$(python3 "$seed/scripts/check-pins.py" 2>&1)"; then
+      echo "check-pins.py accepted a range; the guard is inert"; exit 1
+    fi
+    # A seed fails for a reason, not just with a status: the reason must be the
+    # planted one. A missing ROOT would also exit 1, and would prove nothing.
+    printf "%s\n" "$out" | grep -q "must be pinned exactly" ||
+      { echo "refused for the wrong reason:"; printf "%s\n" "$out"; exit 1; }
+    printf "%s\n" "$out" | head -1
+    echo "✅ a planted range is refused, naming the range"
+  '
+
+  if [ "$PYTHON_LOCAL" -eq 0 ] && command -v docker >/dev/null 2>&1; then
+    run "audit: seeds fire (a planted advisory must fail)" . \
+      "docker run --rm python:3.12-slim sh -c \"pip install -q --upgrade pip >/dev/null 2>&1; pip install -q pip-audit >/dev/null 2>&1; printf 'pyyaml==5.1\\n' > /tmp/planted.txt; if pip-audit --strict -r /tmp/planted.txt >/tmp/o 2>&1; then echo 'pip-audit accepted a known-vulnerable pin; the gate is inert'; exit 1; fi; grep -Eq 'PYSEC-|GHSA-|CVE-' /tmp/o || { echo 'refused for the wrong reason:'; cat /tmp/o; exit 1; }; grep -Eo 'PYSEC-[0-9-]+|GHSA-[a-z0-9-]+' /tmp/o | head -1; echo '✅ a planted advisory is refused, named'\""
+  fi
+
+  run "audit: seeds fire (a planted vulnerable module must fail)" . '
+    set -uo pipefail
+    seed="$(mktemp -d)"
+    cp -R go "$seed/go"
+    cp go/go.mod "$seed/go.orig"
+    cp go/go.sum "$seed/go.sum.orig"
+    cd "$seed/go"
+    [ -f go.mod ] || { echo "the module copy is missing; the seed would prove nothing"; exit 1; }
+    go mod edit -require=golang.org/x/text@v0.14.0
+    go mod tidy >/dev/null 2>&1 || true
+    grep -q "golang.org/x/text v0.14.0" go.mod ||
+      { echo "the plant did not take; the seed would prove nothing"; exit 1; }
+    set +e
+    out="$("$(go env GOPATH)/bin/govulncheck" -scan=module 2>&1)"
+    status=$?
+    set -e
+    [ "$status" -eq 3 ] ||
+      { echo "govulncheck exited $status, not 3 (findings) — refused for the wrong reason:"; printf "%s\n" "$out" | head -5; exit 1; }
+    printf "%s\n" "$out" | grep -q "golang.org/x/text@v0.14.0" ||
+      { echo "findings did not name the planted module"; printf "%s\n" "$out" | head -5; exit 1; }
+    printf "%s\n" "$out" | grep -E "^Vulnerability #" | head -1
+    echo "✅ a planted vulnerable module is refused, named"
+  '
 }
 
 job_validators() {
@@ -272,13 +334,17 @@ if [ "$MODE" != "jobs" ]; then
 fi
 
 if [ "$FAILED" -ne 0 ]; then
-  printf '\nLOCAL CI: RED — inspect %s\n' "$LOG_DIR"
+  # The count is printed, never typed into a report: a hand-written step count
+  # is a claim about the script that the script itself can derive.
+  printf '\nLOCAL CI: RED — %d step(s) executed, %d failed (%s)\n' \
+    "$EXECUTED" "$FAILED_COUNT" "$LOG_DIR"
   exit 1
-elif [ -n "$SKIPPED_STEPS" ]; then
+elif [ "$SKIPPED_COUNT" -gt 0 ]; then
   printf '\nLOCAL CI: GREEN EXCEPT SKIPPED STEPS (not full evidence):%s\n' "$SKIPPED_STEPS"
-  printf '  these steps executed no tests; a skip is a decision, not a pass\n  logs: %s\n' "$LOG_DIR"
+  printf '  %d step(s) executed, %d skipped; a skip is a decision, not a pass\n  logs: %s\n' \
+    "$EXECUTED" "$SKIPPED_COUNT" "$LOG_DIR"
   exit 3
 else
-  printf '\nLOCAL CI: GREEN (%s)\n' "$LOG_DIR"
+  printf '\nLOCAL CI: GREEN — %d step(s) executed (%s)\n' "$EXECUTED" "$LOG_DIR"
   exit 0
 fi
