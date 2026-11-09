@@ -82,13 +82,24 @@ type Gate struct {
 	mu            sync.Mutex
 }
 
-// Open instantiates the embedded artifact and opens a replay session.
+// Open verifies the embedded artifact's digest and size, then opens a replay
+// session. Bytes that are not the recorded artifact are refused with an
+// *ArtifactDigestError naming both digests.
 func Open(ctx context.Context, world World) (*Gate, error) {
-	return OpenBytes(ctx, artifact, world)
+	if err := verifyArtifact(artifact); err != nil {
+		return nil, err
+	}
+	return openBytes(ctx, artifact, world)
 }
 
-// OpenBytes is Open over caller-supplied WebAssembly bytes (tests, tooling).
-func OpenBytes(ctx context.Context, wasm []byte, world World) (g *Gate, err error) {
+// OpenUnverified is Open over caller-supplied WebAssembly bytes, for tests and
+// tooling. It checks the import/export shape but NOT the digest: the gate has
+// not been checked against the recorded artifact, and the name says so.
+func OpenUnverified(ctx context.Context, wasm []byte, world World) (*Gate, error) {
+	return openBytes(ctx, wasm, world)
+}
+
+func openBytes(ctx context.Context, wasm []byte, world World) (g *Gate, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			g = nil

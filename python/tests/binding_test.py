@@ -18,6 +18,7 @@ from rigorix_verifier.binding import (
     ARTIFACT_SHA256,
     ARTIFACT_SIZE,
     IMPORTS,
+    ArtifactDigestMismatch,
     Gate,
     GateClosed,
     GateError,
@@ -41,14 +42,16 @@ def _vector(name: str) -> dict:
     return json.loads((VECTORS / f"{name}.json").read_text(encoding="utf-8"))
 
 
-def _open(vector: dict, **kwargs) -> Gate:
-    return Gate.open(
-        scenario=vector["scenario"],
-        fixtures=vector["fixtures"],
-        clock=vector["clock"],
-        seed=vector["seed"],
-        **kwargs,
-    )
+def _open(vector: dict, artifact: bytes | None = None) -> Gate:
+    session = {
+        "scenario": vector["scenario"],
+        "fixtures": vector["fixtures"],
+        "clock": vector["clock"],
+        "seed": vector["seed"],
+    }
+    if artifact is None:
+        return Gate.open(**session)
+    return Gate.open_unverified(artifact=artifact, **session)
 
 
 def _matches(outcome: dict, expected: dict) -> bool:
@@ -183,6 +186,39 @@ def test_artifact_digest_and_size_are_recorded():
     raw = artifact_bytes()
     assert len(raw) == ARTIFACT_SIZE
     assert hashlib.sha256(raw).hexdigest() == ARTIFACT_SHA256
+    loader.verify_artifact(raw)  # the load-time check accepts the recorded bytes
+
+    with pytest.raises(ArtifactDigestMismatch):
+        loader.verify_artifact(raw[:-1])
+
+
+def test_a_modified_artifact_is_refused_at_load(monkeypatch):
+    edited = bytearray(artifact_bytes())
+    edited[len(edited) // 2] ^= 0xFF
+
+    def tampered() -> bytes:
+        return bytes(edited)
+
+    monkeypatch.setattr(loader, "artifact_bytes", tampered)
+    vector = _vector("vec-0001")
+    with pytest.raises(ArtifactDigestMismatch) as refusal:
+        _open(vector)
+
+    expected = hashlib.sha256(bytes(edited)).hexdigest()
+    assert refusal.value.expected == ARTIFACT_SHA256
+    assert refusal.value.actual == expected
+    assert ARTIFACT_SHA256 in str(refusal.value)
+    assert expected in str(refusal.value)
+    assert isinstance(refusal.value, NotWASIArtifact)
+
+
+def test_the_honest_artifact_opens_through_the_verified_entry_point():
+    vector = _vector("vec-0001")
+    gate = _open(vector)
+    try:
+        assert gate.contract_version()["gate_evaluation"] is True
+    finally:
+        gate.close()
 
 
 def test_the_record_is_six_imports():

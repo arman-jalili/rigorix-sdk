@@ -58,9 +58,13 @@ invariant. `TestLiveVersion` runs when `RIGORIX_SERVER_URL` is set.
 ## In-process gate (`go/gate`)
 
 `gate.Open` embeds the vendored `rigorix_gate_wasi.wasm` and loads it with
-wazero (pure Go; `CGO_ENABLED=0`). The six WASI prologue imports are answered
-with constants; the clock must stay zero (#1477), while randomness/stdout are
-counted. Any other import is refused at load, by name.
+wazero (pure Go; `CGO_ENABLED=0`). **It verifies the artifact's sha256 and size
+at load** (`7414f8df…`, 1,896,910 bytes) and refuses a mismatch with
+`*gate.ArtifactDigestError`, which names both digests; `gate.OpenUnverified` is
+the opt-out for caller-supplied bytes and says so in its name. The six WASI
+prologue imports are answered with constants; the clock must stay zero (#1477),
+while randomness/stdout are counted. Any other import is refused at load, by
+name.
 
 ```go
 g, err := gate.Open(ctx, gate.World{
@@ -74,8 +78,10 @@ sealed, err := g.ExportArtifactSet(ctx)
 _ = sealed
 ```
 
-`testdata/PROVENANCE.md` records the source commit, sha256 and the five
-vectors; `TestArtifactDigest` and `TestImportRecordIsSix` pin the artifact.
+`testdata/PROVENANCE.md` records the source commit, sha256, size and the five
+vectors. The digest is enforced twice: at load (above) and by
+`scripts/check-vendored-artifact.sh`, which fails if this copy, the Python copy,
+either provenance file or either source constant disagrees.
 
 ## Regenerating the embedded corpus
 

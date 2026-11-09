@@ -124,11 +124,45 @@ class Gate:
         fixtures: Any,
         clock: Any,
         seed: Any,
-        artifact: Optional[bytes] = None,
     ) -> "Gate":
-        """Instantiate the artifact and open a replay session."""
+        """Verify the vendored artifact against its recorded digest, then open.
+
+        A digest mismatch is an `ArtifactDigestMismatch` naming both digests:
+        the installed package is not the artifact that was built, and the gate
+        refuses rather than deciding differently.
+        """
+        wasm = loader.artifact_bytes()
+        loader.verify_artifact(wasm)
+        return cls._open_bytes(wasm, scenario=scenario, fixtures=fixtures, clock=clock, seed=seed)
+
+    @classmethod
+    def open_unverified(
+        cls,
+        *,
+        artifact: bytes,
+        scenario: Any,
+        fixtures: Any,
+        clock: Any,
+        seed: Any,
+    ) -> "Gate":
+        """Open caller-supplied bytes (tests, tooling) without the digest check.
+
+        The import/export shape is still enforced. The name says the rest: these
+        bytes have not been checked against the recorded artifact.
+        """
+        return cls._open_bytes(artifact, scenario=scenario, fixtures=fixtures, clock=clock, seed=seed)
+
+    @classmethod
+    def _open_bytes(
+        cls,
+        wasm: bytes,
+        *,
+        scenario: Any,
+        fixtures: Any,
+        clock: Any,
+        seed: Any,
+    ) -> "Gate":
         engine = wasmtime.Engine()
-        wasm = loader.artifact_bytes() if artifact is None else artifact
         try:
             module = wasmtime.Module(engine, wasm)
         except wasmtime.WasmtimeError as exc:

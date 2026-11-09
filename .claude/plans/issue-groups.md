@@ -434,3 +434,29 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 cargo audit
 ```
+
+---
+
+# Round 2 — artifact trust (issues #69, #72, #73, #74)
+
+Fetched 2026-11-08: four issues, one component family, **shared files**
+(`.ci/local-ci.sh`, `go/gate/`, both `PROVENANCE.md`, both READMEs).
+
+| Batch | Issues | Branch | Note |
+|---|---|---|---|
+| A | #74, #72, #73 | `feature/artifact-trust-72-74` | one artifact, one fact; both languages check at load; local-ci stops calling a skipped suite green |
+| B | #69 | `issue/69` | runtime pins + advisory scanning; needs a Go-toolchain decision (see below) |
+
+**Why A is a batch and B is not:** A's issues edit the same files — #74 creates the
+guard, #72 makes both loaders enforce the digest that guard pins, #73 makes the
+local runner honest about the suite that proves both. B changes dependency policy
+and needs a toolchain-floor decision, so it cannot block A.
+
+**Correction (code is truth, AGENTS.md §1).** #72 states "Python refuses a digest
+mismatch at load". It does not: `loader.py` validates only the import/export
+sets, and the digest is checked by `binding_test.py:184`. Neither language checks
+at load today. Batch A therefore adds the load-time check to **both** — that is
+what criterion 4 ("both READMEs state a load-time check") requires.
+
+**Blocked-by-nobody note for #74:** re-vendoring is blocked on an OSS release, and
+stays out of scope; the provenance records obtainability instead.

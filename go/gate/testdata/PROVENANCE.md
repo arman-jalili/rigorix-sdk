@@ -1,6 +1,6 @@
 # rigorix_gate_wasi.wasm
 
-Vendored copy of the `rigorix-oss` WASI artifact (SDL-4 / WASI-1).
+Vendored copy of the `rigorix-oss` WASI artifact (WASI-1; vendored).
 
 - **source:** `arman-jalili/rigorix-oss`, commit `a314672c89ca49e550a636b3fd6a2ee468038d17`
 - **crate:** `rigorix-gate-wasi` 1.14.2
@@ -8,6 +8,29 @@ Vendored copy of the `rigorix-oss` WASI artifact (SDL-4 / WASI-1).
   (`wasm32-wasip1`, `panic=abort`, debug `name` section stripped)
 - **sha256:** `7414f8df8772c789b38aeae7460f2f50c816bdde2848bc99470e0b273010bc9c`
 - **size:** 1,896,910 bytes
+
+## Obtainability
+
+**No published release asset today.** The source commit above is `rigorix-oss`
+`main`, not a tagged release, and `v1.14.2` carries no assets (`package-wasi` has
+never executed). Obtain the artifact by building it from that commit:
+
+```bash
+git clone https://github.com/arman-jalili/rigorix-oss
+cd rigorix-oss && git checkout a314672c89ca49e550a636b3fd6a2ee468038d17
+bash wasi/ci/build.sh   # writes target/wasm32-wasip1/release/rigorix_gate_wasi.wasm
+```
+
+A rebuild is byte-identical (`7414f8df…`, 1,896,910 bytes), so the digest above
+is a function of the commit. When `rigorix-oss` publishes `v1.14.3` with a
+`rigorix_gate_wasi.wasm` asset, this section becomes that URL and the digest does
+not change.
+
+## One fact, two copies
+
+`scripts/check-vendored-artifact.sh` fails if this file, the other language's
+copy, either `PROVENANCE.md` or either source constant disagrees. The two copies
+in this repository are not two artifacts.
 
 ## Imports (six, answered by constants)
 

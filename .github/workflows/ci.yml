@@ -32,6 +32,13 @@ jobs:
           bash .pi/scripts/validate-channel-versions.sh
           bash .pi/scripts/validate-channel-versions.sh --self-test
 
+      # The artifact is vendored twice (Go testdata, Python package) and each
+      # language records its digest in two places. This is the only comparison
+      # of those four facts; drift means two languages running two gates (#74).
+      - name: One artifact, one fact (both vendored copies agree)
+        working-directory: .
+        run: bash scripts/check-vendored-artifact.sh
+
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:
