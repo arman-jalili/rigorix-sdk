@@ -11,37 +11,91 @@
 # ubuntu-latest CI. Use --python-local to force the host interpreter (the
 # binding tests then skip on Darwin, as they do under pytest).
 #
+# A step that executed no tests is not a green step (#73): the Python binding
+# suite skips itself on Darwin without Docker, and reporting that as "✅" made
+# this runner the only verdict available while it proved nothing. The binding
+# suite therefore runs as its OWN step (a whole-suite check never fires, because
+# the other Python tests still pass), and a step whose summary says `N skipped`
+# and nothing else fails, naming the suite. Use --allow-skips to run anyway: the
+# step is then listed as SKIPPED, never ✅.
+#
 # Usage:
 #   bash .ci/local-ci.sh [--jobs-only | --validators-only] [--python-local]
+#                        [--allow-skips]
 #
-# Exit: 0 = every step green; 1 = at least one failed (logs are printed and kept).
+# Exit: 0 = every step green and every step had a subject
+#       1 = at least one step failed (logs are printed and kept)
+#       3 = green, but at least one step was skipped (--allow-skips); not full
+#           evidence, and a caller checking `-eq 0` will see the difference.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="${LOCAL_CI_LOG_DIR:-$(mktemp -d)}"
+mkdir -p "$LOG_DIR"
 MODE="all"
 PYTHON_LOCAL=0
+ALLOW_SKIPS=0
 FAILED=0
+SKIPPED_STEPS=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --jobs-only) MODE="jobs"; shift ;;
     --validators-only) MODE="validators"; shift ;;
     --python-local) PYTHON_LOCAL=1; shift ;;
-    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --allow-skips) ALLOW_SKIPS=1; shift ;;
+    -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "local-ci: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
 
+# pytest_summary <log> — "passed failed skipped errors" from the last summary
+# line, or nothing when pytest printed none (a collection error exits non-zero
+# anyway, so the caller's failure branch handles it).
+pytest_summary() {
+  local line
+  line="$(grep -E '[0-9]+ (passed|failed|skipped|error|errors)' "$1" |
+    grep -E ' in [0-9.]+s' | tail -1)"
+  [ -n "$line" ] || return 0
+  local passed failed skipped errors
+  passed="$(printf '%s' "$line" | grep -Eo '[0-9]+ passed' | grep -Eo '[0-9]+' | head -1)"
+  failed="$(printf '%s' "$line" | grep -Eo '[0-9]+ failed' | grep -Eo '[0-9]+' | head -1)"
+  errors="$(printf '%s' "$line" | grep -Eo '[0-9]+ errors?' | grep -Eo '[0-9]+' | head -1)"
+  skipped="$(printf '%s' "$line" | grep -Eo '[0-9]+ skipped' | grep -Eo '[0-9]+' | head -1)"
+  printf '%s %s %s %s\n' "${passed:-0}" "${failed:-0}" "${skipped:-0}" "${errors:-0}"
+}
+
 run() {
-  local name="$1" dir="$2" cmd="$3"
+  local name="$1" dir="$2" cmd="$3" subject="${4:-}"
   local slug log start
   slug="$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' '_')"
   log="$LOG_DIR/$slug.log"
   start="$(date +%s)"
   printf '\n▶ %s\n' "$name"
   if ( cd "$ROOT/$dir" && bash -c "$cmd" ) >"$log" 2>&1; then
-    printf '✅ %s (%ss)\n' "$name" "$(( $(date +%s) - start ))"
+    local elapsed detail=""
+    elapsed="$(( $(date +%s) - start ))"
+    if [ "$subject" = "pytest" ]; then
+      local passed=0 failed=0 skipped=0 errors=0
+      read -r passed failed skipped errors <<<"$(pytest_summary "$log")" || true
+      detail=" — ${passed:-0} passed, ${skipped:-0} skipped"
+      if [ "${passed:-0}" -eq 0 ] && [ "${failed:-0}" -eq 0 ] &&
+        [ "${errors:-0}" -eq 0 ] && [ "${skipped:-0}" -gt 0 ]; then
+        if [ "$ALLOW_SKIPS" -eq 1 ]; then
+          printf '⏭ %s (%ss) — SKIPPED: %s test(s), 0 executed (--allow-skips)\n' \
+            "$name" "$elapsed" "$skipped"
+          SKIPPED_STEPS="$SKIPPED_STEPS
+  - $name"
+          return 0
+        fi
+        printf '❌ %s (%ss) — the suite executed 0 tests (%s skipped); %s\n' \
+          "$name" "$elapsed" "$skipped" "$log"
+        grep -E '^SKIPPED' "$log" | head -3 | sed 's/^/   /'
+        FAILED=1
+        return 0
+      fi
+    fi
+    printf '✅ %s%s (%ss)\n' "$name" "$detail" "$elapsed"
   else
     printf '❌ %s (%ss) — %s\n' "$name" "$(( $(date +%s) - start ))" "$log"
     tail -n 50 "$log" | sed 's/^/   /'
@@ -50,6 +104,8 @@ run() {
 }
 
 job_rust() {
+  run "artifact: both vendored copies agree" . \
+    'bash scripts/check-vendored-artifact.sh'
   run "rust: publication channels agree" . \
     'bash .pi/scripts/validate-channel-versions.sh && bash .pi/scripts/validate-channel-versions.sh --self-test'
   run "rust: fmt" rust 'cargo fmt --check'
@@ -70,7 +126,7 @@ job_python() {
 set -euo pipefail
 pip install -q --upgrade pip build
 pip install -q -e ".[test]"
-pytest -q
+pytest -q -rs
 dist="$(mktemp -d)"
 wheel="$(mktemp -d)"
 sdist="$(mktemp -d)"
@@ -83,15 +139,24 @@ python -m venv "$sdist"
 RIGORIX_SDK_SCHEMAS= "$sdist/bin/python" scripts/pack_smoke.py
 PY
     run "python: pytest + wheel/sdist smoke (linux docker)" . \
-      "docker run --rm -v '$ROOT:/repo' -v '$job:/tmp/job.sh:ro' -w /repo/python python:3.12-slim sh /tmp/job.sh"
+      "docker run --rm -v '$ROOT:/repo' -v '$job:/tmp/job.sh:ro' -w /repo/python python:3.12-slim sh /tmp/job.sh" pytest
   else
-    run "python: pytest (host; binding tests skip on Darwin)" python 'pytest -q'
+    run "python: pytest (host; every suite but the binding)" python \
+      'pytest -q -rs --ignore=tests/binding_test.py' pytest
+    # Separate subject: on Darwin this is 14 skips and zero tests, which is not
+    # evidence that the binding works. The step name says which suite is silent.
+    run "python: binding suite (needs a working wasmtime JIT)" python \
+      'pytest -q -rs tests/binding_test.py' pytest
     local tmp; tmp="$(mktemp -d)"
+    # Self-contained: the host interpreter may have no `build`, and macOS's
+    # system python3 cannot install into it. A venv carries the builder.
     run "python: wheel/sdist smoke (host)" python "
       set -euo pipefail
-      python -m build --outdir '$tmp' >/dev/null
-      python -m venv '$tmp/wheel'
-      '$tmp/wheel/bin/pip' install -q '$tmp'/*.whl
+      python3 -m venv '$tmp/buildenv'
+      '$tmp/buildenv/bin/pip' install -q build
+      '$tmp/buildenv/bin/python' -m build --outdir '$tmp/dist' >/dev/null
+      python3 -m venv '$tmp/wheel'
+      '$tmp/wheel/bin/pip' install -q '$tmp/dist'/*.whl
       RIGORIX_SDK_SCHEMAS= '$tmp/wheel/bin/python' scripts/pack_smoke.py
     "
   fi
@@ -185,9 +250,14 @@ if [ "$MODE" != "jobs" ]; then
   job_validators
 fi
 
-if [ "$FAILED" -eq 0 ]; then
-  printf '\nLOCAL CI: GREEN (%s)\n' "$LOG_DIR"
-else
+if [ "$FAILED" -ne 0 ]; then
   printf '\nLOCAL CI: RED — inspect %s\n' "$LOG_DIR"
+  exit 1
+elif [ -n "$SKIPPED_STEPS" ]; then
+  printf '\nLOCAL CI: GREEN EXCEPT SKIPPED STEPS (not full evidence):%s\n' "$SKIPPED_STEPS"
+  printf '  these steps executed no tests; a skip is a decision, not a pass\n  logs: %s\n' "$LOG_DIR"
+  exit 3
+else
+  printf '\nLOCAL CI: GREEN (%s)\n' "$LOG_DIR"
+  exit 0
 fi
-exit "$FAILED"
