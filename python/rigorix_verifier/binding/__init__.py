@@ -12,6 +12,7 @@ from .errors import (
 )
 from .gate import Counters, Gate
 from .loader import ARTIFACT_SHA256, ARTIFACT_SIZE, IMPORTS, artifact_bytes, verify_artifact
+from .runtime import runtime_version
 
 __all__ = [
     "ARTIFACT_SHA256",
@@ -26,5 +27,6 @@ __all__ = [
     "IMPORTS",
     "NotWASIArtifact",
     "artifact_bytes",
+    "runtime_version",
     "verify_artifact",
 ]

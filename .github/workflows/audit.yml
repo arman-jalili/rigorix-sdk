@@ -1,0 +1,119 @@
+name: Audit
+
+# The gate now runs a wasm engine inside the customer's process (wasmtime in
+# Python, wazero in Go) — two dependencies whose advisory feeds nobody read
+# before SDL-5. This workflow is the feed: it fails the build on a known
+# advisory instead of printing a warning nobody reads, and it runs weekly
+# because advisories are published after a merge, not before it.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Mondays, 06:17 UTC — the machine that catches what the merge could not.
+    - cron: "17 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  pins:
+    name: 📌 runtime pins are exact
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # A range is how a support case loses the ability to say which runtime
+      # decided: `wasmtime>=20.0` may install any of 50 releases.
+      - name: check-pins.py (a planted range fails, quoting the line)
+        run: python scripts/check-pins.py
+
+      - name: the seed — a planted range must fail
+        run: |
+          cp python/pyproject.toml /tmp/pyproject.toml
+          sed -i 's/"wasmtime==[0-9.]*"/"wasmtime>=20.0"/' python/pyproject.toml
+          if python scripts/check-pins.py; then
+            echo "::error::check-pins.py accepted wasmtime>=20.0; the guard is inert"
+            exit 1
+          fi
+          cp /tmp/pyproject.toml python/pyproject.toml
+          echo "✅ a planted range is refused"
+
+  python-audit:
+    name: 🐍 pip-audit --strict
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the package and its runtime dependencies
+        run: pip install -e ".[test]" pip-audit
+
+      # --strict: a known advisory in the environment the wheel would run in is
+      # a red build. No `|| true`, no severity filter.
+      - name: pip-audit --strict
+        run: pip-audit --strict
+
+      - name: the seed — a planted advisory must fail
+        run: |
+          printf 'pyyaml==5.1\n' > /tmp/planted-requirements.txt
+          if pip-audit --strict -r /tmp/planted-requirements.txt; then
+            echo "::error::pip-audit accepted a known-vulnerable pin; the gate is inert"
+            exit 1
+          fi
+          echo "✅ a planted advisory is refused"
+
+  go-audit:
+    name: 🐹 govulncheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v4
+
+      # check-latest: the stdlib is part of the surface govulncheck reports, so
+      # the build must use the newest patch of the floor in go.mod (1.26.x).
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/go.mod
+          check-latest: true
+          cache-dependency-path: go/go.sum
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      # Symbol-level scan: a vulnerable function the code actually reaches fails
+      # the build; an advisory in an unused path does not.
+      - name: govulncheck ./...
+        run: "$(go env GOPATH)/bin/govulncheck ./..."
+
+      - name: the seed — a planted vulnerable dependency must fail
+        run: |
+          cp go.mod /tmp/go.mod
+          cp go.sum /tmp/go.sum
+          go mod edit -require=golang.org/x/text@v0.14.0
+          go mod tidy
+          # Module mode takes no patterns; it names the advisory in the module
+          # graph, which is what a planted requirement is.
+          if "$(go env GOPATH)/bin/govulncheck" -scan=module; then
+            echo "::error::govulncheck accepted a known-vulnerable module; the gate is inert"
+            exit 1
+          fi
+          cp /tmp/go.mod go.mod
+          cp /tmp/go.sum go.sum
+          echo "✅ a planted advisory is refused"

@@ -16,7 +16,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Topic :: Security :: Cryptography",
 ]
-dependencies = ["jsonschema>=4.0", "cryptography>=41.0", "wasmtime>=20.0"]
+dependencies = ["jsonschema>=4.0", "cryptography>=41.0", "wasmtime==50.0.1"]
 
 [project.urls]
 Homepage = "https://github.com/arman-jalili/rigorix-sdk"

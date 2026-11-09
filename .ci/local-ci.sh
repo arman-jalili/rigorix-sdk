@@ -4,6 +4,7 @@
 # Mirrors .github/workflows/ci.yml:
 #   verifier (rust), python-verifier, typescript-verifier, typescript-client,
 #   go-verifier-client, java-verifier, publish-helper
+# plus .github/workflows/audit.yml (runtime pins, pip-audit, govulncheck),
 # then the pre-MR .pi validators.
 #
 # The Python job runs in `python:3.12-slim` when Docker is available, because
@@ -227,6 +228,25 @@ job_publish_helper() {
   '
 }
 
+job_audit() {
+  # Mirrors .github/workflows/audit.yml (SDL-5): the two runtimes the gate now
+  # depends on are pinned exactly and scanned for known advisories. This is not
+  # in ci.yml because advisories are published after a merge, not before it.
+  run "audit: exact runtime pins" . 'python3 scripts/check-pins.py'
+  if [ "$PYTHON_LOCAL" -eq 0 ] && command -v docker >/dev/null 2>&1; then
+    run "audit: pip-audit --strict (linux docker)" . \
+      "docker run --rm -v '$ROOT:/repo' -w /repo/python python:3.12-slim sh -c \"pip install -q --upgrade pip >/dev/null 2>&1; pip install -q -e '.[test]' pip-audit >/dev/null 2>&1 && pip-audit --strict\""
+  else
+    run "audit: pip-audit --strict (host)" . \
+      'python3 -m pip_audit --strict || { echo "install pip-audit for the host, or run with Docker available"; exit 1; }'
+  fi
+  # govulncheck reports the stdlib of the toolchain that builds, so this step
+  # needs the newest patch of the floor in go.mod (1.26.x). With an older
+  # toolchain it fails and names the fixed version — which is the point.
+  run "audit: govulncheck" go \
+    'go install golang.org/x/vuln/cmd/govulncheck@latest >/dev/null 2>&1 && "$(go env GOPATH)/bin/govulncheck" ./...'
+}
+
 job_validators() {
   for script in validate-ci validate-tests validate-security validate-operations \
     validate-canonical validate-architecture validate-integration; do
@@ -244,6 +264,7 @@ if [ "$MODE" != "validators" ]; then
   job_go
   job_java
   job_publish_helper
+  job_audit
 fi
 
 if [ "$MODE" != "jobs" ]; then

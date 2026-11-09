@@ -62,6 +62,12 @@ digests, when the installed package is not the artifact that was built;
 and says so in its name. The six WASI prologue imports are answered with
 constants and counted, and any other import is a load-time refusal.
 
+The engine is **`wasmtime==50.0.1`**, an exact pin guarded by
+`scripts/check-pins.py`. `binding.runtime_version()` reports the installed
+engine, so a support case quotes the artifact digest, the artifact's `contract`
+version and the engine version together. `.github/workflows/audit.yml` runs
+`pip-audit --strict` on every pull request and weekly.
+
 ```python
 from rigorix_verifier.binding import Gate
 

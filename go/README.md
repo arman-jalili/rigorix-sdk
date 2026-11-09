@@ -17,6 +17,9 @@ canonical `schemas/**` corpus is embedded at build time (generated).
 
 ## Install
 
+Requires **Go 1.26+** (the floor exists so a patched `golang.org/x/text` is
+reachable; `govulncheck` scans the stdlib of the toolchain that builds).
+
 ```bash
 go get github.com/arman-jalili/rigorix-sdk/go
 ```
@@ -65,6 +68,11 @@ the opt-out for caller-supplied bytes and says so in its name. The six WASI
 prologue imports are answered with constants; the clock must stay zero (#1477),
 while randomness/stdout are counted. Any other import is refused at load, by
 name.
+
+The engine is **wazero v1.12.0**, pinned exactly in `go.mod` — no range, so the
+version in a report is a fact. `scripts/check-pins.py` fails on a range, and
+`.github/workflows/audit.yml` runs `govulncheck ./...` on every pull request and
+weekly; `SECURITY.md` says who answers an advisory and how fast.
 
 ```go
 g, err := gate.Open(ctx, gate.World{
