@@ -11,4 +11,8 @@ Evidence:
 - `pip-audit --strict`: clean; planted `pyyaml==5.1` → exit 1, PYSEC-2020-176.
 - `govulncheck ./...` (Go 1.26.10): clean; planted x/text v0.14.0 → exit 3, GO-2026-6629.
 - `binding.runtime_version()` == `50.0.1`, asserted equal to the pyproject pin.
-- local CI 32/32 green.
+- local CI: the verdict prints the count it executed — `35 step(s) executed`
+  (all), 28 (`--jobs-only`), 7 (`--validators-only`).
+- the three seeds now run in `local-ci` too, and each asserts *why* it failed
+  (the range named, PYSEC id, exit 3 naming the planted module), because a seed
+  that fails for the wrong reason proves nothing.
