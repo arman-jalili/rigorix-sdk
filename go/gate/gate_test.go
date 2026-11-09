@@ -233,7 +233,7 @@ func TestUnknownOpIsTyped(t *testing.T) {
 }
 
 func TestUnexpectedImportIsRefusedByName(t *testing.T) {
-	_, err := OpenBytes(context.Background(), wasmWithImport(
+	_, err := OpenUnverified(context.Background(), wasmWithImport(
 		"__wbindgen_placeholder__", "__wbindgen_throw",
 	), World{})
 	if !errors.Is(err, ErrNotWASIArtifact) {
@@ -241,6 +241,74 @@ func TestUnexpectedImportIsRefusedByName(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "__wbindgen_placeholder__") {
 		t.Fatalf("the refusal must name the import: %v", err)
+	}
+}
+
+func TestAModifiedArtifactIsRefusedAtLoad(t *testing.T) {
+	// `Open` calls verifyArtifact before compiling; flipping one byte is the
+	// attack the check exists for, and both digests must be named.
+	edited := append([]byte(nil), artifact...)
+	edited[len(edited)/2] ^= 0xff
+
+	err := verifyArtifact(edited)
+	if err == nil {
+		t.Fatal("a modified artifact must be refused")
+	}
+	var refusal *ArtifactDigestError
+	if !errors.As(err, &refusal) {
+		t.Fatalf("expected *ArtifactDigestError, got %T: %v", err, err)
+	}
+	if !errors.Is(err, ErrArtifactDigestMismatch) {
+		t.Fatalf("errors.Is(err, ErrArtifactDigestMismatch) must hold: %v", err)
+	}
+	if refusal.Expected != artifactSHA256 {
+		t.Fatalf("expected digest = %s, want %s", refusal.Expected, artifactSHA256)
+	}
+	sum := fmt.Sprintf("%x", sha256.Sum256(edited))
+	if refusal.Actual != sum {
+		t.Fatalf("actual digest = %s, want %s", refusal.Actual, sum)
+	}
+	// The operator quotes the message, not the struct.
+	if !strings.Contains(err.Error(), artifactSHA256) || !strings.Contains(err.Error(), sum) {
+		t.Fatalf("the refusal must name both digests: %v", err)
+	}
+	if refusal.ExpectedSize != artifactSize || refusal.ActualSize != len(edited) {
+		t.Fatalf("sizes = %d/%d, want %d/%d",
+			refusal.ExpectedSize, refusal.ActualSize, artifactSize, len(edited))
+	}
+}
+
+func TestVerifyArtifactAcceptsTheRecordedBytes(t *testing.T) {
+	if err := verifyArtifact(artifact); err != nil {
+		t.Fatalf("the recorded artifact must verify: %v", err)
+	}
+}
+
+func TestVerifyArtifactRefusesATruncation(t *testing.T) {
+	err := verifyArtifact(artifact[:len(artifact)-1])
+	if !errors.Is(err, ErrArtifactDigestMismatch) {
+		t.Fatalf("a truncation must be a digest refusal, got %v", err)
+	}
+}
+
+func TestCallerBytesOpenThroughTheUnverifiedEntryPoint(t *testing.T) {
+	v := loadVector(t, "vec-0001")
+	g, err := OpenUnverified(context.Background(), artifact, World{
+		Scenario: v.Scenario,
+		Fixtures: v.Fixtures,
+		Clock:    v.Clock,
+		Seed:     v.Seed,
+	})
+	if err != nil {
+		t.Fatalf("OpenUnverified over the honest bytes: %v", err)
+	}
+	defer g.Close(context.Background())
+	out, err := g.Attempt(context.Background(), actionOf(t, v))
+	if err != nil {
+		t.Fatalf("attempt: %v", err)
+	}
+	if out["decision_digest"] != v.ExpectedDecision.SHA256 {
+		t.Fatalf("digest %v != %s", out["decision_digest"], v.ExpectedDecision.SHA256)
 	}
 }
 
@@ -253,8 +321,12 @@ func TestArtifactDigest(t *testing.T) {
 	if !strings.Contains(string(provenance), sum) {
 		t.Fatalf("PROVENANCE.md does not record the artifact digest %s", sum)
 	}
-	if len(artifact) != 1_896_910 {
-		t.Fatalf("artifact size = %d, want 1,896,910", len(artifact))
+	// The load-time check and the record are one fact, not two copies of it.
+	if sum != artifactSHA256 {
+		t.Fatalf("artifactSHA256 = %s, bytes hash to %s", artifactSHA256, sum)
+	}
+	if len(artifact) != artifactSize {
+		t.Fatalf("artifact size = %d, want %d", len(artifact), artifactSize)
 	}
 }
 

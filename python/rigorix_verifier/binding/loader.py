@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 from importlib import resources
 
-from .errors import NotWASIArtifact
+from .errors import ArtifactDigestMismatch, NotWASIArtifact
 
 ARTIFACT_NAME = "rigorix_gate_wasi.wasm"
 
@@ -33,6 +34,19 @@ def artifact_bytes() -> bytes:
         .joinpath("_wasm", ARTIFACT_NAME)
         .read_bytes()
     )
+
+
+def verify_artifact(raw: bytes) -> None:
+    """Refuse bytes that are not the recorded artifact.
+
+    The import table is cheap to reproduce in a hostile module; the digest is
+    not. `Gate.open` calls this before the bytes are compiled, so an installed
+    package that was tampered with is a load error, not a different decision.
+    """
+    actual = hashlib.sha256(raw).hexdigest()
+    if len(raw) == ARTIFACT_SIZE and actual == ARTIFACT_SHA256:
+        return
+    raise ArtifactDigestMismatch(ARTIFACT_SHA256, actual, ARTIFACT_SIZE, len(raw))
 
 
 def validate_module(module) -> None:

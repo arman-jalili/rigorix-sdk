@@ -55,8 +55,12 @@ version = client.version()
 
 `rigorix_verifier.binding.Gate` loads the vendored
 `rigorix_gate_wasi.wasm` through `wasmtime`; the decision is made inside the
-module. The six WASI prologue imports are answered with constants and counted,
-and any other import is a load-time refusal.
+module. **`Gate.open` verifies the artifact's sha256 and size at load**
+(`7414f8df…`, 1,896,910 bytes) and raises `ArtifactDigestMismatch`, naming both
+digests, when the installed package is not the artifact that was built;
+`Gate.open_unverified(artifact=...)` is the opt-out for caller-supplied bytes
+and says so in its name. The six WASI prologue imports are answered with
+constants and counted, and any other import is a load-time refusal.
 
 ```python
 from rigorix_verifier.binding import Gate
