@@ -222,9 +222,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The floor is in go.mod (1.26, raised so that a fixed golang.org/x/text
+      # is reachable and the stdlib advisories govulncheck reports are patched);
+      # check-latest keeps the stdlib at the newest patch of that line.
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version-file: go/go.mod
+          check-latest: true
           cache-dependency-path: go/go.sum
 
       - name: Corpus is regenerated (no drift)

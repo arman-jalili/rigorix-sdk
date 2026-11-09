@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import socket
 import subprocess
 from pathlib import Path
@@ -24,6 +25,7 @@ from rigorix_verifier.binding import (
     GateError,
     NotWASIArtifact,
     artifact_bytes,
+    runtime_version,
 )
 from rigorix_verifier.binding import loader
 
@@ -190,6 +192,16 @@ def test_artifact_digest_and_size_are_recorded():
 
     with pytest.raises(ArtifactDigestMismatch):
         loader.verify_artifact(raw[:-1])
+
+
+def test_the_runtime_pin_is_the_runtime_that_runs():
+    """SDL-5: the number in the report is the number in the manifest."""
+    pyproject = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(
+        encoding="utf-8"
+    )
+    pinned = re.search(r'"wasmtime==([0-9]+\.[0-9]+\.[0-9]+)"', pyproject)
+    assert pinned, "pyproject.toml must carry an exact wasmtime pin"
+    assert runtime_version() == pinned.group(1)
 
 
 def test_a_modified_artifact_is_refused_at_load(monkeypatch):

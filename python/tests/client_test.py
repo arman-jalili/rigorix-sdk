@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.server
 import json
 import os
+import re
 import socket
 import threading
 from pathlib import Path
@@ -181,12 +182,14 @@ def test_catalog_parity_with_frozen_catalog():
 
 
 def test_client_adds_no_dependency():
+    """The client is stdlib-only: the runtime deps are the binding's, not its.
+
+    Names, not versions: an exact runtime pin (SDL-5) must not fail this test.
+    """
     text = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     assert "requests" not in text and "httpx" not in text
-    assert (
-        'dependencies = ["jsonschema>=4.0", "cryptography>=41.0", "wasmtime>=20.0"]'
-        in text
-    )
+    names = set(re.findall(r'"([A-Za-z0-9_.-]+)\s*(?:[<>=!~]|")', text.split("dependencies = [")[1].split("]")[0]))
+    assert names == {"jsonschema", "cryptography", "wasmtime"}
 
 
 @pytest.fixture

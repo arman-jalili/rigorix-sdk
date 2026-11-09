@@ -32,6 +32,15 @@ not change.
 copy, either `PROVENANCE.md` or either source constant disagrees. The two copies
 in this repository are not two artifacts.
 
+## Runtime
+
+The binding pins **`wasmtime==50.0.1`** (an exact pin, guarded by
+`scripts/check-pins.py`) and `binding.runtime_version()` reports the installed
+engine at run time. A support case therefore quotes three numbers that belong to
+one decision: the artifact digest above, the artifact's `contract` version, and
+the wasm engine that executed it. Advisories in either engine are scanned by
+`.github/workflows/audit.yml`; `SECURITY.md` says who answers one and how fast.
+
 ## Imports (six, answered by constants)
 
 `std` on `wasm32-wasip1` links six `wasi_snapshot_preview1` prologue functions;
