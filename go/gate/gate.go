@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Arman Wolkenstein-Jalili and Rigorix contributors
+
 // Package gate loads the Rigorix WASI artifact in-process with wazero.
 //
 // The module decides; this package allocates the request, calls `rigx_call`,

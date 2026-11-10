@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Arman Wolkenstein-Jalili and Rigorix contributors
+
 // Package client is a protocol-only typed client for the frozen `rigorix.*`
 // JSON-RPC catalog (ADR-0001). It binds every catalog method and exposes a
 // transport seam; it never exposes a raw step-execution path (ADR-0001 D10).

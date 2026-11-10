@@ -39,6 +39,15 @@ jobs:
         working-directory: .
         run: bash scripts/check-vendored-artifact.sh
 
+      # Published files are not strategy memos; SPDX is on the file a reader
+      # opens first, on every channel that distributes source.
+      - name: Publication hygiene (no strategy, SPDX everywhere)
+        working-directory: .
+        run: |
+          bash .pi/scripts/validate-no-strategy.sh
+          bash scripts/check-spdx.sh --self-test
+          bash scripts/check-spdx.sh
+
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:

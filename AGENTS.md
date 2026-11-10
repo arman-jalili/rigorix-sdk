@@ -9,4 +9,4 @@ Status: scaffold (docs + schemas drafts). No production code yet.
 2. **Contract changes are decisions.** Any schema change goes through the drift CI story
    in rigorix-oss and gets a delta note here. No silent edits.
 3. **Governed flows only.** SDK clients never expose a direct-execute path.
-4. Docs live in `docs/`; strategy freezes are append-only history.
+4. Docs live in `docs/`; contract-sync notes are append-only history.

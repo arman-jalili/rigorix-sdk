@@ -3,7 +3,7 @@
 - **Status:** Accepted (freeze) — 2026-09-19
 - **Context:** rigorix-sdk, contract-sync milestone 1 complete
 - **Supersedes:** none
-- **Related:** `docs/strategy-freeze-2026-09-06.md` (D-3, D-4, D-5, D-6),
+- **Related:** `docs/contract-sync-2026-09-06.md`,
   `schemas/api/method-catalog.md` (draft sketch, now frozen here),
   rigorix-oss ADR-008/011/012 (auth device flow, approval binding, identity
   attestation), rigorix-oss ADR-013 (sequence policy)

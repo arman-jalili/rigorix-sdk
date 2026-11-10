@@ -1,6 +1,6 @@
 name: Audit
 
-# The gate now runs a wasm engine inside the customer's process (wasmtime in
+# The gate now runs a wasm engine inside the embedding process (wasmtime in
 # Python, wazero in Go) — two dependencies whose advisory feeds nobody read
 # before SDL-5. This workflow is the feed: it fails the build on a known
 # advisory instead of printing a warning nobody reads, and it runs weekly
@@ -94,13 +94,23 @@ jobs:
           check-latest: true
           cache-dependency-path: go/go.sum
 
+      # The floor is go/go.mod; print the resolved toolchain so the stdlib
+      # advisory line in a report is reproducible.
+      - name: Toolchain
+        run: go version
+
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
       # Symbol-level scan: a vulnerable function the code actually reaches fails
       # the build; an advisory in an unused path does not.
-      - name: govulncheck ./...
-        run: "$(go env GOPATH)/bin/govulncheck ./..."
+      - name: govulncheck ./... (called vulnerabilities fail the build)
+        run: "$(go env GOPATH)/bin/govulncheck" ./...
+
+      # Uncalled advisories are reported, not swallowed: a change in the module
+      # graph's advisory set is visible in the log without being a red build.
+      - name: module scope (informational)
+        run: "$(go env GOPATH)/bin/govulncheck" -scan=module || true
 
       - name: the seed — a planted vulnerable dependency must fail
         run: |

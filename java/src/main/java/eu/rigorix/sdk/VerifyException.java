@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Arman Wolkenstein-Jalili and Rigorix contributors
+
 package eu.rigorix.sdk;
 
 /** Verifier error taxonomy (mirrors the Rust `VerifyError`). */

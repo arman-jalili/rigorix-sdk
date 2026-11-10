@@ -81,7 +81,9 @@ for hash in $(git rev-list "$RANGE" 2>/dev/null); do
 done
 
 if [ "$checked" -eq 0 ]; then
-  echo "✅ DCO: no commits in $RANGE"
+  # A check that passes with nothing to examine is not a pass: say what it
+  # examined, so nobody reads the ✅ as evidence. `--self-test` is the evidence.
+  echo "⏭ DCO: 0 commits in $RANGE — no subject, not evidence (--self-test covers the predicate)"
   exit 0
 fi
 
