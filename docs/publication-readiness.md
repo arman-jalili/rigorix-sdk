@@ -142,6 +142,12 @@ files and false of two channels. Measured:
 | Go (`.../rigorix-sdk/go`) | module source | **26 / 26** |
 | Java (`eu.rigorix:rigorix-verifier`) | jar (sources on Central) | **12 / 12 main sources** |
 
+`scripts/check-agreement.sh` fails when a tracked Markdown file states a
+contribution agreement other than the one `docs/CLA.md` declares — the canonical
+name is read from that document, not written into the script, so the guard follows
+the agreement. Ten lines in `CONTRIBUTING.md`, `docs/CLA.md` and this document are
+allow-listed with a reason each: they exist to name what was replaced.
+
 `scripts/check-spdx.sh` checks 44 files and `--self-test` proves it refuses a file
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
@@ -326,8 +332,8 @@ need Docker on macOS (wasmtime's JIT is killed by the sandbox); the runner says
 ## Licence and contribution policy (PUB-2)
 
 **Apache-2.0, and only Apache-2.0.** See [the README](../README.md#licence) for the
-statement, `LICENSE` for the text, and `CONTRIBUTING.md` for what a contribution
-signs (DCO).
+statement, `LICENSE` for the text, `docs/CLA.md` for the agreement, and
+`CONTRIBUTING.md` for what signing it means.
 
 ## Acceptance
 
