@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! rigorix-verifier — protocol-only verification of Rigorix audit envelopes.
 //!
 //! Strategy A (SDK freeze D-2): the HMAC trail must be independently

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! Canonical Rigorix contracts as a consumable crate.
 //!
 //! @canonical schemas/README.md — the contract corpus this crate embeds
