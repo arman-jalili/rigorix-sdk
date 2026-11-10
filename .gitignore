@@ -17,4 +17,10 @@ __pycache__/
 
 # Guardian runtime state (mutated by the guardian extension each session)
 guardian-sessions.json
+guardian-manifest.json
 .pi/.guardian-kanban.json
+.pi/.guardian-pipeline-state.json
+
+# Agent session artifacts (plans, tracker dumps). Durable design records live
+# in docs/; the issue history is the tracker.
+.claude/

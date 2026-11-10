@@ -114,6 +114,8 @@ run() {
 job_rust() {
   run "artifact: both vendored copies agree" . \
     'bash scripts/check-vendored-artifact.sh'
+  run "repo: commits are signed off (DCO)" . \
+    'bash scripts/check-dco.sh --self-test && bash scripts/check-dco.sh'
   run "rust: publication channels agree" . \
     'bash .pi/scripts/validate-channel-versions.sh && bash .pi/scripts/validate-channel-versions.sh --self-test'
   run "rust: fmt" rust 'cargo fmt --check'

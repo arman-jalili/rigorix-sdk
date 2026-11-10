@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
 """rigorix-verifier (Python) — Strategy A parity for the signed audit trail.
 
 Independent, protocol-only verification of Rigorix audit envelopes and the

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 /** rigorix-verifier (TypeScript) — Strategy A parity for the signed audit trail.
  *
  * Independent, protocol-only verification: HMAC-SHA256 over the canonical

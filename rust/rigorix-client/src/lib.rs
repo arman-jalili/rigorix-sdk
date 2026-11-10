@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 //! rigorix-client — protocol-only typed client for the frozen `rigorix.*`
 //! JSON-RPC catalog.
 //!

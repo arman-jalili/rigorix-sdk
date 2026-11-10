@@ -9,7 +9,7 @@ this doc alone; it records *why* and *in what order*.
   conference-demo) validated end-to-end with Claude Code/Codex over **stdio MCP only**.
 - The MCP surface is the only cross-runtime boundary today (17 tools). rigorix-mcp has
   **no network transport** — SSE was removed (GAP-A-10); `--sse` warns and runs stdio.
-- rigorix-enterprise is a **control plane** (policy bundle export, audit ingestion with
+- The enterprise product is a **control plane** (policy bundle export, audit ingestion with
   HMAC verify, teams/RBAC, dashboards, REST axum + Postgres) — and is **far behind OSS**:
   identity attestation, approval binding, sequence policy (R7) and runtime wiring all
   landed OSS-side recently; enterprise has none of it. Enterprise `findings/log.md`
@@ -38,7 +38,7 @@ catalog frozen in `schemas/`:
 1. **OSS `rigorix-server`** (rigorix-oss workspace crate) — single-tenant reference
    execution server: engine orchestrator + event bus + approvals + identity + audit
    store behind the catalog over HTTP JSON-RPC + SSE push. stdio MCP unchanged.
-2. **Enterprise execution-API module** (rigorix-enterprise `core`, **module-in-core**
+2. **Enterprise execution-API module** (enterprise `core`, **module-in-core**
    recommended over a separate service: policy_engine/auth/audit_ingestion/Postgres all
    already live there; a sidecar quadruples the sync surface and doubles drift).
 Why OSS first: without a reference server, OSS users never get the any-stack unlock and
@@ -71,5 +71,5 @@ stays Rust-only via `rigorix-engine`.
 ## Artifacts
 - This freeze: rigorix-sdk `docs/strategy-freeze-2026-09-06.md`
 - Sync design: rigorix-sdk `docs/contract-sync-2026-09-06.md`
-- Enterprise-side situation + path: rigorix-enterprise `findings/contract-sync-server-plan-2026-09-06.md`
+- Enterprise-side situation + path: `findings/contract-sync-server-plan-2026-09-06.md` in the enterprise repository
 - OSS-side pointer: rigorix-oss `docs/sdk-server-strategy-freeze-2026-09-06.md`

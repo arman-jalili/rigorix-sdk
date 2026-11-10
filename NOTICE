@@ -1,0 +1,15 @@
+Rigorix SDK
+Copyright 2026 Arman Wolkenstein-Jalili and Rigorix contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+NOTICE: no third-party source code or documentation is vendored in this
+repository. The canonical JSON Schema corpus under schemas/ is original work
+written for this project. Third-party software is used as dependencies only —
+declared in rust/Cargo.toml, python/pyproject.toml, typescript/package.json,
+typescript-client/package.json, go/go.mod and java/pom.xml — and each dependency
+carries its own licence and notice requirements in its own package.
+
+The one binary artefact vendored here, rigorix_gate_wasi.wasm, is built by this
+project's sibling repository and is covered by the same licence; its provenance,
+digest and obtainability are recorded beside each copy in PROVENANCE.md.

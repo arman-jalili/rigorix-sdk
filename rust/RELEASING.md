@@ -37,7 +37,7 @@ The domain is `rigorix.eu`; the old identifiers named a host that is not ours to
 > old identity that we can recall, so the cost of moving now is smaller than the cost of two identities.
 
 Consumer chain, in order: SDK 0.8.0 → any consumer that pins `rigorix-schemas` must update its URI
-references in the same bump (`core/tests/conformance/events.rs`, `catalog.rs` in rigorix-enterprise).
+references in the same bump (`core/tests/conformance/events.rs`, `catalog.rs` in the enterprise consumer).
 
 ## 0.7.1 — the same contract, republished so the version means one thing
 
@@ -95,7 +95,7 @@ head exists yet** — the startup window, or a history read that has not succeed
 > *without* the new value verifies unchanged in both directions.
 
 > **Publish order is load-bearing, and it is cross-repo.** `rigorix-schemas` → `rigorix-verifier`
-> (crates.io, then the `v0.6.0` tag for PyPI/npm) → `rigorix-enterprise` (its canonical form must
+> (crates.io, then the `v0.6.0` tag for PyPI/npm) → the enterprise consumer (its canonical form must
 > accept the value) → the `rigorix-oss` engine release that emits it. Shipping the engine before
 > the consumers makes startup-window evidence unverifiable at best and rejected at worst.
 
@@ -128,7 +128,7 @@ not ship ahead of this release. An engine must not emit an authority-fact bundle
 before `0.5.0` is published.
 
 Consumers pin `rigorix-verifier = "0.5"` (`rigorix-oss/server`,
-`rigorix-enterprise/core`). The bump is mandatory: `^0.4` does **not** resolve
+the enterprise consumer's `core`). The bump is mandatory: `^0.4` does **not** resolve
 `0.5.0` under 0.x semver.
 
 ## 0.4.0 — structured attribution reason (additive)
@@ -152,7 +152,7 @@ the check ran, an unreadable artifact).
 > the field.
 
 Consumers pin `rigorix-verifier = "0.4"` (`rigorix-oss/server`,
-`rigorix-enterprise/core`).
+the enterprise consumer's `core`).
 
 ## 0.3.0 — ADR-017 dispatch-time preconditions + signed attribution
 
@@ -165,7 +165,7 @@ envelope carrying the new fields needs `0.3.0` to canonicalize byte-exact.
 
 `rigorix-schemas` and `rigorix-verifier` bump together (exact-version dep).
 Consumers pin `rigorix-verifier = "0.3"` (`rigorix-oss/server`,
-`rigorix-enterprise/core`).
+the enterprise consumer's `core`).
 
 ## 0.2.0 — required for anchored verification
 
@@ -237,6 +237,6 @@ git tag v0.2.0     && git push origin v0.2.0         # → PyPI + npm publish
 ### 5. Bump consumers (0.x semver: `^0.1` does **not** match `0.2`)
 
 - `rigorix-oss/server/Cargo.toml` → `rigorix-verifier = "0.2"`
-- `rigorix-enterprise/core/Cargo.toml` → `rigorix-verifier = "0.2"`
+- the enterprise consumer's `core/Cargo.toml` → `rigorix-verifier = "0.2"`
 
 Then run their CI. The bump is mandatory: `^0.1` will not resolve 0.2.0.

@@ -42,7 +42,39 @@ rigorix-governed once v0 lands (dogfood demo #2).
 - [x] ADR-017 / consequence-gating §4.3 — `rigorix.audit.authorityFacts` + `api/authority-fact-bundle.json` (SDK #44)
 - [x] SSE push channel — ADR-0002 + `events.json` + fixtures
 - [x] ADR-016 integrity contract — `api/history-slice.json`, `api/ledger-receipt.json`, `api/compaction-checkpoint.json`
-- [x] `rust/` **0.9.0** (`rigorix-schemas`, `rigorix-verifier`, `rigorix-client`) — published to crates.io and npm; PyPI is **0.6.0** and cannot yet verify effect-commitment evidence
+- [x] `rust/` **0.9.0** (`rigorix-schemas`, `rigorix-verifier`, `rigorix-client`) — published to crates.io, npm, PyPI and Maven Central (all four verifier channels at 0.9.0)
 - [x] Python / TypeScript / Java / Go verifiers + catalog clients — fixtures green in each language
 
-*Last verified: 2026-09-29 against `rigorix-oss@f94718d7` + `rigorix-enterprise@13463c5`.*
+*Last verified: 2026-11-10 against `rigorix-oss` `v1.14.3` (the gate artifact the
+vendored copies hash to).*
+
+## Development
+
+```bash
+bash .ci/local-ci.sh     # every CI job plus the seven validators, no secret needed
+```
+
+The runner prints how many steps it executed and exits `1` on a failure, `3` when
+a step was skipped for lack of a subject (the Python binding tests need Linux or
+Docker: wasmtime's JIT is killed by the macOS sandbox).
+
+- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md) — DCO sign-off, the rules
+  this repository holds itself to.
+- **Publication readiness:** [docs/publication-readiness.md](docs/publication-readiness.md)
+  — including the recorded decision to publish the history as it stands.
+- **Security:** [SECURITY.md](SECURITY.md) — private reporting, and who answers a
+  wasm-engine advisory.
+
+## Licence
+
+**Apache-2.0**, and only Apache-2.0. The full text is [LICENSE](LICENSE), the
+attribution statement is [NOTICE](NOTICE), and every published artefact declares
+the same in its manifest (`rust/Cargo.toml`, both `package.json` files,
+`python/pyproject.toml`).
+
+The Apache licence rather than MIT because it carries an express patent grant,
+which matters for a verifier others embed. The schemas under `schemas/` are part of
+this repository and covered by the same licence; they carry no per-file licence
+field, deliberately — adding one would change the bytes of a frozen contract that
+other repositories pin, so the terms are stated here and in
+[schemas/README.md](schemas/README.md).

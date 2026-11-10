@@ -1,7 +1,7 @@
 # Contract Sync — Design (2026-09-06)
 
 **Status:** Design doc (freeze). Owner: rigorix-sdk `schemas/` + both repos' CI.
-**Problem:** rigorix-enterprise lags rigorix-oss by several releases of *shared
+**Problem:** the enterprise consumer lags `rigorix-oss` by several releases of *shared
 contracts*. Server mode cannot be designed or built on drifting contracts.
 
 ## Why sync is milestone 1 (not an open-ended catch-up)
@@ -77,7 +77,7 @@ expiry; JWKS) and scope them to teams/roles.
 - [ ] `schemas/policy.json` (enforcement config + sequence rules + approval/identity requirements)
 - [ ] `schemas/claims.json` (attested claim + `ClaimSummary`)
 - [ ] `schemas/fixtures/` real envelopes + exported bundle + claim samples
-- [ ] Conformance tests green in rigorix-oss CI, rigorix-enterprise CI (fixtures pulled in)
+- [ ] Conformance tests green in `rigorix-oss` CI and the enterprise consumer's CI (fixtures pulled in)
 - [ ] F-20260904-01 fixed + tested (admin 200 / member 403)
 - [ ] `log.md` reconciled (05/06/07 closed; 01–04 tracked in this milestone)
 
@@ -106,7 +106,7 @@ Then: catalog design → servers → SDKs.
     verify roundtrip, tamper, GAP-M-12 unsigned policy, wrong key, canonical
     stability, schema conformance, casing rejection). No rigorix-engine dep.
   - Next: real-engine signed fixtures (F-20260907-01, rigorix-oss); delta map
-    + additive storage (F-20260907-03, rigorix-enterprise).
+    + additive storage (F-20260907-03, enterprise deployment).
 
 - **2026-09-08 (this PR)** — F-20260907-01 rigorix-oss conformance round:
   - `schemas/fixtures/envelope/*.json` — 5 REAL engine-signed envelopes from
@@ -273,7 +273,7 @@ Then: catalog design → servers → SDKs.
     unchanged (legacy = chain-of-one / unknown predecessor, grandfathered).
 
 - **2026-09-24 — SDK-C5 catalog parity (closed namespace; additive contract):**
-  The enterprise Execution API (rigorix-enterprise #206 / PR #208) registered
+  The enterprise Execution API (enterprise issue #206 / PR #208) registered
   `rigorix.auth.verify` (`core/src/execution_api/application/catalog.rs:74`,
   dispatch at `:182`) but it was absent from the frozen catalog — drift in a
   namespace meant to be closed (ADR-0001 D3).
@@ -300,12 +300,12 @@ Then: catalog design → servers → SDKs.
     subset, not the whole namespace).
 
 - **2026-09-25 — SDK-CATALOG-AUDIT (ADR-016 Phase B surface; additive):**
-  The enterprise Execution API (rigorix-enterprise PR #210, merged) registers
+  The enterprise Execution API (enterprise PR #210, merged) registers
   three ADR-016 Phase B ledger methods that the frozen catalog did not declare —
   the same closed-namespace drift SDK-C5 fixed for `rigorix.auth.verify`.
   - `schemas/api/catalog.json`: **declared** `rigorix.audit.head` /
     `.history` / `.overdue` (query / `session` / `mcpTool: null`, `since`
-    1.0.0), grounded in `rigorix-enterprise
+    1.0.0), grounded in the enterprise consumer's
     core/src/execution_api/application/{catalog,services,dto}.rs`:
     - `auditHeadParams { producer_id }`; `auditHeadResult { producer_id,
       sequence|null, envelope_hash|null, anchor_public_key }` (the adapter's
@@ -383,7 +383,7 @@ Then: catalog design → servers → SDKs.
     post-publish clean-project check, the `rust-v0.2.0` tag, and the mandatory
     0.x consumer bumps (`^0.1` does not match 0.2).
   - **Deferred (credential-gated):** the actual `cargo publish`, the tag, and
-    the `rigorix-oss` / `rigorix-enterprise` consumer bumps. `cargo package -p
+    the `rigorix-oss` and enterprise consumer bumps. `cargo package -p
     rigorix-verifier` becomes runnable once `rigorix-schemas` 0.2.0 is live
     (cargo resolves the exact-version dep against the registry even with
     `--no-verify`). 0.1.0 is not yanked (valid for catalog-only use).
