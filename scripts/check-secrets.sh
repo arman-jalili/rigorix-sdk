@@ -19,9 +19,13 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# Pinned: a scan that changes rules when the image moves cannot be quoted in a
-# report a month later.
-GITLEAKS_IMAGE="${GITLEAKS_IMAGE:-zricethezav/gitleaks:v8.30.1}"
+# Pinned by digest, not by tag (#105): a tag can be moved, and then the same
+# command runs a different scanner under the same name — which is exactly what the
+# sentence above used to claim could not happen. The tag stays in the comment so
+# the version is still readable. `bash scripts/check-secrets.sh` prints the digest
+# it used, so a report can quote the scanner and not just its name.
+GITLEAKS_TAG="v8.30.1"
+GITLEAKS_IMAGE="${GITLEAKS_IMAGE:-zricethezav/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f}"  # ${GITLEAKS_TAG}
 
 have_docker() { command -v docker >/dev/null 2>&1; }
 
@@ -129,6 +133,10 @@ fi
 
 status=0
 
+# The scanner is a digest, and the run says which one: a report that quotes
+# "gitleaks" without the digest quotes a name, not a tool.
+echo "▶ scanner: ${GITLEAKS_IMAGE}  (${GITLEAKS_TAG})"
+
 echo "▶ history: every revision reachable from any ref"
 # --all is the default log-opts in recent gitleaks, but the flag is the claim.
 if ! leak_scan "$ROOT" --log-opts="--all"; then
@@ -145,6 +153,6 @@ if ! scan_dangling "$ROOT"; then
 fi
 
 if [ "$status" -eq 0 ]; then
-  echo "✅ secret scan: clean (history + dangling objects, ${GITLEAKS_IMAGE})"
+  echo "✅ secret scan: clean (history + dangling objects, ${GITLEAKS_TAG} ${GITLEAKS_IMAGE#*@})"
 fi
 exit "$status"
