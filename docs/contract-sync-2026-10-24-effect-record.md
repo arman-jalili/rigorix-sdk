@@ -4,7 +4,7 @@
 **Issue:** #52
 **Status:** frozen (`schemas/api/effect-record.json`, `$id`
 `https://rigorix.eu/schemas/api/effect-record-v1.json`)
-**Upstream:** rigorix-oss 1.11.0 (engine + ADR-019), rigorix-enterprise
+**Upstream:** rigorix-oss 1.11.0 (engine + ADR-019), enterprise consumer
 (`EffectRecordResponse`)
 
 ## Why
@@ -37,7 +37,7 @@ servers claim it.
 
 | Artifact field | Source |
 |---|---|
-| `record.*` | rigorix-enterprise `effect_commitment/interfaces/http/dto.rs` → `EffectRecordResponse`; `EffectRecordView` for `deadline` (set only while dispatched) |
+| `record.*` | enterprise `effect_commitment/interfaces/http/dto.rs` → `EffectRecordResponse`; `EffectRecordView` for `deadline` (set only while dispatched) |
 | `record.intent_key` | enterprise `IntentKey` — 64 lowercase hex (`H(dag_id, node_id, intent_digest)`) |
 | `record.state` | OSS `effect_commitment/domain/state.rs` → `EffectState` (four snake_case words) |
 | `settlement.*` | OSS `effect_commitment/domain/outcome.rs` → `ObservedOutcome` + `OutcomeVerdict` |

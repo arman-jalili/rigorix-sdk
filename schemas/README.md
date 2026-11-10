@@ -2,8 +2,14 @@
 
 Contract-first schemas for Rigorix audit, identity, and policy surfaces.
 Grounded in rigorix-oss Rust types (code is truth) and reconciled with
-rigorix-enterprise consumers via contract-sync milestone 1 (delta maps).
+Enterprise consumers via contract-sync milestone 1 (delta maps).
 Contract changes are DECISIONS (see AGENTS.md + docs/strategy-freeze).
+
+**Licence:** these schemas are part of the Rigorix SDK and are Apache-2.0 (see
+`../LICENSE`). They carry no per-file `license` field on purpose: a schema under
+`schemas/api/` is a frozen contract that other repositories pin and hash, so
+adding a key would change the published bytes for a statement the repository
+already makes once.
 
 ## Catalog
 
@@ -20,7 +26,7 @@ Contract changes are DECISIONS (see AGENTS.md + docs/strategy-freeze).
 | `api/history-slice.json` | **v1** (2026-09-24, FROZEN) | ADR-016 (Contract); engine `HistoryAction` | Anchor-signed history projection `{ scope, since, actions[], head_hash, sig }` the guard consumes in `anchored` mode; actions mirror `HistoryAction` (no parameter values). Fixture in `fixtures/integrity/`. |
 | `api/compaction-checkpoint.json` | **v1** (2026-09-24, FROZEN) | ADR-016 (Contract, GDPR/compaction) | Anchor-signed compaction proof `{ sequence_from, sequence_to, reason, prior_head, new_head, sig }`; a verifier accepts a chain gap iff covered by a valid checkpoint. Fixture in `fixtures/integrity/`. |
 | `api/authority-fact-bundle.json` | **v1** (2026-10-13, FROZEN) | rigorix-oss `engine/src/audit/domain/authority_fact.rs` (`AuthorityFactBundle`/`AuthorityFactProjection`/`AuthorityFact`) + `docs/spec/consequence-gating-v1.md` §4.3 | The authority-fact projection bundle: projection + the signed history it was derived from + `subjects_without_record`. `envelopes[]` `$ref`s `envelope.json` by `$id` (no second dialect). Verified by re-derivation, not signature (§4.3.1). `generated_at` is not compared. |
-| `api/effect-record.json` | **v1** (2026-10-24, FROZEN) | rigorix-oss `effect_commitment/domain/{state,outcome}.rs` + `infrastructure/provider_receipt.rs`; rigorix-enterprise `effect_commitment/interfaces/http/dto.rs` (`EffectRecordResponse`) | Effect-commitment artifact = the frozen wire record + the provider evidence that settled it (`ObservedOutcome` + the raw read-back bytes + optional resolver) + two independent deployment axes (`durability` l1/l2, `settlement` none/l3). Terminal ⇒ evidence, non-terminal ⇒ none, dispatched ⇒ deadline. Verified structurally and by re-deriving `readback_digest`; **no envelope binding**. Fixtures in `fixtures/effect/`. |
+| `api/effect-record.json` | **v1** (2026-10-24, FROZEN) | rigorix-oss `effect_commitment/domain/{state,outcome}.rs` + `infrastructure/provider_receipt.rs`; enterprise `effect_commitment/interfaces/http/dto.rs` (`EffectRecordResponse`) | Effect-commitment artifact = the frozen wire record + the provider evidence that settled it (`ObservedOutcome` + the raw read-back bytes + optional resolver) + two independent deployment axes (`durability` l1/l2, `settlement` none/l3). Terminal ⇒ evidence, non-terminal ⇒ none, dispatched ⇒ deadline. Verified structurally and by re-deriving `readback_digest`; **no envelope binding**. Fixtures in `fixtures/effect/`. |
 | `api/method-catalog.md` | sketch (2026-09-06, historical) | — | Pre-freeze sketch. **Superseded by `api/catalog.json` + ADR-0001**; kept as history. |
 
 ## Conformance fixtures (milestone 1)

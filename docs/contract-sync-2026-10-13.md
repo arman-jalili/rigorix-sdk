@@ -74,5 +74,5 @@ install smoke job is green. `rust/RELEASING.md` carries the requirement in its
 
 `rigorix-oss` `ISSUE-PROJECTION-SURFACES` may now ship its MCP tool — but only
 after the consumers move, because 0.x semver means `^0.4` does **not** resolve
-`0.5.0`. `rigorix-oss/server` and `rigorix-enterprise/core` pin
+`0.5.0`. `rigorix-oss/server` and the enterprise consumer's `core` pin
 `rigorix-verifier = "0.5"`.
