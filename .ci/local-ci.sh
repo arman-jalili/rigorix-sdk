@@ -267,7 +267,7 @@ job_audit() {
   # Mirrors .github/workflows/audit.yml (SDL-5): the two runtimes the gate now
   # depends on are pinned exactly and scanned for known advisories. This is not
   # in ci.yml because advisories are published after a merge, not before it.
-  run "audit: exact runtime pins" . 'python3 scripts/check-pins.py'
+  run "audit: exact runtime pins" . 'python3 scripts/check-pins.py --self-test && python3 scripts/check-pins.py'
   run "audit: dependency licences (rust + npm + python)" . \
     'bash scripts/check-licenses.sh --self-test && bash scripts/check-licenses.sh'
   if [ "$PYTHON_LOCAL" -eq 0 ] && command -v docker >/dev/null 2>&1; then
@@ -305,8 +305,10 @@ job_audit() {
   run "audit: seeds fire (a planted range must fail)" . '
     set -uo pipefail
     seed="$(mktemp -d)"
-    mkdir -p "$seed/scripts" "$seed/python/rigorix_verifier/_wasm" "$seed/go/gate/testdata"
-    cp scripts/check-pins.py "$seed/scripts/"
+    mkdir -p "$seed/scripts" "$seed/python/rigorix_verifier/_wasm" "$seed/go/gate/testdata" \
+             "$seed/.github/workflows"
+    cp .github/workflows/*.yml "$seed/.github/workflows/"
+    cp scripts/check-pins.py scripts/check-secrets.sh "$seed/scripts/"
     cp python/pyproject.toml "$seed/python/"
     cp go/go.mod "$seed/go/"
     cp python/rigorix_verifier/_wasm/PROVENANCE.md "$seed/python/rigorix_verifier/_wasm/"
@@ -321,6 +323,37 @@ job_audit() {
       { echo "refused for the wrong reason:"; printf "%s\n" "$out"; exit 1; }
     printf "%s\n" "$out" | head -1
     echo "✅ a planted range is refused, naming the range"
+
+    # The surface the guard gained in #105, in a CLEAN second fixture: a tag-pinned
+    # action and a tag-pinned scanner must both be refused by name in one run. (A
+    # fresh copy, because the range error above would otherwise be the only thing
+    # the guard has to report.)
+    seed2="$(mktemp -d)"
+    mkdir -p "$seed2/scripts" "$seed2/python/rigorix_verifier/_wasm" "$seed2/go/gate/testdata" \
+             "$seed2/.github/workflows"
+    cp scripts/check-pins.py scripts/check-secrets.sh "$seed2/scripts/"
+    cp python/pyproject.toml "$seed2/python/"
+    cp go/go.mod "$seed2/go/"
+    cp python/rigorix_verifier/_wasm/PROVENANCE.md "$seed2/python/rigorix_verifier/_wasm/"
+    cp go/gate/testdata/PROVENANCE.md "$seed2/go/gate/testdata/"
+    cp .github/workflows/*.yml "$seed2/.github/workflows/"
+    # BSD sed has no `0,/re/` address; one `uses:` per line, so a per-line replace
+    # is the same edit.
+    sed -i.bak -E "s|uses: actions/checkout@[0-9a-f]{40}.*|uses: actions/checkout@v4|" \
+      "$seed2/.github/workflows/ci.yml"
+    sed -i.bak -E "s|GITLEAKS_IMAGE:-[^}]+|GITLEAKS_IMAGE:-zricethezav/gitleaks:v8.30.1|" \
+      "$seed2/scripts/check-secrets.sh"
+    grep -q "uses: actions/checkout@v4" "$seed2/.github/workflows/ci.yml" || { echo "the action plant did not apply"; exit 1; }
+    grep -q "gitleaks:v8.30.1}" "$seed2/scripts/check-secrets.sh" || { echo "the scanner plant did not apply"; exit 1; }
+    if out2="$(python3 "$seed2/scripts/check-pins.py" 2>&1)"; then
+      echo "check-pins.py accepted a tag-pinned action and a tag-pinned scanner; the guard is inert"; exit 1
+    fi
+    printf "%s\n" "$out2" | grep -q "is not a commit SHA" ||
+      { echo "the action plant was not refused by name:"; printf "%s\n" "$out2"; exit 1; }
+    printf "%s\n" "$out2" | grep -q "GITLEAKS_IMAGE is zricethezav/gitleaks:v8.30.1" ||
+      { echo "the scanner plant was not refused by name:"; printf "%s\n" "$out2"; exit 1; }
+    printf "%s\n" "$out2" | head -2
+    echo "✅ a planted range, a tag-pinned action and a tag-pinned scanner are refused, each by name"
   '
 
   if [ "$PYTHON_LOCAL" -eq 0 ] && command -v docker >/dev/null 2>&1; then

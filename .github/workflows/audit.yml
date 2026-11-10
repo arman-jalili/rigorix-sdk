@@ -23,14 +23,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
 
       # A range is how a support case loses the ability to say which runtime
       # decided: `wasmtime>=20.0` may install any of 50 releases.
+      - name: check-pins.py --self-test (a tag, a missing comment, a minor floor)
+        run: python scripts/check-pins.py --self-test
+
       - name: check-pins.py (a planted range fails, quoting the line)
         run: python scripts/check-pins.py
 
@@ -52,8 +54,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       # The four internal comparisons cannot see the defect #78 found: every
       # recording can move together to bytes no download reproduces. This job is
       # the only check that leaves the repository, which is why it is scheduled
@@ -71,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
         with:
           fetch-depth: 0 # every revision becomes public; a shallow scan misses them
 
@@ -86,9 +87,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4
         with:
           node-version: "22"
 
@@ -114,9 +114,8 @@ jobs:
       run:
         working-directory: python
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
 
@@ -145,11 +144,10 @@ jobs:
       run:
         working-directory: go
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
       # check-latest: the stdlib is part of the surface govulncheck reports, so
       # the build must use the newest patch of the floor in go.mod (1.26.x).
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff  # v5
         with:
           go-version-file: go/go.mod
           check-latest: true

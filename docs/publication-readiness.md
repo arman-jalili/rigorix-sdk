@@ -156,6 +156,43 @@ allow-listed with a reason each: they exist to name what was replaced.
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## A pin is a digest, in the workflows too (#105)
+
+The two wasm engines were pinned exactly and refused a range with a sentence; the
+workflows were not. Every action ran a tag or a branch — `actions/checkout@v4`,
+`dtolnay/rust-toolchain@stable`, and `pypa/gh-action-pypi-publish@release/v1`, the
+one holding the PyPI token — and the secret scanner was pinned to
+`zricethezav/gitleaks:v8.30.1`, a **tag** under a comment claiming that "a scan that
+changes rules when the image moves cannot be quoted in a report a month later".
+
+Now, in `publish.yml` first:
+
+| what | was | now |
+|---|---|---|
+| actions | `@v4`, `@v5`, `@stable`, `@release/v1` | 40-hex commit + `# vX.Y.Z` on the line |
+| secret scanner | `gitleaks:v8.30.1` | `gitleaks@sha256:c00b6bd0…` with `# v8.30.1` |
+| run output | the image name | `▶ scanner: <digest>  (v8.30.1)` |
+
+**Recorded exception:** `dtolnay/rust-toolchain` has no version tag that follows its
+`stable` branch, so the pin is the commit behind the moving `v1` tag —
+`683b588c…` `# v1` — rather than a `release/…` branch name. The version comment
+says what was resolved, not a version number that does not exist.
+
+`scripts/check-pins.py` gained both subjects, and they are reported in one run so a
+fix cannot satisfy one and miss the other:
+
+```
+$ # planted: actions/checkout@v4  and  gitleaks:v8.30.1
+❌ .github/workflows/ci.yml:24: uses: actions/checkout@v4 is not a commit SHA — a tag or branch can move; pin the 40-hex commit and put the version in a comment
+❌ scripts/check-secrets.sh: GITLEAKS_IMAGE is zricethezav/gitleaks:v8.30.1 — a tag can be moved, and then the same command runs a different scanner (pin @sha256:<digest>, tag in the comment)
+→ exit 1
+```
+
+A SHA without a version comment is a third defect and fails on its own wording: the
+SHA says what runs, the comment says what it is. `--self-test` covers the tag, the
+uncommented SHA, the tag-pinned scanner and the minor Go floor; the `local-ci` seed
+plants the action and the scanner in a temporary copy and requires each to be named.
+
 ## What the artifact guard checks, and where (#104)
 
 `scripts/check-vendored-artifact.sh` had four checks and all four were internal:
