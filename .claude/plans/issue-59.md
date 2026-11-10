@@ -3,7 +3,7 @@
 **Branch:** `issue/59`
 **Base:** `main` (`63575ec`)
 **Issue:** #59 — browser entry: same canonical bytes, WebCrypto, no Node imports
-**Severity:** high — blocks rigorix-gtm #33 (`demo.rigorix.eu` cannot verify a receipt)
+**Severity:** high — blocks a private downstream workstream (#33): the public demo cannot verify a receipt
 
 ## Status
 
