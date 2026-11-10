@@ -5,39 +5,36 @@
 This project is **Apache-2.0** ([LICENSE](LICENSE), [NOTICE](NOTICE)). By
 contributing you agree that your contribution is licensed under the same terms.
 
-## Developer Certificate of Origin (DCO), not a CLA
+## Contributor Licence Agreement
 
-Every commit must carry a sign-off:
+Every contribution is made under the [Contributor Licence Agreement](docs/CLA.md)
+(version 1.0). You keep copyright; you grant the project a copyright licence, a
+patent licence, and the right to relicense the contribution under any licence the
+project adopts.
 
-```bash
-git commit -s -m "fix(scope): what changed and why"
-```
+**A pull request whose author has not signed cannot be merged.** Signing happens on
+the pull request itself: the CLA bot comments once and waits for your confirmation,
+and the signature record (account, agreement version, date) is what the required
+check reads.
 
-That appends the trailer
+### Why a CLA and not a `Signed-off-by` trailer
 
-```
-Signed-off-by: Your Name <you@example.com>
-```
+The project previously used a DCO sign-off. A sign-off records that you had the
+right to submit the work, and it grants nothing else — so it preserves no ability
+to change the project's licence, which is the one thing a licence agreement exists
+to preserve. Version 1.0 of the CLA is the replacement, and the DCO check is gone
+with it: two gates enforcing different agreements is worse than one gate.
 
-using the name and email in your `user.name` / `user.email`. The trailer
-certifies the [Developer Certificate of Origin 1.1](https://developercertificate.org/):
-that you wrote the change, or have the right to submit it under this licence.
+### Until the bot is live
 
-**Why DCO and not a CLA:** a CLA would give this project a relicensing option it
-does not want, and the DCO is the lower-friction instrument for a
-specification-adjacent project. The check is mechanical, so nothing depends on
-anyone remembering to ask.
-
-CI enforces it: `scripts/check-dco.sh` checks every commit in a pull request and
-refuses one without the trailer, naming the commit. Run it locally:
-
-```bash
-bash scripts/check-dco.sh --self-test        # proves the check can refuse
-bash scripts/check-dco.sh origin/main..HEAD  # your branch
-```
-
-Commits made before this policy have no trailer; they are accepted as history and
-are not rewritten. The policy applies to commits from its introduction onward.
+The repository is private on a free plan, where GitHub does not offer branch
+protection or required status checks (both return `403 Upgrade to GitHub Pro or
+make this repository public`). The bot can be installed while private, but the
+check cannot be made required until the visibility change. In that window the
+maintainer asks for the signature on the pull request and records it before
+merging; the required check is applied in the same operation that makes the
+repository public, by the operator — never after it. This paragraph exists so the
+gap is a known state with an owner, not a hole.
 
 ## Before you write code
 

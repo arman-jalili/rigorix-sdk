@@ -146,6 +146,52 @@ files and false of two channels. Measured:
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## Contribution gate: a CLA, and what cannot be switched on yet (#84)
+
+**Decision: a Contributor Licence Agreement, not a DCO sign-off.** Version 1.0 is
+in [`docs/CLA.md`](CLA.md); it grants the copyright licence, the patent licence,
+and the right to relicense under any licence the project adopts — the last of
+which a `Signed-off-by` trailer cannot grant. The DCO check is removed with it
+(`scripts/check-dco.sh` deleted, the `dco` job removed, the runner step removed),
+because two gates enforcing different agreements is worse than one gate.
+
+**Measured, and it constrains the sequencing:**
+
+```
+$ gh api repos/arman-jalili/rigorix-sdk/branches/main/protection
+{"message":"Upgrade to GitHub Pro or make this repository public to enable this feature.","status":403}
+$ gh api repos/arman-jalili/rigorix-sdk/rulesets
+{"message":"Upgrade to GitHub Pro or make this repository public to enable this feature.","status":403}
+$ gh api repos/arman-jalili/rigorix-sdk --jq .private
+true
+```
+
+So **no branch protection exists today, on any branch, for any check** — nothing
+blocks a merge, including CI. The CLA bot can be installed while the repository
+is private, but its check cannot be *required* until the repository is public
+(protection is free on public repositories) or the account has Pro.
+
+**The three operator steps, in this order, none of them executable from this
+repository's code:**
+
+1. Install the CLA bot (CLA Assistant or equivalent) on this repository and
+   exercise it on a test pull request — an unsigned author must show the check
+   failing.
+2. Confirm the bot's check passes for a signed author.
+3. In the same operation that makes the repository public, add the bot's check to
+   the required list for `main`. Not after: the first external pull request can
+   arrive within hours of an announcement.
+
+Until step 3, the maintainer asks for the signature on the pull request and
+records it before merging. That is a manual gate with an owner, not an absent one,
+and it is the only honest statement available while the API returns 403.
+
+**Acceptance status:** the in-repository half is done (`docs/CLA.md`,
+`CONTRIBUTING.md`, the DCO removed, the checklist item replaced). The
+"unsigned pull request cannot be merged" criterion is **not** satisfied yet, and
+cannot be, until the bot is installed and the check is required — recorded here
+rather than reported as complete.
+
 ## Licence audit of the graph (#86)
 
 The repository is Apache-2.0; the dependencies are linked, not vendored, and

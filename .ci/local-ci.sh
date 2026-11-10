@@ -22,7 +22,11 @@
 #
 # Usage:
 #   bash .ci/local-ci.sh [--jobs-only | --validators-only] [--python-local]
-#                        [--allow-skips]
+#                        [--allow-skips] [--list]
+#
+# --list prints every step the runner can execute, including both sides of a
+# branch (docker/host, python-local). It is a list of call sites, not of a run:
+# only one side of each branch executes on a given machine.
 #
 # Exit: 0 = every step green and every step had a subject
 #       1 = at least one step failed (logs are printed and kept)
@@ -48,6 +52,7 @@ while [ $# -gt 0 ]; do
     --validators-only) MODE="validators"; shift ;;
     --python-local) PYTHON_LOCAL=1; shift ;;
     --allow-skips) ALLOW_SKIPS=1; shift ;;
+    --list) MODE="list"; shift ;;
     -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "local-ci: unknown argument '$1'" >&2; exit 2 ;;
   esac
@@ -114,8 +119,6 @@ run() {
 job_rust() {
   run "artifact: both vendored copies agree" . \
     'bash scripts/check-vendored-artifact.sh'
-  run "repo: commits are signed off (DCO)" . \
-    'bash scripts/check-dco.sh --self-test && bash scripts/check-dco.sh'
   run "repo: no commercial strategy in published files" . \
     'bash .pi/scripts/validate-no-strategy.sh --self-test && bash .pi/scripts/validate-no-strategy.sh'
   run "repo: SPDX on every published source channel" . \
@@ -338,6 +341,15 @@ job_validators() {
     run "validator: $script" . "bash .pi/scripts/$script.sh"
   done
 }
+
+if [ "$MODE" = "list" ]; then
+  # Call sites, in script order. A branch (docker vs host) contributes both; the
+  # count of an actual run is printed by the verdict line instead.
+  grep -oE 'run "[^"]+"' "$0" |
+    sed 's/^run "//; s/"$//' |
+    awk '{ printf "%2d. %s\n", NR, $0 }'
+  exit 0
+fi
 
 echo "local-ci: repo=$ROOT logs=$LOG_DIR mode=$MODE"
 

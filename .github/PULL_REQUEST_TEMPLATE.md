@@ -18,7 +18,7 @@ LOCAL CI: …
 
 ## Checklist
 
-- [ ] Every commit is signed off (`git commit -s`) — [CONTRIBUTING](CONTRIBUTING.md)
+- [ ] I have signed the [CLA](docs/CLA.md) (the bot records it on the pull request)
 - [ ] Generated files were regenerated, not edited (`go generate`, `bundle_schemas.py`, `bundle-schemas.mjs`)
 - [ ] A guard change comes with a seed that shows it refusing
 - [ ] `schemas/` changes carry a delta note under `docs/`
