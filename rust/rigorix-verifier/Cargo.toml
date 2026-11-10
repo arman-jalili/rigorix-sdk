@@ -1,7 +1,7 @@
 [package]
 name = "rigorix-verifier"
 description = "Protocol-only verifier for Rigorix audit envelopes — HMAC integrity, JSON Schema conformance, per-producer chain + anchor signatures. No rigorix-engine dependency (frozen struct copies per the SDK contract-freeze)."
-version = "0.9.0"
+version = "0.10.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -18,7 +18,7 @@ include = ["src/**/*", "README.md"]
 # EXACT pin: a schemas patch must not change what an already-published verifier
 # accepts without a verifier release (#55). Publish rigorix-schemas first —
 # Cargo now enforces the order instead of relying on memory.
-rigorix-schemas = { version = "=0.9.0", path = "../rigorix-schemas" }
+rigorix-schemas = { version = "=0.10.0", path = "../rigorix-schemas" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 hmac = "0.12"

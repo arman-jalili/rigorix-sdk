@@ -274,11 +274,16 @@ job_audit() {
     'bash scripts/check-licenses.sh --self-test && bash scripts/check-licenses.sh'
   if [ "$PYTHON_LOCAL" -eq 0 ] && command -v docker >/dev/null 2>&1; then
     run "audit: pip-audit --strict (linux docker)" . \
-      "docker run --rm -v '$ROOT:/repo' -w /repo/python python:3.12-slim sh -c \"pip install -q --upgrade pip >/dev/null 2>&1; pip install -q -e '.[test]' pip-audit >/dev/null 2>&1 && pip-audit --strict\""
+      "docker run --rm -v '$ROOT:/repo' -w /repo/python python:3.12-slim sh -c \"pip install -q --upgrade pip >/dev/null 2>&1; pip install -q pip-audit >/dev/null 2>&1 && bash scripts/audit.sh\""
   else
     run "audit: pip-audit --strict (host)" . \
-      'python3 -m pip_audit --strict || { echo "install pip-audit for the host, or run with Docker available"; exit 1; }'
+      'bash python/scripts/audit.sh || { echo "install pip-audit for the host, or run with Docker available"; exit 1; }'
   fi
+  # The audit's subject is the dependency graph, not this distribution: `--strict`
+  # refuses to audit a package it cannot resolve on PyPI, and the in-tree version is
+  # deliberately ahead of the published one (#102). requirements.lock is the same
+  # graph the licence audit reads.
+  #
   # govulncheck reports the stdlib of the toolchain that *builds*, so the gate is
   # only a property of the tree if the module's floor names a patched release.
   # `go 1.26` did not: it admits 1.26.3, whose stdlib carries 17 advisories, and

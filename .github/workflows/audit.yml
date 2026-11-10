@@ -120,12 +120,16 @@ jobs:
           python-version: "3.12"
 
       - name: Install the package and its runtime dependencies
-        run: pip install -e ".[test]" pip-audit
+        run: pip install pip-audit
 
       # --strict: a known advisory in the environment the wheel would run in is
       # a red build. No `|| true`, no severity filter.
-      - name: pip-audit --strict
-        run: pip-audit --strict
+      # The subject is the dependency graph, not this distribution: `--strict`
+      # refuses to audit a package it cannot resolve on PyPI, and the in-tree
+      # version is deliberately ahead of the published one (#102). The lock is the
+      # same graph the licence audit reads, so both gates audit one list.
+      - name: pip-audit --strict (the locked dependency graph)
+        run: bash scripts/audit.sh
 
       - name: the seed — a planted advisory must fail
         run: |

@@ -8,7 +8,7 @@ a standalone repo whose job is to make the Rigorix boundary speakable from any s
 | Path | Purpose |
 |------|---------|
 | `schemas/` | **Single source of truth** for Rigorix contracts: envelope v2, policy/config model, identity claim format, native `rigorix.*` API method catalog. Drift-tested against rigorix-oss (CI). |
-| `rust/` | `rigorix-schemas` + `rigorix-verifier` (published **0.9.0**) + `rigorix-client` — typed JSON-RPC client + envelope/chain/anchor verifier (protocol-only, **no** `rigorix-engine` dependency) |
+| `rust/` | `rigorix-schemas` + `rigorix-verifier` (in-tree **0.10.0**; **0.9.0** published) + `rigorix-client` — typed JSON-RPC client + envelope/chain/anchor verifier (protocol-only, **no** `rigorix-engine` dependency) |
 | `python/` · `typescript/` · `java/` · `go/` | The same verifier + catalog client, byte-exact on the shared fixtures (`rigorix-verifier` on PyPI/npm; Maven `eu.rigorix:rigorix-verifier`; Go module) |
 | `docs/` | Contract-sync design notes and ADRs |
 
@@ -43,6 +43,10 @@ rigorix-governed once v0 lands (dogfood demo #2).
 - [x] SSE push channel — ADR-0002 + `events.json` + fixtures
 - [x] ADR-016 integrity contract — `api/history-slice.json`, `api/ledger-receipt.json`, `api/compaction-checkpoint.json`
 - [x] `rust/` **0.9.0** (`rigorix-schemas`, `rigorix-verifier`, `rigorix-client`) — published to crates.io, npm, PyPI and Maven Central (all four verifier channels at 0.9.0)
+- [ ] **0.10.0** — the release that carries the in-process gate: the tree is at
+  0.10.0, the channels serve 0.9.0, and `scripts/check-release.sh` reports both
+  facts. Publication is blocked on the Actions billing entitlement, so no tag
+  exists for it yet (see [docs/publication-readiness.md](docs/publication-readiness.md)).
 - [x] Python / TypeScript / Java / Go verifiers + catalog clients — fixtures green in each language
 
 *Last verified: 2026-11-10 against `rigorix-oss` `v1.14.3` (the gate artifact the

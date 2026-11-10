@@ -116,7 +116,15 @@ registry_has() {
       npm)    url="https://registry.npmjs.org/$NPM_COORDINATE" ;;
       maven)  url="https://repo1.maven.org/maven2/eu/rigorix/rigorix-verifier/maven-metadata.xml" ;;
     esac
-    body="$(curl -fsSL --max-time 20 -A "rigorix-sdk-release-check" "$url" 2>/dev/null)" || return 0
+    # A 404 is an answer ("this version is not there"), not a failure to read: a
+    # preflight that reports "unverified" for every new version is useless.
+    local code file
+    file="$(mktemp)"
+    code="$(curl -sS --max-time 20 -A "rigorix-sdk-release-check" -o "$file" \
+      -w '%{http_code}' "$url" 2>/dev/null)" || { rm -f "$file"; return 0; }
+    if [ "$code" = "404" ]; then rm -f "$file"; echo no; return 0; fi
+    [ "$code" = "200" ] || { rm -f "$file"; return 0; }
+    body="$(cat "$file")"; rm -f "$file"
   fi
   case "$channel" in
     crates) printf '%s' "$body" | grep -q "\"num\"[[:space:]]*:[[:space:]]*\"$version\"" && echo yes || echo no ;;

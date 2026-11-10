@@ -15,7 +15,7 @@ shelling out to Rust. No engine dependency.
 ## Install
 
 ```bash
-pip install rigorix-verifier==0.9.0   # published artifact (embedded corpus)
+pip install rigorix-verifier==0.9.0   # published: verifier only (see Status below)
 pip install .                          # or: pip install -e ".[test]" (from source)
 ```
 
@@ -50,6 +50,27 @@ client = Client(HTTPTransport("http://127.0.0.1:3001/rpc"))
 plan = client.plan({"template_name": "attendance"})
 version = client.version()
 ```
+
+## Status: the gate is in this repository, not on PyPI yet
+
+Read this before following the section below.
+
+| | version | contains the in-process gate |
+|---|---|---|
+| PyPI (published) | **0.9.0** | **no** — no `rigorix_verifier.binding`, no vendored `.wasm` |
+| this tree | **0.10.0** (unreleased) | yes |
+
+So `pip install rigorix-verifier==0.9.0` gives the verifier and the embedded
+corpus, and **not** `rigorix_verifier.binding`. The import below fails against the
+published 0.9.0 and succeeds from a checkout:
+
+```bash
+pip install "git+https://github.com/arman-jalili/rigorix-sdk#subdirectory=python"
+```
+
+`0.10.0` is the release that carries it. Until it is published, this file documents
+a coordinate that exists in the tree — measured with `scripts/check-release.sh
+--verify-published`, which opens the wheel and fails when the surface is missing.
 
 ## In-process gate (WASI)
 
