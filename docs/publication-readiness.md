@@ -20,8 +20,8 @@ a chat log.
 **Measured on 2026-11-10, at `457c687`:**
 
 - `git rev-list --count HEAD` → **79** commits
-- commits naming a non-public sibling → **4** (`rigorix-enterprise` ×3,
-  `rigorix-gtm` ×1), measured with `git log --all --grep=`
+- commits naming a non-public sibling → **4** (one product repository ×3, one
+  go-to-market repository ×1), measured with `git log --all --grep=<name>`
 - the site repository's name → **absent from the history entirely**
 
 The issue that requested this (*PUB-1*) cited 109 commits and 22 mentions. Those
@@ -52,9 +52,12 @@ a repository path was doing nothing:
 
 | shape | before | after |
 |---|---|---|
-| deployment | `rigorix-enterprise is a control plane` | `The enterprise product is a control plane` |
-| consumer | `rigorix-enterprise/core` | `the enterprise consumer's core` |
-| bare path | `rigorix-enterprise \`findings/x.md\`` | `\`findings/x.md\` in the enterprise repository` |
+| deployment | `<repo> is a control plane` | `The enterprise product is a control plane` |
+| consumer | `<repo>/core` | `the enterprise consumer's core` |
+| bare path | `<repo> \`findings/x.md\`` | `\`findings/x.md\` in the enterprise repository` |
+
+(`<repo>` is the private repository name; this file states the shape without
+repeating it, because the file itself is part of the tip.)
 
 `go/internal/corpus/corpus_gen.go` is generated, so the fix was made in
 `schemas/README.md` and the corpus regenerated — the guard is `go generate` +
@@ -109,7 +112,7 @@ signs (DCO).
 
 | # | Criterion | Command | Result |
 |---|---|---|---|
-| 1 | the tip is clean | `git grep -l 'rigorix-enterprise\|rigorix-gtm\|cost-demo'` (excluding `.claude/`) | 0 findings |
+| 1 | the tip is clean | the private-name scan over tracked files (`docs/publication-readiness.md` states the rule, not the names) | 0 findings |
 | 2 | the history decision is recorded | this file | accept, with the measurements |
 | 3 | no secret is needed | `bash .ci/local-ci.sh` on a clone | green, no `RIGORIX_SDK_TOKEN` |
 | 4 | the packaging is honest | `cargo package --list -p rigorix-schemas` | unchanged by the sweep |
