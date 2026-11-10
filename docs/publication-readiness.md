@@ -156,6 +156,46 @@ allow-listed with a reason each: they exist to name what was replaced.
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## What each coordinate serves, read rather than assumed (#103)
+
+`publish.yml` asserted one thing about a release: the tag matches the manifest. Two
+properties a release needs were asserted nowhere, and both have failed here:
+
+- **whether the version is new.** A second registry rejecting it, after the first has
+  taken it, is discovered by hand and late.
+- **whether the registry serves what the tree documents.** That is how
+  `rigorix-verifier` 0.9.0 reached PyPI without `binding/` and the vendored artifact
+  while every local gate was green: the pack gate builds from the tree.
+
+`scripts/check-release.sh` has two modes — `preflight` (before the first upload: one
+version across the four manifests, the tag agrees, no channel serves it yet) and
+`--verify-published` (after the last upload: every channel serves it, and the PyPI
+wheel carries the surface the README names). `publish.yml` runs the first in a
+`preflight` job that every upload job `needs`, and the second in `verify-published`
+after the uploads. Neither is `continue-on-error`.
+
+**Measured 2026-11-11** with `bash scripts/check-release.sh --verify-published`:
+
+| coordinate | version served | surface |
+|---|---|---|
+| crates.io `rigorix-verifier` | 0.9.0 | verifier only |
+| PyPI `rigorix-verifier` | 0.9.0 | **no `binding/`, no vendored artifact** |
+| npm `rigorix-verifier` | 0.9.0 | verifier only |
+| npm `rigorix-client` | 0.8.0 | independent cadence (not part of a verifier release) |
+| Maven `eu.rigorix:rigorix-verifier` | 0.9.0 | verifier only |
+| Go `github.com/arman-jalili/rigorix-sdk/go` | no `go/v0.9.0` with `gate/` | tag-only coordinate |
+
+So the tree **cannot be published as it stands**: `preflight` exits 1 naming all four
+channels, and the verification exits 1 on the PyPI surface. That is the point — the
+check would have caught what shipped. The release that fixes it is `#102`.
+
+Re-measure with:
+
+```bash
+bash scripts/check-release.sh --verify-published
+bash scripts/check-release.sh             # preflight: exits 0 only for a new version
+```
+
 ## A pin is a digest, in the workflows too (#105)
 
 The two wasm engines were pinned exactly and refused a range with a sentence; the

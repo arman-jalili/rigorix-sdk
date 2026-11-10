@@ -136,6 +136,8 @@ job_rust() {
     'bash .pi/scripts/validate-no-strategy.sh --self-test && bash .pi/scripts/validate-no-strategy.sh'
   run "repo: SPDX on every published source channel" . \
     'bash scripts/check-spdx.sh --self-test && bash scripts/check-spdx.sh'
+  run "release: the release checks can refuse (published version, wrong tag, split manifests)" . \
+    'bash scripts/check-release.sh --self-test'
   run "repo: every workflow file parses (a file GitHub cannot load gates nothing)" . \
     'bash scripts/check-workflows.sh --self-test && bash scripts/check-workflows.sh'
   run "repo: documents state the agreement in use (CLA, not DCO)" . \

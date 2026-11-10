@@ -47,6 +47,11 @@ jobs:
           bash scripts/check-spdx.sh --self-test
           bash scripts/check-spdx.sh
 
+      # A release's identity, proven offline: the three cases are fixtures, so a
+      # pull request does not ask four registries about a version it is not releasing.
+      - name: Release checks can refuse (published version, wrong tag, split manifests)
+        run: bash scripts/check-release.sh --self-test
+
       # `audit.yml` did not parse for four merges: `run: "$(cmd)" args` is a quoted
       # scalar followed by junk. Nothing loaded the file, so nothing said so.
       - name: Every workflow file parses
