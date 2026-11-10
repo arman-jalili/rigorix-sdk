@@ -156,6 +156,61 @@ allow-listed with a reason each: they exist to name what was replaced.
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## The in-process gate is in the tree and on no channel (#102)
+
+Measured against the registries, not the tree:
+
+| coordinate | serves | carries the in-process gate |
+|---|---|---|
+| PyPI `rigorix-verifier` | 0.9.0 | **no** — wheel has 0 `binding/` entries, and its METADATA declares no `wasmtime` |
+| crates.io `rigorix-verifier` | 0.9.0 | no |
+| npm `rigorix-verifier` | 0.9.0 | no (and does not claim one) |
+| Maven `eu.rigorix:rigorix-verifier` | 0.9.0 | no (and does not claim one) |
+| Go `go/v0.9.0` | — | **no** — 0 `go/gate/` entries at the tag, 12 at `HEAD` |
+
+The tree is bumped to **0.10.0** across the five manifests (`rust/Cargo.toml`,
+`python/pyproject.toml`, `typescript/package.json`, `java/pom.xml`, and the two
+intra-workspace pins), because the contents moved and a version must mean released
+content — `check-release.sh` refuse-and-name is what makes that a rule rather than a
+habit. `typescript-client` stays at 0.8.0: independent cadence, recorded in
+`validate-channel-versions.sh`.
+
+Bumping the tree also narrowed the dependency audit: `pip-audit --strict` refuses to
+audit a package it cannot resolve on PyPI, and 0.10.0 is by design unpublished, so
+`--strict` over an editable install reported *"Dependency not found on PyPI and could
+not be audited: rigorix-verifier (0.10.0)"* — a fact about the release, not an
+advisory. The audit's subject is now `requirements.lock` (the same graph the licence
+audit reads), and `python/scripts/audit.sh` owns the step so `.ci/local-ci.sh` and
+`audit.yml` cannot drift apart. It also retries **once** when pip-audit's own
+resolver environment fails to bootstrap (`Failed to upgrade pip`) — a network
+failure, matched by its own words — and never retries a finding.
+
+Both READMEs now state the coordinate instead of the tree: `python/README.md` has a
+`Status` table (published 0.9.0 = verifier only; tree 0.10.0 = with the gate) and the
+one-line checkout install that does work today; `go/README.md` shows the two
+`git ls-tree` commands that make the difference visible.
+
+**Blocked, and stated as blocked:** publishing 0.10.0 needs a tag push and the
+`Publish` workflow, and Actions minutes are exhausted. The exact steps, in order,
+when billing clears:
+
+```bash
+# 1. the gate's own evidence, offline
+bash .ci/local-ci.sh
+# 2. the release identity: unpublished everywhere, tag agrees
+bash scripts/check-release.sh --tag v0.10.0
+# 3. tag and publish (five channels; Go and the Rust crates by tag)
+git tag v0.10.0 && git tag rust-v0.10.0 && git tag go/v0.10.0 && git push --tags
+# 4. after the uploads, from the registries
+bash scripts/check-release.sh --verify-published --tag v0.10.0
+```
+
+Measured today: step 2 exits **0** (`0.10.0` is unpublished on all four channels —
+a 404 from crates.io is an answer, not a read failure, and the script treats it that
+way), and step 4 exits **1**, naming `binding/` as missing, until the release lands.
+The acceptance rows in `#102` that need `pip download …==0.10.0` are therefore **not
+satisfied**, and are not reported as if they were.
+
 ## What each coordinate serves, read rather than assumed (#103)
 
 `publish.yml` asserted one thing about a release: the tag matches the manifest. Two
