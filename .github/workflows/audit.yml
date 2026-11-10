@@ -45,6 +45,27 @@ jobs:
           cp /tmp/pyproject.toml python/pyproject.toml
           echo "✅ a planted range is refused"
 
+  artifact:
+    name: 📦 the vendored artifact is the published one
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # The four internal comparisons cannot see the defect #78 found: every
+      # recording can move together to bytes no download reproduces. This job is
+      # the only check that leaves the repository, which is why it is scheduled
+      # and not part of ci.yml — a pull request must not depend on a release API.
+      - name: the guard can refuse (four planted drifts)
+        run: bash scripts/check-vendored-artifact.sh --self-test
+
+      - name: the vendored copy equals the release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/check-vendored-artifact.sh --verify-upstream
+
   secrets:
     name: 🔑 no credential in the history
     runs-on: ubuntu-latest
@@ -145,12 +166,14 @@ jobs:
       # Symbol-level scan: a vulnerable function the code actually reaches fails
       # the build; an advisory in an unused path does not.
       - name: govulncheck ./... (called vulnerabilities fail the build)
-        run: "$(go env GOPATH)/bin/govulncheck" ./...
+        run: |
+          "$(go env GOPATH)/bin/govulncheck" ./...
 
       # Uncalled advisories are reported, not swallowed: a change in the module
       # graph's advisory set is visible in the log without being a red build.
       - name: module scope (informational)
-        run: "$(go env GOPATH)/bin/govulncheck" -scan=module || true
+        run: |
+          "$(go env GOPATH)/bin/govulncheck" -scan=module || true
 
       - name: the seed — a planted vulnerable dependency must fail
         run: |

@@ -22,7 +22,12 @@
 #
 # Usage:
 #   bash .ci/local-ci.sh [--jobs-only | --validators-only] [--python-local]
-#                        [--allow-skips] [--list]
+#                        [--allow-skips] [--list] [--verify-upstream]
+#
+# --verify-upstream adds the one step that leaves the machine: it compares the
+# vendored artifact to the release asset through the GitHub API (#104). It needs
+# `gh` and network, so it is opt-in; without the flag the runner says so instead of
+# counting a step that did not run.
 #
 # --list prints every step the runner can execute, including both sides of a
 # branch (docker/host, python-local). It is a list of call sites, not of a run:
@@ -40,6 +45,7 @@ mkdir -p "$LOG_DIR"
 MODE="all"
 PYTHON_LOCAL=0
 ALLOW_SKIPS=0
+VERIFY_UPSTREAM=0
 FAILED=0
 EXECUTED=0
 FAILED_COUNT=0
@@ -53,6 +59,7 @@ while [ $# -gt 0 ]; do
     --python-local) PYTHON_LOCAL=1; shift ;;
     --allow-skips) ALLOW_SKIPS=1; shift ;;
     --list) MODE="list"; shift ;;
+    --verify-upstream) VERIFY_UPSTREAM=1; shift ;;
     -h|--help) sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "local-ci: unknown argument '$1'" >&2; exit 2 ;;
   esac
@@ -117,12 +124,20 @@ run() {
 }
 
 job_rust() {
+  run "artifact: the guard can refuse (four planted drifts)" . \
+    'bash scripts/check-vendored-artifact.sh --self-test'
   run "artifact: both vendored copies agree" . \
     'bash scripts/check-vendored-artifact.sh'
+  if [ "$VERIFY_UPSTREAM" -eq 1 ]; then
+    run "artifact: the vendored copy equals the release asset (github api)" . \
+      'bash scripts/check-vendored-artifact.sh --verify-upstream'
+  fi
   run "repo: no commercial strategy in published files" . \
     'bash .pi/scripts/validate-no-strategy.sh --self-test && bash .pi/scripts/validate-no-strategy.sh'
   run "repo: SPDX on every published source channel" . \
     'bash scripts/check-spdx.sh --self-test && bash scripts/check-spdx.sh'
+  run "repo: every workflow file parses (a file GitHub cannot load gates nothing)" . \
+    'bash scripts/check-workflows.sh --self-test && bash scripts/check-workflows.sh'
   run "repo: documents state the agreement in use (CLA, not DCO)" . \
     'bash scripts/check-agreement.sh --self-test && bash scripts/check-agreement.sh'
   run "repo: no credential in the history (gitleaks)" . \
@@ -384,6 +399,9 @@ elif [ "$SKIPPED_COUNT" -gt 0 ]; then
     "$EXECUTED" "$SKIPPED_COUNT" "$LOG_DIR"
   exit 3
 else
+  if [ "$VERIFY_UPSTREAM" -eq 0 ]; then
+    printf '⏭ the release asset was not compared (pass --verify-upstream: needs gh and network)\n'
+  fi
   printf '\nLOCAL CI: GREEN — %d step(s) executed (%s)\n' "$EXECUTED" "$LOG_DIR"
   exit 0
 fi

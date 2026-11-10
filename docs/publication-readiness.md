@@ -156,6 +156,53 @@ allow-listed with a reason each: they exist to name what was replaced.
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## What the artifact guard checks, and where (#104)
+
+`scripts/check-vendored-artifact.sh` had four checks and all four were internal:
+the copies agree, both `PROVENANCE.md` files agree with their copy, both source
+constants agree. **All five recordings can move together to a value no download
+reproduces** — which is the state `#78` found, and the guard passed on it.
+
+| mode | what it proves | where it runs | when |
+|---|---|---|---|
+| default | the five recordings agree with each other | `ci.yml`, `local-ci` | every change |
+| `--self-test` | four planted drifts are each rejected by file name | `audit.yml`, `local-ci` | every change |
+| `--verify-upstream` | the vendored bytes are the **release asset** | `audit.yml`, `local-ci --verify-upstream` | weekly, or on request |
+
+`--verify-upstream` reads the `**source:** owner/repo, tag vX` line from
+`PROVENANCE.md`, asks the release API for that asset's `digest` and `size`, and
+compares them to the vendored copy. It is the only check in this repository that
+leaves the machine, so it is **not** in `ci.yml`: a pull request must not depend on
+a release API. Without `gh` or network it exits **2** and says `not verified` —
+never 0. `local-ci` without the flag prints
+`⏭ the release asset was not compared (pass --verify-upstream …)` and does not
+count a step that did not run.
+
+Measured 2026-11-11: `--verify-upstream` → exit 0, `arman-jalili/rigorix-oss`
+`v1.14.3` publishing `ab77bb82…` (1,899,431 B), equal to the vendored copy. With
+all five recordings moved to `1d82f852…` the default mode still passes and
+`--verify-upstream` fails naming both digests — the `#78` defect, caught.
+
+## A workflow that could not load (#104, found in passing)
+
+Wiring the artifact job into `audit.yml` produced a YAML error — and it predated
+the change: **`audit.yml` had not parsed since the govulncheck edit**, four merges
+earlier.
+
+```yaml
+run: "$(go env GOPATH)/bin/govulncheck" ./...      # a quoted scalar, then junk
+```
+
+Nothing caught it. Actions never loaded the file (billing), no local step parsed
+YAML, and the text read as if the step worked. A workflow that cannot load gates
+nothing, so:
+
+- both lines are block scalars now;
+- `scripts/check-workflows.sh` parses every workflow file, `--self-test` plants the
+  exact unloadable shape and requires the refusal to name the file, and an empty
+  workflows directory is a refusal (`no subject, not evidence`), not a pass;
+- it runs in `ci.yml` and in `local-ci`.
+
 ## Tracker sweep (#89)
 
 Issue and pull-request bodies are published with the repository, and `git grep`
