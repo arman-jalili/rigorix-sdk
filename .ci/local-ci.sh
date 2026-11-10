@@ -262,11 +262,13 @@ job_audit() {
     run "audit: pip-audit --strict (host)" . \
       'python3 -m pip_audit --strict || { echo "install pip-audit for the host, or run with Docker available"; exit 1; }'
   fi
-  # govulncheck reports the stdlib of the toolchain that builds, so this step
-  # needs the newest patch of the floor in go.mod (1.26.x). With an older
-  # toolchain it fails and names the fixed version — which is the point.
-  # The floor is in go/go.mod; the toolchain is printed so the stdlib advisory
-  # line is a property of the tree, not of whichever Go happens to be installed.
+  # govulncheck reports the stdlib of the toolchain that *builds*, so the gate is
+  # only a property of the tree if the module's floor names a patched release.
+  # `go 1.26` did not: it admits 1.26.3, whose stdlib carries 17 advisories, and
+  # this step then failed on a host that satisfied the module — a red gate for a
+  # machine the tree called in-policy (#98). The floor is now `go 1.26.10`, so a
+  # host that can build the module is a host where those advisories are fixed.
+  # The toolchain is printed either way, so a failure is attributable.
   run "audit: govulncheck (toolchain printed)" go '
     set -uo pipefail
     echo "toolchain: $(go version)"
