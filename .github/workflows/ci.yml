@@ -48,6 +48,14 @@ jobs:
           bash scripts/check-spdx.sh --self-test
           bash scripts/check-spdx.sh
 
+      # A grep for "Developer Certificate of Origin" passed while the README said
+      # "DCO sign-off" (#97). This reads the fact: the canonical agreement comes
+      # from docs/CLA.md, and a document that names another one fails.
+      - name: Documents state the agreement in use
+        run: |
+          bash scripts/check-agreement.sh --self-test
+          bash scripts/check-agreement.sh
+
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:

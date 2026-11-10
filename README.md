@@ -58,8 +58,9 @@ The runner prints how many steps it executed and exits `1` on a failure, `3` whe
 a step was skipped for lack of a subject (the Python binding tests need Linux or
 Docker: wasmtime's JIT is killed by the macOS sandbox).
 
-- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md) — DCO sign-off, the rules
-  this repository holds itself to.
+- **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md) — the
+  [Contributor Licence Agreement](docs/CLA.md) a contribution is made under, and
+  the rules this repository holds itself to.
 - **Publication readiness:** [docs/publication-readiness.md](docs/publication-readiness.md)
   — including the recorded decision to publish the history as it stands.
 - **Security:** [SECURITY.md](SECURITY.md) — private reporting, and who answers a
@@ -67,10 +68,17 @@ Docker: wasmtime's JIT is killed by the macOS sandbox).
 
 ## Licence
 
-**Apache-2.0**, and only Apache-2.0. The full text is [LICENSE](LICENSE), the
-attribution statement is [NOTICE](NOTICE), and every published artefact declares
-the same in its manifest (`rust/Cargo.toml`, both `package.json` files,
-`python/pyproject.toml`).
+**Apache-2.0**, and only Apache-2.0. The full text is [LICENSE](LICENSE) and the
+attribution statement is [NOTICE](NOTICE). Every published source file states it in
+its own header, and the claim is measured rather than listed by hand:
+
+```bash
+bash scripts/check-spdx.sh   # 44 file(s) carry SPDX-License-Identifier: Apache-2.0
+```
+
+The manifests (`rust/Cargo.toml`, both `package.json` files, `python/pyproject.toml`,
+`java/pom.xml`) declare it too; a Go module has no field for it and inherits the
+repository `LICENSE`.
 
 The licence grants no trademark rights (Apache-2.0 §6): what the names permit is
 stated in [TRADEMARK.md](TRADEMARK.md).

@@ -123,6 +123,8 @@ job_rust() {
     'bash .pi/scripts/validate-no-strategy.sh --self-test && bash .pi/scripts/validate-no-strategy.sh'
   run "repo: SPDX on every published source channel" . \
     'bash scripts/check-spdx.sh --self-test && bash scripts/check-spdx.sh'
+  run "repo: documents state the agreement in use (CLA, not DCO)" . \
+    'bash scripts/check-agreement.sh --self-test && bash scripts/check-agreement.sh'
   run "repo: no credential in the history (gitleaks)" . \
     'bash scripts/check-secrets.sh --self-test && bash scripts/check-secrets.sh'
   run "rust: publication channels agree" . \
