@@ -71,6 +71,20 @@ For a change to a frozen schema or the API catalog, open an issue first: those
 are additive-only within a major version, and the delta note is part of the
 change.
 
+## Issue and pull-request bodies are published documents
+
+An issue or pull-request body is as public as the code, and it is indexed. A
+private repository name, an internal hostname, or commercial positioning does not
+belong in one — not even as an example of what was removed. Describe the artifact
+or the deployment instead ("the enterprise consumer", "the public demo").
+
+`scripts/tracker-sweep.sh` reads every title and body against that rule; the
+names it looks for are supplied out of band:
+
+```bash
+PRIVATE_NAMES="<name>,<name>" bash scripts/tracker-sweep.sh
+```
+
 ## Code of conduct
 
 See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Report a security issue privately

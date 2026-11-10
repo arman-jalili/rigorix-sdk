@@ -23,6 +23,7 @@ cd "$ROOT"
 ALLOW=(
   ".pi/skills/|agent-harness reference text, not product documentation"
   ".pi/scripts/|the guard's own pattern is not prose"
+  "scripts/tracker-sweep.sh|a scanner's pattern, not prose (see the file's comment)"
 )
 
 COMMERCIAL_RE='funnel|go-to-market|\bGTM\b|pricing|competitor|\bcustomer\b|\bdeal\b|\bsales\b'

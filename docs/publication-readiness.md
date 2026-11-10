@@ -146,6 +146,45 @@ files and false of two channels. Measured:
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## Tracker sweep (#89)
+
+Issue and pull-request bodies are published with the repository, and `git grep`
+cannot see them, so the tree's guard said nothing about them. Measured
+2026-11-11 over **45 issues and 50 pull requests**, titles and bodies:
+
+| class | pattern | before | after |
+|---|---|---|---|
+| private repository name | supplied out of band to the script | 16 items | **0** |
+| commercial vocabulary | the words the guard lists | 6 items | **0** |
+| internal hostname | `*.internal` | 1 item | **0** |
+
+**16 items were edited** (14 issues, 2 pull requests), mechanically: a repository
+name became "the enterprise consumer", "the web-properties repository" or "the
+demo deployment" where it described provenance; a demo hostname became "the public
+demo"; positioning ("Python is where the buyers' engineers are") kept its
+technical reason and lost the framing. The three issues this sweep was filed for
+(`#80`, `#59`, `#64`) were among them, and `#80`'s own remediation note carried
+**stale measurements** — it reported 27 files and 22 commits where the tree has
+23 occurrences and 4 commits, and 0 files now. Corrected in the body.
+
+The sweep's own remediation issues quoted the names they removed (`#88`, `#89`,
+`#91`); they were rewritten to describe the classes, because a document that names
+what it keeps out is the leak it reports.
+
+```bash
+PRIVATE_NAMES="<name>,<name>,<name>" bash scripts/tracker-sweep.sh
+```
+
+The names are supplied out of band, for the same reason the history measurement
+takes them that way: the repository records the method, not the names.
+
+**Recorded, not re-triaged:** an earlier pass reported pull request `#71` as a hit
+on `ExportArtifactSet`. It is an API name, not a keyword; the re-run does not
+match it, and it needs no edit.
+
+The rule is stated where a contributor meets it: `CONTRIBUTING.md` → "Issue and
+pull-request bodies are published documents".
+
 ## Contribution gate: a CLA, and what cannot be switched on yet (#84)
 
 **Decision: a Contributor Licence Agreement, not a DCO sign-off.** Version 1.0 is
