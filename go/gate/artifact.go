@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Arman Wolkenstein-Jalili and Rigorix contributors
+
 // The artifact's identity: the digest and size recorded in PROVENANCE.md and
 // in the Python binding, checked before the bytes are compiled.
 //

@@ -116,6 +116,10 @@ job_rust() {
     'bash scripts/check-vendored-artifact.sh'
   run "repo: commits are signed off (DCO)" . \
     'bash scripts/check-dco.sh --self-test && bash scripts/check-dco.sh'
+  run "repo: no commercial strategy in published files" . \
+    'bash .pi/scripts/validate-no-strategy.sh --self-test && bash .pi/scripts/validate-no-strategy.sh'
+  run "repo: SPDX on every published source channel" . \
+    'bash scripts/check-spdx.sh --self-test && bash scripts/check-spdx.sh'
   run "rust: publication channels agree" . \
     'bash .pi/scripts/validate-channel-versions.sh && bash .pi/scripts/validate-channel-versions.sh --self-test'
   run "rust: fmt" rust 'cargo fmt --check'
@@ -252,8 +256,20 @@ job_audit() {
   # govulncheck reports the stdlib of the toolchain that builds, so this step
   # needs the newest patch of the floor in go.mod (1.26.x). With an older
   # toolchain it fails and names the fixed version — which is the point.
-  run "audit: govulncheck" go \
-    'go install golang.org/x/vuln/cmd/govulncheck@latest >/dev/null 2>&1 && "$(go env GOPATH)/bin/govulncheck" ./...'
+  # The floor is in go/go.mod; the toolchain is printed so the stdlib advisory
+  # line is a property of the tree, not of whichever Go happens to be installed.
+  run "audit: govulncheck (toolchain printed)" go '
+    set -uo pipefail
+    echo "toolchain: $(go version)"
+    go install golang.org/x/vuln/cmd/govulncheck@latest >/dev/null 2>&1
+    if ! "$(go env GOPATH)/bin/govulncheck" ./...; then
+      echo "called vulnerabilities found — the gate fails"
+      exit 1
+    fi
+    # Advisories the code does not reach are printed, not silently passed.
+    echo "--- module scope (informational: advisories the code does not call) ---"
+    "$(go env GOPATH)/bin/govulncheck" -scan=module || true
+  '
 
   # The seeds. A guard that has never refused anything is a claim, and the
   # workflow that plants these is billing-blocked, so the runner plants them
@@ -313,7 +329,8 @@ job_audit() {
 
 job_validators() {
   for script in validate-ci validate-tests validate-security validate-operations \
-    validate-canonical validate-architecture validate-integration; do
+    validate-canonical validate-architecture validate-integration \
+    validate-no-strategy; do
     run "validator: $script" . "bash .pi/scripts/$script.sh"
   done
 }

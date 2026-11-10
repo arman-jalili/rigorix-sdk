@@ -3,7 +3,7 @@
 Contract-first schemas for Rigorix audit, identity, and policy surfaces.
 Grounded in rigorix-oss Rust types (code is truth) and reconciled with
 Enterprise consumers via contract-sync milestone 1 (delta maps).
-Contract changes are DECISIONS (see AGENTS.md + docs/strategy-freeze).
+Contract changes are DECISIONS (see AGENTS.md + `docs/contract-sync-*.md`).
 
 **Licence:** these schemas are part of the Rigorix SDK and are Apache-2.0 (see
 `../LICENSE`). They carry no per-file `license` field on purpose: a schema under

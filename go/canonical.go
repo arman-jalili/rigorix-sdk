@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Arman Wolkenstein-Jalili and Rigorix contributors
+
 // Package rigorix is an independent (Strategy A) verifier + client for the
 // frozen Rigorix contract corpus: envelope HMAC, JSON Schema, ADR-016
 // per-producer chains, and Ed25519 anchor artifacts. No rigorix-engine
