@@ -120,11 +120,15 @@ That is an entitlement block (spending limit / billing), not a test result. So:
   seeds (`pip-audit` on a planted pin, `govulncheck` on a planted vulnerable
   module, `check-pins.py` on a planted range) have run in `local-ci`, not in
   Actions; a `pip-audit --strict` finding there is a real finding, not a flake.
-- `govulncheck` is a property of the tree, not of the machine: the floor is
-  `go 1.26` in `go/go.mod`, CI resolves it with `go-version-file` +
-  `check-latest`, and both CI and `local-ci` print `go version` before scanning.
-  Advisories the code does not call are printed (`-scan=module`) rather than
-  swallowed, so a change in either number is visible.
+- `govulncheck` is a property of the tree, because the floor names a **patch**:
+  `go 1.26.10` in `go/go.mod`. It previously said `go 1.26`, which is a minimum
+  language version — it admitted 1.26.3, whose standard library carries 17
+  advisories, so the gate failed on a host the tree called in-policy (`#98`). CI
+  resolves the floor with `go-version-file` + `check-latest`; both CI and
+  `local-ci` print `go version` before scanning, and `scripts/check-pins.py`
+  refuses a floor without a patch component. Advisories the code does not call are
+  printed (`-scan=module`) rather than swallowed, so a change in either number is
+  visible.
 - The DCO range check states its subject count; zero commits prints
   `no subject, not evidence` rather than a ✅. (`#84` replaces it with a CLA check,
   which has a subject — the pull request's author.)
@@ -341,5 +345,5 @@ statement, `LICENSE` for the text, `docs/CLA.md` for the agreement, and
 |---|---|---|---|
 | 1 | the tip is clean | the private-name scan over tracked files (`docs/publication-readiness.md` states the rule, not the names) | 0 findings |
 | 2 | the history decision is recorded | this file | accept, with the measurements |
-| 3 | no secret is needed | `bash .ci/local-ci.sh` on a clone | green, no `RIGORIX_SDK_TOKEN` |
+| 3 | no secret is needed | `bash .ci/local-ci.sh` on a clone, `RIGORIX_SDK_TOKEN` unset | `toolchain: go1.26.10`; `LOCAL CI: GREEN — 41 step(s) executed`; exit `0` |
 | 4 | the packaging is honest | `cargo package --list -p rigorix-schemas` | unchanged by the sweep |

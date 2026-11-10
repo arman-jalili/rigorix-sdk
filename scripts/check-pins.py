@@ -6,7 +6,14 @@ and `wazero v1.12.0` are claims a support case can quote. `wasmtime>=20.0` is a
 claim about nothing — the installed engine may be any of 50 releases, and the
 provenance would still read as if it named one.
 
-Scope: the two wasm engines only, because those are the versions recorded in
+Scope: the two wasm engines, plus the Go module's floor. The floor belongs here
+because, like a pin, it is a claim about a version: `go 1.26` is a *minimum
+language version*, so it admits 1.26.3 — a toolchain whose standard library
+carries 17 advisories, which made `govulncheck` fail on a host the module called
+in-policy (#98). A floor must name a patch release for the gate to be a property
+of the tree.
+
+The two wasm engines are, because those are the versions recorded in
 `PROVENANCE.md` and reported at run time by `binding.runtime_version()`.
 Ordinary library dependencies keep their compatible ranges; a library that
 pinned `jsonschema` exactly would fight its consumers, and it is not the thing
@@ -40,6 +47,7 @@ RANGE_MARKERS = (">=", "<=", ">", "<", "~=", "!=", "^", "~", "*")
 
 PIN_RE = re.compile(r"^==\s*(\d+\.\d+\.\d+)$")
 GO_PIN_RE = re.compile(r"^v(\d+\.\d+\.\d+)$")
+GO_FLOOR_RE = re.compile(r"^go (\d+\.\d+\.\d+)$", re.MULTILINE)
 
 
 class PinError(Exception):
@@ -125,6 +133,49 @@ def check_wazero() -> str:
     raise PinError(GO_MOD, 1, "module", f"no {WAZERO} requirement found")
 
 
+def go_floor(text: str) -> str:
+    """The `go` directive, which must name a patch release (X.Y.Z)."""
+    match = GO_FLOOR_RE.search(text)
+    if match:
+        return match.group(1)
+    minor = re.search(r"^go (\d+\.\d+)\s*$", text, re.MULTILINE)
+    if minor:
+        raise PinError(
+            GO_MOD,
+            _line_of(text, f"go {minor.group(1)}"),
+            f"go {minor.group(1)}",
+            "the go directive must name a patch release (e.g. go 1.26.10), not a minor: "
+            "a minor admits a toolchain whose stdlib the scan then reports",
+        )
+    raise PinError(GO_MOD, 1, text.splitlines()[0], "no `go` directive: the floor cannot be read")
+
+
+def check_go_floor() -> str:
+    return go_floor(GO_MOD.read_text(encoding="utf-8"))
+
+
+def self_test() -> int:
+    """The floor's own cases: a patch passes, a minor fails, absence fails."""
+    failures = 0
+    if go_floor("module x\n\ngo 1.26.10\n") != "1.26.10":
+        print("❌ self-test: a patch floor was not accepted", file=sys.stderr)
+        failures += 1
+    for text, expects in (("module x\n\ngo 1.26\n", "patch release"), ("module x\n", "no `go` directive")):
+        try:
+            go_floor(text)
+        except PinError as error:
+            if expects not in str(error):
+                print(f"❌ self-test: wrong reason: {error}", file=sys.stderr)
+                failures += 1
+        else:
+            print(f"❌ self-test: {text.splitlines()[-1]!r} was accepted", file=sys.stderr)
+            failures += 1
+    if failures:
+        return 1
+    print("✅ check-pins self-test: a minor floor is refused, a patch floor is accepted")
+    return 0
+
+
 def check_provenance(pin: str) -> None:
     """The provenance names the runtime, and names the pinned one."""
     text = PY_PROVENANCE.read_text(encoding="utf-8")
@@ -140,14 +191,20 @@ def check_provenance(pin: str) -> None:
 
 
 def main() -> int:
+    if "--self-test" in sys.argv[1:]:
+        return self_test()
     try:
         wasmtime = check_wasmtime()
         wazero = check_wazero()
+        floor = check_go_floor()
         check_provenance(wasmtime)
     except PinError as error:
         print(f"❌ {error}", file=sys.stderr)
         return 1
-    print(f"✅ exact runtime pins: {WASMTIME}=={wasmtime}, {WAZERO} v{wazero}; provenance agrees")
+    print(
+        f"✅ exact runtime pins: {WASMTIME}=={wasmtime}, {WAZERO} v{wazero}; "
+        f"provenance agrees; go floor {floor}"
+    )
     return 0
 
 
