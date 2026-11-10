@@ -382,7 +382,7 @@ func TestContractVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version["contract"] != "1.14.2" {
+	if version["contract"] != "1.14.3" {
 		t.Fatalf("contract = %v", version["contract"])
 	}
 	if version["gate_evaluation"] != true {

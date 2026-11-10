@@ -25,7 +25,7 @@ PY_PROVENANCE="python/rigorix_verifier/_wasm/PROVENANCE.md"
 GO_PROVENANCE="go/gate/testdata/PROVENANCE.md"
 PY_CONSTANT_FILE="python/rigorix_verifier/binding/loader.py"
 GO_CONSTANT_FILE="go/gate/artifact.go"
-EXPECTED_SIZE=1896910
+EXPECTED_SIZE=1899431
 
 fail() {
   printf '❌ %s\n' "$1" >&2

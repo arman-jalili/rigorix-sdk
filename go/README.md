@@ -62,7 +62,7 @@ invariant. `TestLiveVersion` runs when `RIGORIX_SERVER_URL` is set.
 
 `gate.Open` embeds the vendored `rigorix_gate_wasi.wasm` and loads it with
 wazero (pure Go; `CGO_ENABLED=0`). **It verifies the artifact's sha256 and size
-at load** (`7414f8df…`, 1,896,910 bytes) and refuses a mismatch with
+at load** (`ab77bb82…`, 1,899,431 bytes) and refuses a mismatch with
 `*gate.ArtifactDigestError`, which names both digests; `gate.OpenUnverified` is
 the opt-out for caller-supplied bytes and says so in its name. The six WASI
 prologue imports are answered with constants; the clock must stay zero (#1477),

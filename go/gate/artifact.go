@@ -16,10 +16,10 @@ import (
 // artifactSHA256 is the recorded digest of the embedded artifact. PROVENANCE.md,
 // the Python binding and scripts/check-vendored-artifact.sh record the same
 // value; that guard fails if any of them drifts.
-const artifactSHA256 = "7414f8df8772c789b38aeae7460f2f50c816bdde2848bc99470e0b273010bc9c"
+const artifactSHA256 = "ab77bb821bcff564dd2302a43cf3a73930cfd5ec94925b78328770a8023b7928"
 
-// artifactSize is the recorded byte length (1,896,910).
-const artifactSize = 1_896_910
+// artifactSize is the recorded byte length (1,899,431).
+const artifactSize = 1_899_431
 
 // ErrArtifactDigestMismatch means the bytes are not the recorded artifact.
 // errors.Is matches it against *ArtifactDigestError.
