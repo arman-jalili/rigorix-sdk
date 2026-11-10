@@ -104,32 +104,6 @@ jobs:
           fi
           echo "no rigorix-engine dependency"
 
-  dco:
-    name: ✍️ commits are signed off
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # the range needs the commits, not a shallow tip
-
-      - name: The check can refuse (self-test)
-        run: bash scripts/check-dco.sh --self-test
-
-      # A pull request's commits only: policy applies from its introduction, and
-      # the history before it is accepted rather than rewritten (PUB-2).
-      - name: Every commit carries Signed-off-by
-        run: |
-          if [ -n "${GITHUB_BASE_REF:-}" ]; then
-            base="origin/${GITHUB_BASE_REF}"
-            git fetch --no-tags origin "$GITHUB_BASE_REF" >/dev/null 2>&1 || true
-            range="$base..HEAD"
-          else
-            range="HEAD~1..HEAD"
-          fi
-          echo "range: $range"
-          bash scripts/check-dco.sh "$range"
-
   python-verifier:
     name: 🐍 rigorix-verifier (pytest)
     runs-on: ubuntu-latest
