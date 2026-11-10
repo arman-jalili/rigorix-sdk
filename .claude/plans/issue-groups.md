@@ -62,7 +62,7 @@ issue's named eight is included.
 `rigorix-verifier@0.9.0` cannot be imported by a page (every entry reaches for a
 Node built-in). Adds `rigorix-verifier/browser` with WebCrypto, a generated schema
 corpus, a `node:` build guard, and a real-Chrome cross-entry conformance test.
-Blocks rigorix-gtm #33.
+Blocks a private downstream workstream (#33).
 
 ---
 
