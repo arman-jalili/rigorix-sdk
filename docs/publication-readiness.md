@@ -146,6 +146,43 @@ files and false of two channels. Measured:
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## Licence audit of the graph (#86)
+
+The repository is Apache-2.0; the dependencies are linked, not vendored, and
+until this section nobody had read their licences. Measured on 2026-11-11 with
+`cargo-deny 0.19.0`, `license-checker 25`, `pip-licenses 5.5.5`:
+
+| ecosystem | graph | licences found | gate |
+|---|---|---|---|
+| Rust | 169 packages (`cargo metadata --offline`) | MIT OR Apache-2.0 (86), MIT (27), Unicode-3.0 (18), Apache-2.0 OR MIT (16), Apache-2.0 (4+4 deprecated `/` forms), BSD-3-Clause (3), Apache-2.0 WITH LLVM-exception (3), Unlicense OR MIT (2), BSD-2-Clause (2), MIT-0, BSD-1-Clause, LGPL-2.1-or-later (1, as an alternative) | `rust/deny.toml` + `cargo deny check licenses` |
+| npm `typescript` | 14 packages | MIT (10), Apache-2.0 (3), BSD-3-Clause (1) | `license-checker --onlyAllow` |
+| npm `typescript-client` | 4 packages | MIT (2), Apache-2.0 (2) | `license-checker --onlyAllow` |
+| Python | 10 packages (`requirements.lock`) | MIT, Apache-2.0 OR BSD-3-Clause, BSD-3-Clause, PSF-2.0, Apache-2.0 WITH LLVM-exception | `pip-licenses --partial-match --fail-on` |
+| Go | 3 modules (`go/go.sum`) | Apache-2.0 (wazero), BSD-3-Clause (`x/text`, `x/sys`) | **not gated by this script** — see below |
+| Java | `java/pom.xml` | Apache-2.0 test/runtime jars | **not gated by this script** — see below |
+
+No GPL, AGPL, SSPL, CDDL or EPL obligation is taken. `r-efi`'s
+`MIT OR Apache-2.0 OR LGPL-2.1-or-later` is resolved to a permissive option and
+recorded as a scoped exception in `rust/deny.toml`.
+
+**Two gates that could not fire, and do now.** `license-checker --failOn GPL`
+compares whole strings, so `GPL-3.0` never matched; it is an allow-list now.
+`pip-licenses --fail-on GPL` behaves the same way without `--partial-match`, so
+`GPL-2.0-or-later` passed; the flag is there. Both were found by planting the
+failure and watching the gate pass — which is the only way to know.
+
+`scripts/check-licenses.sh --self-test` plants a GPL dependency in all three
+ecosystems and requires each gate to refuse it.
+
+**Not covered, stated rather than implied:** Go and Java have no licence gate
+yet. Both graphs are small and permissive today (measured above by hand), but
+"small and permissive" is a measurement, not a gate — the same defect this issue
+was filed about.
+
+`NOTICE` was rewritten to distinguish vendored from linked and to record the
+obligations that are real: Unicode-3.0 attribution, the LLVM exception on
+`wasmtime`, PSF-2.0 on `typing_extensions`.
+
 ## Internal strategy is not published (#88)
 
 `docs/strategy-freeze-2026-09-06.md` was removed. Its durable technical content

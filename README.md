@@ -72,6 +72,9 @@ attribution statement is [NOTICE](NOTICE), and every published artefact declares
 the same in its manifest (`rust/Cargo.toml`, both `package.json` files,
 `python/pyproject.toml`).
 
+The licence grants no trademark rights (Apache-2.0 §6): what the names permit is
+stated in [TRADEMARK.md](TRADEMARK.md).
+
 The Apache licence rather than MIT because it carries an express patent grant,
 which matters for a verifier others embed. The schemas under `schemas/` are part of
 this repository and covered by the same licence; they carry no per-file licence

@@ -120,6 +120,8 @@ job_rust() {
     'bash .pi/scripts/validate-no-strategy.sh --self-test && bash .pi/scripts/validate-no-strategy.sh'
   run "repo: SPDX on every published source channel" . \
     'bash scripts/check-spdx.sh --self-test && bash scripts/check-spdx.sh'
+  run "repo: no credential in the history (gitleaks)" . \
+    'bash scripts/check-secrets.sh --self-test && bash scripts/check-secrets.sh'
   run "rust: publication channels agree" . \
     'bash .pi/scripts/validate-channel-versions.sh && bash .pi/scripts/validate-channel-versions.sh --self-test'
   run "rust: fmt" rust 'cargo fmt --check'
@@ -246,6 +248,8 @@ job_audit() {
   # depends on are pinned exactly and scanned for known advisories. This is not
   # in ci.yml because advisories are published after a merge, not before it.
   run "audit: exact runtime pins" . 'python3 scripts/check-pins.py'
+  run "audit: dependency licences (rust + npm + python)" . \
+    'bash scripts/check-licenses.sh --self-test && bash scripts/check-licenses.sh'
   if [ "$PYTHON_LOCAL" -eq 0 ] && command -v docker >/dev/null 2>&1; then
     run "audit: pip-audit --strict (linux docker)" . \
       "docker run --rm -v '$ROOT:/repo' -w /repo/python python:3.12-slim sh -c \"pip install -q --upgrade pip >/dev/null 2>&1; pip install -q -e '.[test]' pip-audit >/dev/null 2>&1 && pip-audit --strict\""

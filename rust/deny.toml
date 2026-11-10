@@ -1,0 +1,42 @@
+# Dependency licence policy (#86).
+#
+# The repository is Apache-2.0; the dependencies are not vendored but they are
+# linked, and a licence obligation travels with the binary. This file is the
+# policy, and `cargo deny check licenses` is the gate: a new dependency whose
+# licence is not listed here fails the build instead of arriving quietly.
+#
+# `allow` is the permissive set. Copyleft is not absent from the graph: `r-efi`
+# is offered as `MIT OR Apache-2.0 OR LGPL-2.1-or-later`, so the permissive
+# options are taken and the copyleft option is recorded as a scoped exception
+# rather than blessed for everything.
+
+[licenses]
+version = 2
+# SPDX expressions are matched as declared; a low confidence would let a
+# heuristic guess stand in for a statement.
+confidence-threshold = 0.9
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-1-Clause",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  # 18 packages: the Unicode data tables the JSON-Schema crate matches with.
+  "Unicode-3.0",
+  "Unlicense",
+]
+
+# `r-efi` declares `MIT OR Apache-2.0 OR LGPL-2.1-or-later`. Two permissive
+# options are available, so no copyleft obligation is taken; the exception records
+# that the disjunction was read rather than that its permissive half was assumed.
+# (cargo-deny's exception table takes `crate` + `allow` only; the reason lives
+# here, where it is read by the person changing the line.)
+[[licenses.exceptions]]
+crate = "r-efi"
+allow = ["LGPL-2.1-or-later"]
+
+# The workspace's own crates are Apache-2.0 via `[workspace.package]`.
+[licenses.private]
+ignore = true

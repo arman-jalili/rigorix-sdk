@@ -27,3 +27,13 @@ runtime version it moves to. "We will look at it" is not a policy; a date is.
 
 `pip-audit` and `govulncheck` fail the build on a *known* advisory. Unknown ones
 are the reason the runtimes are pinned and the ownership sentence exists.
+
+## A credential in the history
+
+The history is published with the repository, and `scripts/check-secrets.sh` scans
+every revision plus the objects no ref reaches, from a pinned gitleaks image. If a
+credential is found — now or after the repository is public — **rotate it first**.
+Rotation is not conditional on deciding what to do about the commit, and it is not
+deferred until after publication: a secret in a public repository is disclosed the
+moment the visibility changes. Rewriting the history afterwards is a separate
+decision, and no rewrite makes an already-disclosed credential secret again.

@@ -45,6 +45,46 @@ jobs:
           cp /tmp/pyproject.toml python/pyproject.toml
           echo "✅ a planted range is refused"
 
+  secrets:
+    name: 🔑 no credential in the history
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # every revision becomes public; a shallow scan misses them
+
+      - name: The scan can fail (a planted key must be caught)
+        run: bash scripts/check-secrets.sh --self-test
+
+      - name: gitleaks over all refs + dangling objects
+        run: bash scripts/check-secrets.sh
+
+  licences:
+    name: ⚖️ dependency licences
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install npm trees from their lockfiles
+        run: |
+          ( cd typescript && npm ci --no-audit --no-fund )
+          ( cd typescript-client && npm ci --no-audit --no-fund )
+
+      - name: cargo-deny (pinned)
+        run: cargo install cargo-deny --version 0.19.0 --locked
+
+      - name: The gates can refuse (planted GPL in three ecosystems)
+        run: bash scripts/check-licenses.sh --self-test
+
+      - name: Licence gate
+        run: bash scripts/check-licenses.sh
+
   python-audit:
     name: 🐍 pip-audit --strict
     runs-on: ubuntu-latest

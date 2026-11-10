@@ -2,14 +2,43 @@ Rigorix SDK
 Copyright 2026 Arman Wolkenstein-Jalili and Rigorix contributors
 
 This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+The licence grants no trademark rights; see TRADEMARK.md for what the names
+permit (nominative use, compatibility statements, unmodified redistribution).
 
-NOTICE: no third-party source code or documentation is vendored in this
-repository. The canonical JSON Schema corpus under schemas/ is original work
-written for this project. Third-party software is used as dependencies only —
-declared in rust/Cargo.toml, python/pyproject.toml, typescript/package.json,
-typescript-client/package.json, go/go.mod and java/pom.xml — and each dependency
-carries its own licence and notice requirements in its own package.
+## Vendored vs linked
 
-The one binary artefact vendored here, rigorix_gate_wasi.wasm, is built by this
-project's sibling repository and is covered by the same licence; its provenance,
-digest and obtainability are recorded beside each copy in PROVENANCE.md.
+**Vendored** (the source is in this repository):
+
+- the canonical JSON Schema corpus under `schemas/` — original work written for
+  this project, Apache-2.0;
+- `rigorix_gate_wasi.wasm` — built by this project's sibling repository, under
+  the same licence, with its provenance, digest and obtainability recorded beside
+  each copy in `PROVENANCE.md`.
+
+**Linked** (a dependency, not copied in): everything in `rust/Cargo.lock`,
+`python/requirements.lock`, both `package-lock.json` files, `go/go.sum` and
+`java/pom.xml`. Each dependency carries its own licence and its own attribution
+requirements in its own package; `scripts/check-licenses.sh` gates the graph
+against a policy (`rust/deny.toml` for Rust, an allow-list for npm, a deny-list
+for Python).
+
+## Attribution obligations the dependency set carries
+
+These are obligations, not permissions, and they are listed because "Apache-2.0"
+in the manifest does not describe the graph:
+
+- **Unicode-3.0** (Rust: the Unicode tables behind case folding and
+  identifiers). Requires the copyright and permission notice to travel with the
+  software; it is permissive but not attribution-free.
+- **Apache-2.0 WITH LLVM-exception** (`wasmtime`, the Python wasm engine). The
+  exception is what makes linking it into a non-Apache binary unproblematic; the
+  NOTICE obligations of Apache-2.0 still apply to the runtime distribution.
+- **PSF-2.0** (`typing_extensions`, Python). Permissive; the PSF notice must be
+  retained.
+- **MIT / Apache-2.0 / BSD-2-Clause / BSD-3-Clause / MIT-0 / Unlicense / ISC**
+  across the rest of the graph — attribution required by MIT and BSD, none by
+  MIT-0 or Unlicense.
+
+`r-efi` appears as `MIT OR Apache-2.0 OR LGPL-2.1-or-later`; the permissive
+options are taken, and the exception is recorded in `rust/deny.toml` so the
+choice is visible rather than assumed.
