@@ -48,6 +48,14 @@ jobs:
           bash scripts/check-spdx.sh --self-test
           bash scripts/check-spdx.sh
 
+      # `audit.yml` did not parse for four merges: `run: "$(cmd)" args` is a quoted
+      # scalar followed by junk. Nothing loaded the file, so nothing said so.
+      - name: Every workflow file parses
+        run: |
+          python3 -m pip install --quiet pyyaml
+          bash scripts/check-workflows.sh --self-test
+          bash scripts/check-workflows.sh
+
       # A grep for "Developer Certificate of Origin" passed while the README said
       # "DCO sign-off" (#97). This reads the fact: the canonical agreement comes
       # from docs/CLA.md, and a document that names another one fails.

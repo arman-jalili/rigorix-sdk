@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# check-vendored-artifact.sh — the two vendored copies are one fact.
+# check-vendored-artifact.sh — the two vendored copies are one fact, and that fact
+# is the published asset.
 #
 # `go/gate/testdata/` and `python/rigorix_verifier/_wasm/` each carry the same
 # 1.9 MB WASI artifact, and each language records its digest twice (PROVENANCE.md
@@ -13,11 +14,37 @@
 #   4. both source constants (Go `artifactSHA256`, Python `ARTIFACT_SHA256`)
 #      record the same digest
 #
-# Usage: bash scripts/check-vendored-artifact.sh
-# Exit: 0 = one fact; 1 = drift (message names the file).
+# What those four checks cannot see (SDL, #104): every one of them is an internal
+# comparison, so all five recordings can move together to a value no download
+# reproduces — which is exactly the state #78 found. Hence:
+#   --verify-upstream  compare the vendored bytes to the release asset the
+#                      PROVENANCE files name, through the release API. Network and
+#                      `gh` are required, so it runs on a schedule (audit.yml) and
+#                      on request, never in a pull request.
+#   --self-test        show that each check above can fail: four planted drifts,
+#                      each of which must be rejected naming the file it changed.
+#
+# Usage:
+#   bash scripts/check-vendored-artifact.sh [--self-test] [--verify-upstream]
+#                                           [--root DIR]
+# Exit: 0 = one fact; 1 = drift (message names the file); 2 = not verified
+#       (no `gh`, no network, or a release that records no digest) — never 0.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TREE="$ROOT"
+SELF_TEST=0
+VERIFY_UPSTREAM=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --self-test) SELF_TEST=1 ;;
+    --verify-upstream) VERIFY_UPSTREAM=1 ;;
+    --root) TREE="$2"; shift ;;
+    *) echo "check-vendored-artifact: unknown argument: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
 
 PY_ARTIFACT="python/rigorix_verifier/_wasm/rigorix_gate_wasi.wasm"
 GO_ARTIFACT="go/gate/testdata/rigorix_gate_wasi.wasm"
@@ -72,46 +99,224 @@ recorded_constant() {
   printf '%s\n' "$(printf '%s' "${line#*:}" | grep -Eo '[0-9a-f]{64}')"
 }
 
-# 1. both copies exist.
-for copy in "$PY_ARTIFACT" "$GO_ARTIFACT"; do
-  [ -f "$ROOT/$copy" ] || fail "missing vendored copy $copy"
-done
+check() {
+  local py_digest go_digest py_size go_size
+  # 1. both copies exist.
+  for copy in "$PY_ARTIFACT" "$GO_ARTIFACT"; do
+    [ -f "$TREE/$copy" ] || fail "missing vendored copy $copy"
+  done
 
-PY_DIGEST="$(digest_of "$ROOT/$PY_ARTIFACT")"
-GO_DIGEST="$(digest_of "$ROOT/$GO_ARTIFACT")"
-PY_SIZE="$(size_of "$ROOT/$PY_ARTIFACT")"
-GO_SIZE="$(size_of "$ROOT/$GO_ARTIFACT")"
+  py_digest="$(digest_of "$TREE/$PY_ARTIFACT")"
+  go_digest="$(digest_of "$TREE/$GO_ARTIFACT")"
+  py_size="$(size_of "$TREE/$PY_ARTIFACT")"
+  go_size="$(size_of "$TREE/$GO_ARTIFACT")"
 
-# 2. the copies are byte-identical. Name the file that has to change.
-if [ "$PY_DIGEST" != "$GO_DIGEST" ]; then
-  fail "the two vendored copies differ: $GO_ARTIFACT is $GO_DIGEST ($GO_SIZE B), but $PY_ARTIFACT is $PY_DIGEST ($PY_SIZE B) — update both from the same build"
+  # 2. the copies are byte-identical. Name the file that has to change.
+  if [ "$py_digest" != "$go_digest" ]; then
+    fail "the two vendored copies differ: $GO_ARTIFACT is $go_digest ($go_size B), but $PY_ARTIFACT is $py_digest ($py_size B) — update both from the same build"
+  fi
+
+  # 3. each PROVENANCE.md records its own copy.
+  local pair provenance rest digest size recorded_digest_value recorded_size_value
+  for pair in "$PY_PROVENANCE:$py_digest:$py_size" "$GO_PROVENANCE:$go_digest:$go_size"; do
+    provenance="${pair%%:*}"
+    rest="${pair#*:}"
+    digest="${rest%%:*}"
+    size="${rest##*:}"
+    recorded_digest_value="$(recorded_digest "$TREE/$provenance")"
+    [ "$recorded_digest_value" = "$digest" ] ||
+      fail "$provenance records sha256 $recorded_digest_value, but the copy hashes to $digest — the provenance must change with the artifact"
+    recorded_size_value="$(recorded_size "$TREE/$provenance")"
+    [ "$recorded_size_value" = "$size" ] ||
+      fail "$provenance records size $recorded_size_value, but the copy is $size bytes"
+  done
+
+  # 4. both source constants agree with the bytes. The loader that refuses a
+  #    mismatch must refuse over the same digest the other language trusts.
+  local py_constant go_constant
+  py_constant="$(recorded_constant "$TREE/$PY_CONSTANT_FILE" ARTIFACT_SHA256)"
+  go_constant="$(recorded_constant "$TREE/$GO_CONSTANT_FILE" artifactSHA256)"
+  [ "$py_constant" = "$py_digest" ] ||
+    fail "$PY_CONSTANT_FILE records $py_constant, but the copy hashes to $py_digest"
+  [ "$go_constant" = "$go_digest" ] ||
+    fail "$GO_CONSTANT_FILE records $go_constant, but the copy hashes to $go_digest"
+
+  [ "$py_size" = "$EXPECTED_SIZE" ] ||
+    fail "$PY_ARTIFACT is $py_size bytes, expected $EXPECTED_SIZE"
+
+  printf '✅ one artifact: %s (%s B) — both copies, both provenance files and both source constants agree\n' \
+    "$py_digest" "$py_size"
+}
+
+# The release the PROVENANCE files name: `**source:** \`owner/repo\`, tag \`vX\``.
+upstream_coordinate() {
+  local file="$1" line
+  line="$(grep -n -E '\*\*source:\*\* `[^`]+/[^`]+`, tag `[^`]+`' "$file" | head -1)"
+  [ -n "$line" ] || return 1
+  printf '%s\n' "$(printf '%s' "${line#*:}" | grep -Eo '`[^`]+/[^`]+`' | head -1 | tr -d '`') $(printf '%s' "${line#*:}" | grep -Eo 'tag `[^`]+`' | head -1 | tr -d '`' | sed 's/^tag //')"
+}
+
+verify_upstream() {
+  local repo tag asset published published_size vendored vendored_size provenance
+  provenance="$1"
+  command -v gh >/dev/null 2>&1 ||
+    { printf '⚠ not verified: gh is not installed, so the release asset was not compared\n' >&2; return 2; }
+
+  read -r repo tag <<<"$(upstream_coordinate "$TREE/$provenance")"
+  if [ -z "${repo:-}" ] || [ -z "${tag:-}" ]; then
+    printf '⚠ not verified: %s names no `**source:** \\`owner/repo\\`, tag \\`vX\\`` line\n' "$provenance" >&2
+    return 2
+  fi
+
+  asset="$(basename "$PY_ARTIFACT")"
+  if ! json="$(gh release view "$tag" --repo "$repo" --json assets 2>/dev/null)"; then
+    printf '⚠ not verified: the release API could not be read for %s %s (network or auth)\n' "$repo" "$tag" >&2
+    return 2
+  fi
+  published="$(printf '%s' "$json" | python3 -c '
+import json, sys
+asset = sys.argv[1]
+for entry in json.load(sys.stdin).get("assets", []):
+    if entry.get("name") == asset:
+        print(entry.get("size", ""), entry.get("digest") or "")
+        break
+' "$asset")"
+  if [ -z "$published" ]; then
+    printf '⚠ not verified: %s %s publishes no asset named %s\n' "$repo" "$tag" "$asset" >&2
+    return 2
+  fi
+  published_size="${published%% *}"
+  published="${published#* }"
+  if [ -z "$published" ]; then
+    printf '⚠ not verified: %s %s records no digest for %s\n' "$repo" "$tag" "$asset" >&2
+    return 2
+  fi
+  published="${published#sha256:}"
+
+  vendored="$(digest_of "$TREE/$PY_ARTIFACT")"
+  vendored_size="$(size_of "$TREE/$PY_ARTIFACT")"
+  if [ "$published" != "$vendored" ]; then
+    fail "the vendored copy is not the published asset: $repo $tag publishes $published ($published_size B), the copy hashes to $vendored ($vendored_size B)"
+  fi
+  [ "$published_size" = "$vendored_size" ] ||
+    fail "the vendored copy and the published asset disagree on size: published $published_size B, copy $vendored_size B"
+  printf '✅ published asset: %s %s — %s (%s B) equals the vendored copy (%s)\n' \
+    "$repo" "$tag" "$published" "$published_size" "$asset"
+}
+
+fixture() {
+  # Six recording files, copied from the real tree; a plant never touches it.
+  local tmp="$1" path
+  for path in "$PY_ARTIFACT" "$GO_ARTIFACT" "$PY_PROVENANCE" "$GO_PROVENANCE" \
+              "$PY_CONSTANT_FILE" "$GO_CONSTANT_FILE"; do
+    mkdir -p "$tmp/$(dirname "$path")"
+    cp "$ROOT/$path" "$tmp/$path"
+  done
+}
+
+plant_byte() {
+  python3 - "$1" <<'PY'
+import sys
+path = sys.argv[1]
+data = bytearray(open(path, "rb").read())
+data[1024] ^= 0xFF
+open(path, "wb").write(data)
+PY
+}
+
+plant_digest() {
+  python3 - "$1" <<'PY'
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+open(path, "w", encoding="utf-8").write(
+    re.sub(r"[0-9a-f]{64}", "0" * 64, text, count=1)
+)
+PY
+}
+
+plant_size() {
+  python3 - "$1" <<'PY'
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+open(path, "w", encoding="utf-8").write(
+    re.sub(r"\b1,899,431\b", "1,899,432", text, count=1)
+)
+PY
+}
+
+plant_constant() {
+  python3 - "$1" <<'PY'
+import re, sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+open(path, "w", encoding="utf-8").write(
+    re.sub(r"([0-9a-f]{64})", lambda m: "f" * 64, text, count=1)
+)
+PY
+}
+
+self_test() {
+  local tmp failures=0 case_name out expect
+  tmp="$(mktemp -d)"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$tmp' >/dev/null 2>&1 || true" EXIT
+
+  expect_clean() {
+    local dir="$1"
+    if out="$(TREE="$dir" check 2>&1)"; then
+      case "$out" in *"✅ one artifact:"*) : ;;
+        *) echo "❌ self-test: the clean fixture passed without a verdict"; failures=$((failures + 1)) ;; esac
+    else
+      echo "❌ self-test: the clean fixture failed — the guard rejects the real tree"
+      printf '%s\n' "$out" | tail -2
+      failures=$((failures + 1))
+    fi
+  }
+
+  expect_planted() {
+    local dir="$1" wanted="$2" label="$3"
+    if out="$(TREE="$dir" check 2>&1)"; then
+      echo "❌ self-test: planted drift ($label) was accepted"
+      failures=$((failures + 1))
+      return
+    fi
+    case "$out" in
+      *"$wanted"*) ;;
+      *) echo "❌ self-test: planted drift ($label) was not named ($wanted)"; failures=$((failures + 1)) ;;
+    esac
+  }
+
+  fixture "$tmp/clean";       expect_clean "$tmp/clean"
+  fixture "$tmp/copy";        plant_byte     "$tmp/copy/$GO_ARTIFACT"
+  expect_planted "$tmp/copy" "$GO_ARTIFACT" "a byte in one copy"
+  fixture "$tmp/digest";      plant_digest   "$tmp/digest/$PY_PROVENANCE"
+  expect_planted "$tmp/digest" "$PY_PROVENANCE" "a digest in one provenance"
+  fixture "$tmp/size";        plant_size     "$tmp/size/$GO_PROVENANCE"
+  expect_planted "$tmp/size" "$GO_PROVENANCE" "a size in one provenance"
+  fixture "$tmp/constant";    plant_constant "$tmp/constant/$GO_CONSTANT_FILE"
+  expect_planted "$tmp/constant" "$GO_CONSTANT_FILE" "a source constant"
+
+  if [ "$failures" -gt 0 ]; then
+    echo "❌ check-vendored-artifact self-test: $failures case(s) wrong"
+    return 1
+  fi
+  echo "✅ 4 planted drift(s) rejected, 1 clean fixture accepted — each rejection names the file that changed"
+  return 0
+}
+
+if [ "$SELF_TEST" -eq 1 ]; then
+  self_test
+  exit $?
 fi
 
-# 3. each PROVENANCE.md records its own copy.
-for pair in "$PY_PROVENANCE:$PY_DIGEST:$PY_SIZE" "$GO_PROVENANCE:$GO_DIGEST:$GO_SIZE"; do
-  provenance="${pair%%:*}"
-  rest="${pair#*:}"
-  digest="${rest%%:*}"
-  size="${rest##*:}"
-  recorded_digest_value="$(recorded_digest "$ROOT/$provenance")"
-  [ "$recorded_digest_value" = "$digest" ] ||
-    fail "$provenance records sha256 $recorded_digest_value, but the copy hashes to $digest — the provenance must change with the artifact"
-  recorded_size_value="$(recorded_size "$ROOT/$provenance")"
-  [ "$recorded_size_value" = "$size" ] ||
-    fail "$provenance records size $recorded_size_value, but the copy is $size bytes"
-done
+if [ "$VERIFY_UPSTREAM" -eq 1 ]; then
+  # First the internal fact, then the external one: a drift between the copies is
+  # cheaper to diagnose than a drift from the page.
+  check
+  verify_upstream "$PY_PROVENANCE"
+  exit $?
+fi
 
-# 4. both source constants agree with the bytes. The loader that refuses a
-#    mismatch must refuse over the same digest the other language trusts.
-PY_CONSTANT="$(recorded_constant "$ROOT/$PY_CONSTANT_FILE" ARTIFACT_SHA256)"
-GO_CONSTANT="$(recorded_constant "$ROOT/$GO_CONSTANT_FILE" artifactSHA256)"
-[ "$PY_CONSTANT" = "$PY_DIGEST" ] ||
-  fail "$PY_CONSTANT_FILE records $PY_CONSTANT, but the copy hashes to $PY_DIGEST"
-[ "$GO_CONSTANT" = "$GO_DIGEST" ] ||
-  fail "$GO_CONSTANT_FILE records $GO_CONSTANT, but the copy hashes to $GO_DIGEST"
-
-[ "$PY_SIZE" = "$EXPECTED_SIZE" ] ||
-  fail "$PY_ARTIFACT is $PY_SIZE bytes, expected $EXPECTED_SIZE"
-
-printf '✅ one artifact: %s (%s B) — both copies, both provenance files and both source constants agree\n' \
-  "$PY_DIGEST" "$PY_SIZE"
+check
