@@ -240,7 +240,7 @@ def test_the_record_is_six_imports():
     try:
         version = gate.contract_version()
         assert version["gate_evaluation"] is True
-        assert version["contract"] == "1.14.2"
+        assert version["contract"] == "1.14.3"
     finally:
         gate.close()
 

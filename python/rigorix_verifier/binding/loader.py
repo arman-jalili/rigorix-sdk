@@ -10,8 +10,8 @@ from .errors import ArtifactDigestMismatch, NotWASIArtifact
 ARTIFACT_NAME = "rigorix_gate_wasi.wasm"
 
 # Recorded in `_wasm/PROVENANCE.md`; the test compares the bytes to this.
-ARTIFACT_SHA256 = "7414f8df8772c789b38aeae7460f2f50c816bdde2848bc99470e0b273010bc9c"
-ARTIFACT_SIZE = 1_896_910
+ARTIFACT_SHA256 = "ab77bb821bcff564dd2302a43cf3a73930cfd5ec94925b78328770a8023b7928"
+ARTIFACT_SIZE = 1_899_431
 
 #: The exact import section the embedder contract permits.
 IMPORTS = (

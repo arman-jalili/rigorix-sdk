@@ -6,7 +6,7 @@ Use a **private GitHub security advisory** on this repository
 (`Security → Report a vulnerability`). Do not open a public issue: the report
 needs to reach a person before it reaches a reader.
 
-Include the artifact digest (`7414f8df…`), the `contract` version and the wasm
+Include the artifact digest (`ab77bb82…`), the `contract` version and the wasm
 runtime version — the three numbers a decision depends on. `rigorix_verifier.binding.runtime_version()`
 reports the third; both `PROVENANCE.md` files record the first.
 

@@ -2,29 +2,28 @@
 
 Vendored copy of the `rigorix-oss` WASI artifact (WASI-1; vendored).
 
-- **source:** `arman-jalili/rigorix-oss`, commit `a314672c89ca49e550a636b3fd6a2ee468038d17`
-- **crate:** `rigorix-gate-wasi` 1.14.2
+- **source:** `arman-jalili/rigorix-oss`, tag `v1.14.3`, commit `c8d162e11a5b9c9c50c34d03211e33df33537d48`
+- **crate:** `rigorix-gate-wasi` 1.14.3
 - **build:** `bash wasi/ci/build.sh` from the repo root
   (`wasm32-wasip1`, `panic=abort`, debug `name` section stripped)
-- **sha256:** `7414f8df8772c789b38aeae7460f2f50c816bdde2848bc99470e0b273010bc9c`
-- **size:** 1,896,910 bytes
+- **sha256:** `ab77bb821bcff564dd2302a43cf3a73930cfd5ec94925b78328770a8023b7928`
+- **size:** 1,899,431 bytes
 
 ## Obtainability
 
-**No published release asset today.** The source commit above is `rigorix-oss`
-`main`, not a tagged release, and `v1.14.2` carries no assets (`package-wasi` has
-never executed). Obtain the artifact by building it from that commit:
+**Released.** `rigorix-oss` `v1.14.3` publishes this artifact as the asset
+`rigorix_gate_wasi.wasm` (1,899,431 bytes), built by `package-wasi` from
+`c8d162e11a5b9c9c50c34d03211e33df33537d48` (the commit the tag peels to):
 
 ```bash
-git clone https://github.com/arman-jalili/rigorix-oss
-cd rigorix-oss && git checkout a314672c89ca49e550a636b3fd6a2ee468038d17
-bash wasi/ci/build.sh   # writes target/wasm32-wasip1/release/rigorix_gate_wasi.wasm
+gh release download v1.14.3 --repo arman-jalili/rigorix-oss \
+  --pattern 'rigorix_gate_wasi.wasm*'
+shasum -a 256 -c rigorix_gate_wasi.wasm.sha256   # ab77bb82…
 ```
 
-A rebuild is byte-identical (`7414f8df…`, 1,896,910 bytes), so the digest above
-is a function of the commit. When `rigorix-oss` publishes `v1.14.3` with a
-`rigorix_gate_wasi.wasm` asset, this section becomes that URL and the digest does
-not change.
+The digest above is the downloaded asset's, not a local build's: a macOS build of
+the same commit hashes to `0cfacf43…`, so a locally produced artifact would pin a
+digest no download reproduces. The page's number is the fact.
 
 ## One fact, two copies
 
@@ -55,7 +54,7 @@ Any other import is a load-time `ErrNotWASIArtifact` refusal naming it.
 ```
 node wasi/ci/run-conformance.mjs target/wasm32-wasip1/release/rigorix_gate_wasi.wasm
   module imports 6 item(s)
-  contract 1.14.2 · engine 1.14.2 · gate true
+  contract 1.14.3 · engine 1.14.3 · gate true
   ✓ seeded-0001 (diverges, as recorded)
   ✓ vec-0001  ✓ vec-0002  ✓ vec-0003  ✓ vec-fixture-0001
   ✓ 5 of 5 vectors reproduced through node:wasi
