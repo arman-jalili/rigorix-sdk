@@ -278,10 +278,14 @@ Now, in `publish.yml` first:
 | secret scanner | `gitleaks:v8.30.1` | `gitleaks@sha256:c00b6bd0…` with `# v8.30.1` |
 | run output | the image name | `▶ scanner: <digest>  (v8.30.1)` |
 
-**Recorded exception:** `dtolnay/rust-toolchain` has no version tag that follows its
-`stable` branch, so the pin is the commit behind the moving `v1` tag —
-`683b588c…` `# v1` — rather than a `release/…` branch name. The version comment
-says what was resolved, not a version number that does not exist.
+**Recorded exception, and the trap in it:** `dtolnay/rust-toolchain` has no version
+tag that follows its `stable` branch, so the pin is the commit behind the moving `v1`
+tag — `683b588c…` `# v1`. That action reads its toolchain from the **ref**
+(`@stable`, `@1.85.0`), so pinning it to a commit removes the only thing that said
+which toolchain to install: CI failed the step with `'toolchain' is a required
+input`. The pin stays and the toolchain moves into `with: toolchain: stable`, which
+is the documented form for a pinned ref. A SHA pin is not always a drop-in
+substitution for a tag — the failure mode is silent until the step first runs.
 
 `scripts/check-pins.py` gained both subjects, and they are reported in one run so a
 fix cannot satisfy one and miss the other:

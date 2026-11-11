@@ -71,9 +71,15 @@ jobs:
           bash scripts/check-agreement.sh --self-test
           bash scripts/check-agreement.sh
 
+      # `dtolnay/rust-toolchain` takes its toolchain from the *ref* (`@stable`,
+      # `@1.85.0`), so pinning it to a commit — as #105 requires — removes the only
+      # thing that said which toolchain to install: the step failed with
+      # "'toolchain' is a required input". The SHA stays; the toolchain moves into
+      # `with:`, which is the action's documented form for a pinned ref.
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8  # v1
         with:
+          toolchain: stable
           components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2
