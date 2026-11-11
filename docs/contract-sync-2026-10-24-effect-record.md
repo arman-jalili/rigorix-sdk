@@ -1,3 +1,4 @@
+<!-- history:document -->
 # Contract sync — effect-record artifact (SDK 0.7.0)
 
 **Date:** 2026-10-24

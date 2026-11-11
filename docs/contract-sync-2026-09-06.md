@@ -1,3 +1,4 @@
+<!-- history:document -->
 # Contract Sync — Design (2026-09-06)
 
 **Status:** Design doc (freeze). Owner: rigorix-sdk `schemas/` + both repos' CI.

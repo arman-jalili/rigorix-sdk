@@ -1,3 +1,4 @@
+<!-- history:document -->
 # Contract Sync — Delta (2026-10-13)
 
 **Status:** Applied contract delta (SDK issue #44, `ISSUE-SDK-CATALOG-PROJECTION-METHOD`).

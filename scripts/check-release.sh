@@ -173,47 +173,171 @@ registry_latest() {
 #   <!-- published: pypi=0.10.0 npm=0.10.0 maven=0.10.0 go=0.10.0 crates=0.10.0 -->
 # The prose around it says "the published version" instead of repeating the number, so
 # there is one copy of the fact per document and the check has one place to read.
+# The versions this project has released: the tags are the record, so a document that
+# names one of them is naming a release of ours, not a tool's version. `wasmtime==50.0.1`
+# is not in this set, which is why the default-deny below does not have to be narrowed by
+# a hand-maintained list of what "prose" means (#124).
+released_versions() {
+  ( cd "$TREE" && git tag -l 'v[0-9]*' 2>/dev/null ) |
+    sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -u
+}
+
+# One pass per document, classifying every line: `R` opens a history region, `M` is a
+# published-version marker, `C` is anything else that a version could hide in. Fenced
+# blocks are skipped — an example is not a claim — and history regions are skipped, but
+# their opening line is reported so a reader can see what was exempted (#124).
+classify() {  # classify FILE
+  awk '
+    BEGIN { fence = 0; hist = 0; hlevel = 0 }
+    {
+      line = $0
+      if (line ~ /^[ \t]*```/) { fence = !fence; next }
+      if (fence) next
+      # An explicit region runs until its own end marker, headings and all: `hlevel = 0`
+      # is the sentinel for "no heading closes this", since a heading-opened region
+      # always records a level of 1 or more.
+      if (line ~ /<!-- history:start -->/) { hist = 1; hlevel = 0; print "R\t" NR "\t" line; next }
+      if (line ~ /<!-- history:end -->/) { hist = 0; next }
+      if (line ~ /^#{1,6} /) {
+        match(line, /^#+/); lvl = RLENGTH
+        # Two headings open a history region: one that says so, and one that is a
+        # version number (`## 0.8.0 — the schema identity …`). A section headed by a
+        # release is a record of that release; asking it to also carry a marker would
+        # add a second copy of the fact to every historical section.
+        # "contains the word history" is too broad: `## A credential in the history`
+        # is a security section, and treating it as a release record would exempt
+        # whatever it says. A history heading either opens with it, ends with
+        # "— history", or says "history, superseded".
+        if (tolower(line) ~ /(^#+[ \t]*history|— *history|history, superseded)/ ||
+            line ~ /^#+[ \t]+[0-9]+\.[0-9]+\.[0-9]+/) {
+          hist = 1; hlevel = lvl; print "R\t" NR "\t" line; next
+        }
+        if (hist && lvl <= hlevel) hist = 0
+      }
+      if (hist) next
+      if (line ~ /<!-- published:/) { print "M\t" NR "\t" line; next }
+      print "C\t" NR "\t" line
+    }
+  ' "$1" 2>/dev/null
+}
+
 docs_mode() {
   local files file line_no line marker pair channel declared served checked=0 wrong=0 unreadable=0
+  local table exempt="" claims=0 version_claim released current
   files="$(cd "$TREE" && git ls-files '*.md' 2>/dev/null)"
   [ -n "$files" ] || files="$(cd "$TREE" && find . -name '*.md' -not -path './.git/*' | sed 's|^\./||')"
   [ -n "$files" ] || fail "no subject, not evidence: no Markdown file could be listed under $TREE"
+
+  [ -z "$EXPECT" ] || case "$EXPECT" in
+    [0-9]*.[0-9]*.[0-9]*) ;;
+    *) echo "❌ --expect $EXPECT is not a version — a release version looks like 0.11.0" >&2; exit 2 ;;
+  esac
+
+  # Coverage is asserted, not counted (#124). Before this, deleting a marker took the
+  # claim out of the subject and every run stayed green: 13 statements became 12.
+  table="$TREE/docs/published-versions.tsv"
+  [ -f "$table" ] ||
+    fail "no subject, not evidence: docs/published-versions.tsv is missing — it declares which document states which channel's published version, and without it a deleted statement is a smaller pass"
+  while IFS="$(printf '\t')" read -r channel declared_in file; do
+    case "$channel" in ""|\#*) continue ;; esac
+    case " $ALL_CHANNELS " in
+      *" $channel "*) ;;
+      *) fail "docs/published-versions.tsv names '$channel', which is not a channel ($(channel_list))" ;;
+    esac
+    # `grep '\t'` is not a tab in a basic regex: awk splits the record instead.
+    classify "$TREE/$file" | awk -F'\t' -v want="$channel=" '$1 == "M" && index($3, want) > 0 { found = 1 } END { exit !found }' ||
+      fail "the $channel statement for $file is missing — docs/published-versions.tsv says it declares a published version"
+  done <"$table"
+
+  current="$(release_version)"
+  released="$(released_versions)"
+
   while IFS= read -r file; do
     [ -f "$TREE/$file" ] || continue
-    while IFS=: read -r line_no line; do
-      marker="${line#*published:}"; marker="${marker%%-->*}"
-      for pair in $marker; do
-        channel="${pair%%=*}"; declared="${pair#*=}"
-        case " $ALL_CHANNELS " in
-          *" $channel "*) ;;
-          *) fail "$file:$line_no names an unknown channel '$channel' — the channels are: $(printf '%s' "$ALL_CHANNELS" | tr ' ' ',')" ;;
-        esac
-        [ -n "$declared" ] || fail "$file:$line_no states no version for $channel"
-        served="$(registry_latest "$channel")"
-        if [ -z "$served" ]; then
-          printf '⚠ %s:%s: %s declares %s, and %s could not be read (%s)\n' \
-            "$file" "$line_no" "$channel" "$declared" "$channel" "$(reason_for "$channel" "$declared")" >&2
-          unreadable=$((unreadable + 1)); continue
-        fi
-        checked=$((checked + 1))
-        if [ "$served" != "$declared" ]; then
-          printf '❌ %s:%s says %s for %s, but %s serves %s\n' \
-            "$file" "$line_no" "$declared" "$channel" "$channel" "$served" >&2
-          wrong=$((wrong + 1))
-        else
-          printf '✅ %s %s:%s declares %s, and %s serves it\n' "$channel" "$file" "$line_no" "$declared" "$channel"
-        fi
-      done
-    # Fenced blocks are examples, not claims: a document that *shows* the marker
-    # syntax inside a code fence would otherwise be checked as if it declared a
-    # version, which is a second copy of the fact in the same file.
-    done < <(awk '
-      /^[[:space:]]*```/ { fence = !fence; next }
-      !fence && /<!-- published:/ { print NR ": " $0 }
-    ' "$TREE/$file" 2>/dev/null)
+    # A dated record is history by nature: `<!-- history:document -->` near the top says
+    # so once, instead of wrapping every paragraph of a document whose whole subject is a
+    # release that already happened.
+    if head -5 "$TREE/$file" 2>/dev/null | grep -q '<!-- history:document -->'; then
+      exempt="$exempt${exempt:+, }$file (whole document)"
+      continue
+    fi
+    while IFS="$(printf '\t')" read -r class line_no line; do
+      case "$class" in
+        R) exempt="$exempt${exempt:+, }$file:$line_no $(printf '%s' "$line" | sed 's/^#*[[:space:]]*//' | cut -c1-40)" ;;
+        M)
+          marker="${line#*published:}"; marker="${marker%%-->*}"
+          for pair in $marker; do
+            channel="${pair%%=*}"; declared="${pair#*=}"
+            case " $ALL_CHANNELS " in
+              *" $channel "*) ;;
+              *) fail "$file:$line_no names an unknown channel '$channel' — the channels are: $(channel_list)" ;;
+            esac
+            [ -n "$declared" ] || fail "$file:$line_no states no version for $channel"
+            checked=$((checked + 1))
+            if [ -n "$EXPECT" ]; then
+              # The pre-publish question: does this document declare the version the tag
+              # being released names? No registry is read, because before the upload the
+              # registry can only answer with the previous version (#125).
+              if [ "$declared" != "$EXPECT" ]; then
+                printf '❌ %s:%s states %s for %s, and the release being tagged is %s\n' \
+                  "$file" "$line_no" "$declared" "$channel" "$EXPECT" >&2
+                wrong=$((wrong + 1))
+              else
+                printf '✅ %s %s:%s states %s, the version being released\n' "$channel" "$file" "$line_no" "$declared"
+              fi
+              continue
+            fi
+            served="$(registry_latest "$channel")"
+            if [ -z "$served" ]; then
+              printf '⚠ %s:%s: %s declares %s, and %s could not be read (%s)\n' \
+                "$file" "$line_no" "$channel" "$declared" "$channel" "$(reason_for "$channel" "$declared")" >&2
+              unreadable=$((unreadable + 1)); continue
+            fi
+            if [ "$served" != "$declared" ]; then
+              printf '❌ %s:%s says %s for %s, but %s serves %s\n' \
+                "$file" "$line_no" "$declared" "$channel" "$channel" "$served" >&2
+              wrong=$((wrong + 1))
+            else
+              printf '✅ %s %s:%s declares %s, and %s serves it\n' "$channel" "$file" "$line_no" "$declared" "$channel"
+            fi
+          done ;;
+        C)
+          # Default-deny (#124). A statement of one of *our* released versions, outside a
+          # history region and outside a marker, is a claim nobody declared — which is
+          # how four documents came to say 0.9.0 while the registries served 0.10.0.
+          # The current version is exempt: prose may name what is being released.
+          for version_claim in $released "$current"; do
+            [ "$version_claim" = "$current" ] && continue
+            case "$line" in
+              *"$version_claim"*)
+                printf '❌ %s:%s states %s with no marker — a published version is declared once, as <!-- published: <channel>=%s -->, or the text moves into a history region (<!-- history:start --> … <!-- history:end -->, a "## History" heading, a heading that is a version, or <!-- history:document --> for a whole record)\n' \
+                  "$file" "$line_no" "$version_claim" "$version_claim" >&2
+                claims=$((claims + 1))
+                break ;;
+            esac
+          done ;;
+      esac
+    done < <(classify "$TREE/$file")
   done <<< "$files"
+
   [ "$checked" -gt 0 ] || fail "no subject, not evidence: no document declares a published version, so nothing was compared"
-  [ "$wrong" -eq 0 ] || fail "$wrong statement(s) about a published version are stale — a release updates the documents that state it"
+  [ "$claims" -eq 0 ] ||
+    fail "$claims statement(s) about a released version are outside a declared history region — mark the statement, or move the text into one"
+  if [ "$wrong" -ne 0 ]; then
+    # `[ … ] || if …` is not a command list bash accepts; and the message has to say which
+    # question was asked, because the two have different remedies.
+    if [ -n "$EXPECT" ]; then
+      fail "$wrong statement(s) do not match the version being released ($EXPECT) — the release would publish documents that describe another version"
+    fi
+    fail "$wrong statement(s) about a published version are stale — a release updates the documents that state it"
+  fi
+  [ -n "$exempt" ] && printf 'ℹ history regions exempted: %s\n' "$exempt"
+  if [ -n "$EXPECT" ]; then
+    # A `\'` inside single quotes is not an escape: it ends the string, and the parse
+    # failed three lines further down. Say it without the apostrophe.
+    printf '✅ documents: %d statement(s) match the version the tag names, %s\n' "$checked" "$EXPECT"
+    return 0
+  fi
   # No network: the documents were not compared, and that is not a pass.
   [ "$unreadable" -eq 0 ] || {
     printf '⚠ %d channel(s) could not be read; the documents were not compared against them\n' "$unreadable" >&2
@@ -704,6 +828,18 @@ self_test() {
         printf '%s\n' "$got" | tail -2; failures=$((failures + 1)) ;;
     esac
   }
+  # Every document tree must declare which document states which channel (#124), so the
+  # fixtures do too: `cover DIR CHANNELS FILE`.
+  cover() {
+    local dir="$1" channels="$2" file="$3" ch
+    mkdir -p "$dir/docs"
+    {
+      printf '# channel\tversion\tdocument\n'
+      for ch in $(printf '%s' "$channels" | tr ',' ' '); do
+        printf '%s\tany\t%s\n' "$ch" "$file"
+      done
+    } >"$dir/docs/published-versions.tsv"
+  }
   absent() {  # fixtures where no channel serves the version
     printf '{"versions": []}\n' >"$1/fixtures/crates.json"
     printf '{"releases": {}}\n' >"$1/fixtures/pypi.json"
@@ -895,6 +1031,7 @@ self_test() {
   printf '# doc\n<!-- published: pypi=0.9.0 -->\nprose\n' >"$tmp/docs/README.md"
   for channel in crates pypi npm maven go; do printf '0.10.0\n' >"$tmp/docs/fixtures-latest-$channel.txt"; done
   mkdir -p "$tmp/docs/fx"
+  cover "$tmp/docs" pypi README.md
   for channel in crates pypi npm maven go; do printf '0.10.0\n' >"$tmp/docs/fx/latest-$channel.txt"; done
   cases=$((cases + 1))
   out="$( TREE="$tmp/docs" FIXTURES="$tmp/docs/fx" docs_mode 2>&1 )"
@@ -913,6 +1050,7 @@ self_test() {
   tmp="$(mktemp -d)"
   mkdir -p "$tmp/docs/ok/fx"
   printf '# doc\n<!-- published: pypi=0.10.0 go=0.10.0 -->\n' >"$tmp/docs/ok/README.md"
+  cover "$tmp/docs/ok" pypi,go README.md
   for channel in crates pypi npm maven go; do printf '0.10.0\n' >"$tmp/docs/ok/fx/latest-$channel.txt"; done
   cases=$((cases + 1))
   if out="$( TREE="$tmp/docs/ok" FIXTURES="$tmp/docs/ok/fx" docs_mode 2>&1 )"; then
@@ -930,6 +1068,7 @@ self_test() {
   mkdir -p "$tmp/docs/fenced/fx"
   printf '# doc\n<!-- published: pypi=0.10.0 -->\n\n```\n<!-- published: pypi=0.9.0 -->\n```\n' \
     >"$tmp/docs/fenced/README.md"
+  cover "$tmp/docs/fenced" pypi README.md
   for channel in crates pypi npm maven go; do printf '0.10.0\n' >"$tmp/docs/fenced/fx/latest-$channel.txt"; done
   cases=$((cases + 1))
   if out="$( TREE="$tmp/docs/fenced" FIXTURES="$tmp/docs/fenced/fx" docs_mode 2>&1 )"; then
@@ -1049,12 +1188,105 @@ self_test() {
   expect_fail "no published marker" "no subject, not evidence" \
     "$tmp/docs/empty" "$tmp/docs/empty/fx" docs_mode
 
+  # 16f. default-deny (#124): a released version outside a history region is a claim
+  #      nobody declared — the defect `--verify-docs` could not see, because it only read
+  #      markers. The released set is the tags, so the fixture is a repository.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/deny" 0.10.0
+  git -C "$tmp/deny" -c user.email=self@test.invalid -c user.name=selftest tag -a v0.9.0 -m "0.9.0"
+  cover "$tmp/deny" pypi README.md
+  printf '# doc\n<!-- published: pypi=0.10.0 -->\n\nThe channels serve 0.9.0; 0.10.0 is unpublished.\n' \
+    >"$tmp/deny/README.md"
+  served "$tmp/deny" 0.10.0
+  printf '0.10.0\n' >"$tmp/deny/fixtures/latest-pypi.txt"   # what --verify-docs asks
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/deny" FIXTURES="$tmp/deny/fixtures" docs_mode 2>&1 )"; then
+    echo "❌ self-test [marker-less claim]: a false sentence with no marker passed"
+    failures=$((failures + 1))
+  else
+    case "$out" in
+      *"README.md:4 states 0.9.0 with no marker"*) : ;;
+      *) echo "❌ self-test [marker-less claim]: refused without naming the file, the line and the version"
+         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
+  fi
+
+  # 16g. the same sentence inside a history region passes, and the exemption is named —
+  #      what was not checked must be visible.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/hist" 0.10.0
+  git -C "$tmp/hist" -c user.email=self@test.invalid -c user.name=selftest tag -a v0.9.0 -m "0.9.0"
+  cover "$tmp/hist" pypi README.md
+  printf '# doc\n<!-- published: pypi=0.10.0 -->\n<!-- history:start -->\nThe channels served 0.9.0.\n<!-- history:end -->\n' \
+    >"$tmp/hist/README.md"
+  served "$tmp/hist" 0.10.0
+  printf '0.10.0\n' >"$tmp/hist/fixtures/latest-pypi.txt"   # what --verify-docs asks
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/hist" FIXTURES="$tmp/hist/fixtures" docs_mode 2>&1 )"; then
+    case "$out" in
+      *"ℹ history regions exempted:"*"README.md:3"*) : ;;
+      *) echo "❌ self-test [history region]: passed without naming what it exempted"
+         printf '%s\n' "$out" | grep '^ℹ' | head -2; failures=$((failures + 1)) ;; esac
+  else
+    echo "❌ self-test [history region]: refused a claim inside a declared history region"
+    printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  fi
+
+  # 16h. coverage is asserted, not counted (#124): deleting a marker used to shrink the
+  #      subject (13 statements became 12) and every run stayed green.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/cov" 0.10.0
+  mkdir -p "$tmp/cov/docs"
+  printf '# doc\n' >"$tmp/cov/README.md"
+  cover "$tmp/cov" pypi README.md
+  served "$tmp/cov" 0.10.0
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/cov" FIXTURES="$tmp/cov/fixtures" docs_mode 2>&1 )"; then
+    echo "❌ self-test [deleted marker]: accepted a document that lost its statement"
+    failures=$((failures + 1))
+  else
+    case "$out" in
+      *"the pypi statement for README.md is missing"*) : ;;
+      *) echo "❌ self-test [deleted marker]: refused without naming the missing statement"
+         printf '%s\n' "$out" | tail -2; failures=$((failures + 1)) ;; esac
+  fi
+
+  # 16i. `--expect` is the pre-publish question (#125): does every document state the
+  #      version about to be tagged? No registry is read — before the upload it can only
+  #      answer with the previous version.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/expect" 0.11.0
+  mkdir -p "$tmp/expect/docs"
+  printf '# doc\n<!-- published: pypi=0.10.0 -->\n' >"$tmp/expect/README.md"
+  cover "$tmp/expect" pypi README.md
+  absent "$tmp/expect"                       # nothing published: no registry may be needed
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/expect" FIXTURES="$tmp/expect/fixtures" EXPECT=0.11.0 docs_mode 2>&1 )"; then
+    echo "❌ self-test [--expect mismatch]: accepted a document stating another version"
+    failures=$((failures + 1))
+  else
+    case "$out" in
+      *"README.md:2 states 0.10.0 for pypi, and the release being tagged is 0.11.0"*) : ;;
+      *) echo "❌ self-test [--expect mismatch]: refused without naming both versions"
+         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
+  fi
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/expect" FIXTURES="$tmp/expect/fixtures" EXPECT=0.10.0 docs_mode 2>&1 )"; then
+    case "$out" in
+      *"match the version the tag names, 0.10.0"*) : ;;
+      *) echo "❌ self-test [--expect match]: passed without saying which question it answered"
+         printf '%s\n' "$out" | tail -2; failures=$((failures + 1)) ;; esac
+  else
+    echo "❌ self-test [--expect match]: refused a document that states the tag's version"
+    printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  fi
+
   # 18. a channel that cannot be read: the documents were not compared, so exit 3 —
   #     never the green line of a check that did not happen.
   tmp="$(mktemp -d)"
   mkdir -p "$tmp/docs/offline/fx"
   # The marker names two channels; only one of them can be read.
   printf '# doc\n<!-- published: pypi=0.10.0 maven=0.10.0 -->\n' >"$tmp/docs/offline/README.md"
+  cover "$tmp/docs/offline" pypi,maven README.md
   printf '0.10.0\n' >"$tmp/docs/offline/fx/latest-pypi.txt"
   cases=$((cases + 1))
   out="$( TREE="$tmp/docs/offline" FIXTURES="$tmp/docs/offline/fx" docs_mode 2>&1 )"
@@ -1073,9 +1305,14 @@ self_test() {
     echo "❌ check-release self-test: $failures of $cases case(s) wrong"
     return 1
   fi
-  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote; a channel outside --channels is named with its remedy and exits 3 rather than printing a green total; a Go proxy 404, a module without gate/ and a wasm that is not the pinned artifact are each refused by name; a document that states a stale version, a tree with no such statement, and a registry that cannot be read are each reported as what they are"
+  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote; a channel outside --channels is named with its remedy and exits 3 rather than printing a green total; a Go proxy 404, a module without gate/ and a wasm that is not the pinned artifact are each refused by name; a document that states a stale version, a tree with no such statement, a registry that cannot be read, a marker-less claim of a released version, a deleted marker against the coverage table and an --expect mismatch are each reported as what they are, and a claim inside a declared history region is exempted by name"
   return 0
 }
+
+if [ -n "$EXPECT" ] && [ "$MODE" != "docs" ]; then
+  echo "❌ --expect is the pre-publish document question and needs --verify-docs (mode is $MODE)" >&2
+  exit 2
+fi
 
 case "$MODE" in
   # One reader for the four manifests, so a harness that must track the tree's version

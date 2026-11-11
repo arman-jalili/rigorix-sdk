@@ -72,7 +72,7 @@ Rationale, name class by name class:
    than as an adjective.
 5. **Cost.** Scrubbing with `git filter-repo` rewrites all 79 shas. Every dossier
    that cites a commit sha stops resolving, and the provenance links of the
-   already published 0.9.0 crates dangle — a permanent cost to hide names the
+   already published crates dangle — a permanent cost to hide names the
    product literature already states.
 
 The cost of "accept" is that the names stay, in messages and in blobs. That is
@@ -263,6 +263,7 @@ reach them anyway: the preflight ran, and at that tree it fails by design, becau
 The checks no longer inherit `needs:` from jobs a dispatch skips — a job whose needs
 are skipped is skipped too, which is how they became unreachable.
 
+<!-- history:start -->
 Evidence, not reading. Dispatch `43048892626` on `v0.10.0` ran the checks and nothing
 else — `preflight` and the four upload jobs appear as *skipped*, so no byte was
 uploaded — and both passed. Dispatch
@@ -273,6 +274,7 @@ dispatch is given became the **subject**: `--verify-published --tag v0.9.0` read
 tree's version (0.10.0) and printed `✅`, so a run told to check one release verified
 another. Same defect as #110 — a verdict about the script's default instead of about
 what it was handed — one layer down. `--tag` now decides the version, says so, and
+<!-- history:end -->
 preflight refuses a tag that names a different version than the tree it would upload.
 
 Writing that `if:` produced a second defect of the class this file already records: a
@@ -288,9 +290,60 @@ symbol` and the branch push produced a **zero-job** failure. `check-workflows.sh
 requires balanced quotes on every `if:`/`${{ }}` line, refuses that exact line by file
 and line number, and the real defect was put back to watch it bite.
 
+### The document gate covers what nobody opted in, and runs before the uploads (#124, #125)
+
+Two defects, both in the guard #119 added, and both of the same shape: **the guard's
+authority was smaller than its claim.**
+
+**It only read markers.** A sentence stating that the channels serve an older version,
+placed above the marker, passed — be that sentence exactly the one #119 existed to
+remove — and deleting a marker
+removed a claim from the subject instead of failing: 13 statements became 12, then 11,
+with every run green. The mechanism distinguished "history" from "claim" by the *absence*
+of a marker, which is indistinguishable from an oversight; the default was ignore, and
+the default is what fails.
+
+Now the default is deny:
+
+- A statement of one of **our released versions** outside a history region fails, and the
+  released set is derived from the tags — so `wasmtime==50.0.1` is not in it, and the
+  rule does not need a hand-maintained definition of "prose".
+- History is marked **positively**, three ways, because the documents have three kinds of
+  history: ``<!-- history:start -->` … ``<!-- history:end -->` for a passage, a heading that
+  opens with `History` or ends ``— history` (the "history, superseded" sections), a heading that
+  *is* a version (every section of `rust/RELEASING.md`), and
+  ``<!-- history:document -->` for a dated record whose whole subject is a past release — the
+  four `docs/contract-sync-*` files.
+- What was exempted is **printed**, so a reader can see what was not checked.
+- Coverage is **asserted** from `docs/published-versions.tsv`: channel → document. Deleting
+  a statement now fails naming it — `the npm statement for typescript/README.md is
+  missing` — instead of shrinking the subject.
+
+**It ran after the uploads.** `--verify-docs` was a step in `verify-published`, which
+`needs:` the four upload jobs. The one gate with authority to stop a release never looked
+at a document, so a release that made a document false had already published,
+irreversibly, when the check said so: a post-mortem with a red tick on the run that did
+the damage.
+
+The reason it was wired there is real, and is why this is two modes rather than a move —
+before an upload, "what does this channel serve?" can only answer with the *previous*
+version:
+
+| mode | question | when | authoritative for |
+|---|---|---|---|
+| `--verify-docs --expect <version>` | does every document state the version this tag names? | preflight, before any upload; reads no registry | **what may be published** — a stale document stops the release |
+| `--verify-docs` | do the documents agree with what the channels actually answered? | after the uploads | **what was published** — the registry is the only witness |
+
+Both are wired: `publish.yml`'s preflight runs `--expect "$(check-release.sh
+--print-version)"` beside `--tag`, and `verify-published` keeps the registry form. The
+acceptance for the first is offline — `--verify-docs --expect 0.9.0` at this tree exits 1
+naming each document that states 0.10.0.
+
 ### A release's definition of done contains a document (#119)
 
+<!-- history:start -->
 Four files said the registries served 0.9.0 while every one of them served 0.10.0.
+<!-- history:end -->
 Nothing failed, because nothing compared a document's claim with the registry's answer.
 
 Each document now states a published version **once**, on a machine-readable line next
@@ -315,6 +368,7 @@ stale claim), and fails with the file, the line and both versions:
 No network is exit 3 — "not compared", never a green line. `local-ci` reports a step
 that exits 3 as `⏭ NOT COMPARED` and counts it, so the gate's own verdict says so.
 
+<!-- history:start -->
 ## The 0.10.0 release: what published, and the two defects it found (2026-11-11)
 
 `v0.10.0` was pushed at `56ad028` after the tag fix (#116), and the workflow ran to
@@ -369,6 +423,7 @@ bash scripts/check-release.sh --verify-published --channels crates
 It needs the crates token, which is not available here. The three other channels have
 spent `0.10.0`, so this is a remaining step of the same release, not a new version.
 
+<!-- history:end -->
 ## The preflight's subject is the remote's advertisement (#116)
 
 The release preflight could not pass inside the workflow that runs it, and it refused
@@ -497,7 +552,7 @@ way), and step 4 exits **1**, naming `binding/` as missing, until the release la
 The acceptance rows in `#102` that need `pip download …==0.10.0` are therefore **not
 satisfied**, and are not reported as if they were.
 
-## What each coordinate serves, read rather than assumed (#103)
+## What each coordinate serves, read rather than assumed (#103) — history, superseded
 
 `publish.yml` asserted one thing about a release: the tag matches the manifest. Two
 properties a release needs were asserted nowhere, and both have failed here:
