@@ -5,7 +5,7 @@ There are five publication channels; `RELEASING.md` at the repository root lists
 
 - **Rust crates (crates.io)** — `rigorix-schemas`, `rigorix-verifier`
   (`rigorix-client` is a typed protocol client, independent cadence). Published
-  manually (`cargo publish`), marker tag `rust-v0.7.0`.
+  manually (`cargo publish`), marker tag `rust-v<version>`.
 
   Pass the token explicitly: `cargo publish -p <crate> --token "$CRATES_TOKEN"`.
   The token stored in `~/.cargo/credentials.toml` may be revoked, which surfaces
@@ -14,7 +14,7 @@ There are five publication channels; `RELEASING.md` at the repository root lists
   ownership issues. `rigorix-schemas` must be published **and indexed** before
   `rigorix-verifier`, whose dependency on it is exact-versioned.
 - **Python + TypeScript (PyPI + npm)** — `rigorix-verifier` (both) and
-  `rigorix-client` (npm). Published by CI on the `v0.7.0` tag.
+  `rigorix-client` (npm). Published by CI on the `v<version>` tag.
 
 `rust/Cargo.toml` `[workspace.package] version` is the single source for every
 workspace member (`version.workspace = true`). The **verifier** pins

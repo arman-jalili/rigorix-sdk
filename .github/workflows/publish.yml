@@ -86,6 +86,19 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         run: bash scripts/check-release.sh --tag "${{ github.ref_name }}"
 
+      # The document gate ran only *after* the uploads (#125), so the release that made a
+      # document false had already published, irreversibly, when the check said so. This
+      # is the pre-publish form: no registry is read, because before the upload the
+      # registry can only answer with the previous version — it compares the documents
+      # with the version this tag names.
+      - name: Preflight — every document states the version being released
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -uo pipefail
+          version="$(bash scripts/check-release.sh --print-version)"
+          echo "the tag names ${GITHUB_REF_NAME}; the manifests say ${version}"
+          bash scripts/check-release.sh --verify-docs --expect "$version"
+
   python:
     name: 🐍 rigorix-verifier → PyPI
     runs-on: ubuntu-latest
@@ -442,7 +455,11 @@ jobs:
       # A release's definition of done contained no document, which is how four files
       # came to say 0.9.0 while every channel served 0.10.0 (#119). A stale document
       # is now a red run, not a discovery by a reader.
-      - name: Every document states the version its channel serves
+      # The registry-backed form: the documents agree with what the channels *actually*
+      # answered. The preflight asked the other question (`--expect`, tree vs tag) before
+      # any byte was uploaded; this one can only be asked afterwards (#125), which is why
+      # there are two modes rather than one step that moved.
+      - name: Every document states the version its channel serves (registry-backed)
         env:
           TAG_NAME: ${{ steps.resolve.outputs.tag }}
         run: bash scripts/check-release.sh --verify-docs

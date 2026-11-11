@@ -159,6 +159,11 @@ job_rust() {
   # The documents state what each channel serves, once and machine-readably; this
   # compares them against the registries. Exit 3 is "not compared" (no network), which
   # the runner reports as a skip rather than a pass.
+  # The pre-publish question, and the only one a local run can always answer: it compares
+  # the documents with the tree's version and reads no registry (#125). A release that
+  # makes a document false then stops before the first upload.
+  run "release: every document states the version being released (no registry)" . \
+    'bash scripts/check-release.sh --verify-docs --expect "$(bash scripts/check-release.sh --print-version)"'
   run "release: every document states the version its channel serves" . \
     'bash scripts/check-release.sh --verify-docs'
   run "repo: every workflow file parses (a file GitHub cannot load gates nothing)" . \

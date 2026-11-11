@@ -42,7 +42,7 @@ fixtures (ledger receipt / history slice / compaction checkpoint, Ed25519-signed
 with a documented test-only key). `rigorix-verifier` verifies the chain, rejects
 a broken one, and accepts a gap iff covered by a valid signed checkpoint.
 
-`fixtures/effect/` (ADR-019 / SDK 0.7.0) holds the effect-commitment artifact
+`fixtures/effect/` (ADR-019) holds the effect-commitment artifact
 cases: five accepted (including `l1` durability + `l3` settlement) and one
 rejected fixture per invariant, plus readback mismatches. Contract-first until
 the engine exports the artifact.

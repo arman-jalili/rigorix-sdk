@@ -1,0 +1,17 @@
+# channel	version	document
+# One row per (channel, document) that states that channel's published version.
+# `--verify-docs` asserts each of these markers exists, so deleting one fails instead of
+# shrinking the subject: 13 statements became 12 silently before #124.
+crates	any	README.md
+pypi	any	README.md
+npm	any	README.md
+maven	any	README.md
+go	any	README.md
+crates	any	docs/publication-readiness.md
+pypi	any	docs/publication-readiness.md
+npm	any	docs/publication-readiness.md
+maven	any	docs/publication-readiness.md
+go	any	docs/publication-readiness.md
+pypi	any	python/README.md
+go	any	go/README.md
+npm	any	typescript/README.md

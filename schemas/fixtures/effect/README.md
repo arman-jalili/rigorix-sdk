@@ -1,7 +1,7 @@
 # Effect-commitment fixtures
 
 Contract-first fixtures for [`api/effect-record.json`](../../api/effect-record.json)
-(SDK 0.7.0 / ADR-019).
+(ADR-019).
 
 The engine does not emit this artifact yet: OSS 1.11.0 ships the effect-commitment
 bounded context, and the release rule says the SDK contract lands **before** the

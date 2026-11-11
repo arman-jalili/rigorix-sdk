@@ -74,8 +74,7 @@ git ls-tree -r --name-only "$(git describe --tags --abbrev=0 --match 'go/v*')" \
 git ls-tree -r --name-only go/v0.9.0  | grep -c '^go/gate/'    # 0 — that tag predates the gate
 ```
 
-`go/v0.9.0` is named only as history: the version above the commands is the one a
-consumer gets, and `scripts/check-release.sh --verify-published` opens the proxy's
+The version above the commands is the one a consumer gets, and `scripts/check-release.sh --verify-published` opens the proxy's
 zip and fails when `gate/` or the pinned artifact is missing from it.
 
 ## In-process gate (`go/gate`)
