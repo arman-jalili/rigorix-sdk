@@ -458,18 +458,37 @@ jobs:
         env:
           TAG_NAME: ${{ steps.resolve.outputs.tag }}
           CHANNELS_IN: ${{ steps.resolve.outputs.channels }}
+          # The caller's intent, which is the thing exit 3 cannot express (#134).
+          EXPLICIT_CHANNELS: ${{ inputs.channels != '' }}
         run: |
-          # Exit 3 is a *partial* verdict: the channels asked about serve the version and
-          # the rest were named with the command that would settle them. A dispatch that
-          # narrows the question deliberately — `-f channels=pypi,npm` — is exactly that
-          # case, so it is a warning here and not a red run; exit 1 (a channel that does
-          # not serve it) still fails.
+          # Exit 3 is a *partial* verdict. Whether that is a failure depends on the
+          # question, and the caller already knows which one it asked (#134) — so the
+          # branch is on `inputs.channels`, never on the exit code alone:
+          #
+          #   tag push    → "did the channels this workflow uploads take it?" The set is
+          #                 complete for that question, and the two others are settled by
+          #                 a release dispatch. Pass, saying so.
+          #   dispatch, no input → "is the release complete everywhere?" (all five). A
+          #                 partial answer to that question is a failure.
+          #   dispatch, input    → someone narrowed it deliberately. Warning, naming the
+          #                 channels that were not asked.
+          #
+          # Exit 1 (a channel that does not serve the version) always fails.
           rc=0
           out="$(bash scripts/check-release.sh --verify-published --tag "$TAG_NAME" --channels "$CHANNELS_IN" 2>&1)" || rc=$?
           printf '%s\n' "$out"
           case "$rc" in
             0) ;;
-            3) echo "::warning::partial verdict — the channels this run was not asked about are named above; pass -f channels=crates,pypi,npm,maven,go to ask about all five" ;;
+            3)
+              # The signal is `inputs.channels`, never the exit code alone.
+              if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+                echo "complete for this job: the channels this workflow uploads (${CHANNELS_IN}) serve ${TAG_NAME}; crates and go are settled by the release dispatch (gh workflow run publish.yml -f tag=${TAG_NAME} -f channels=$(bash scripts/check-release.sh --print-channels))"
+              elif [ "$EXPLICIT_CHANNELS" = "true" ]; then
+                echo "::warning::partial verdict by request — asked: ${CHANNELS_IN}; the channels not asked are named above, with the command that settles each"
+              else
+                echo "❌ the default question is every channel and the answer is partial (asked: ${CHANNELS_IN}) — a run must not pass a partial answer to a question it did not narrow; pass -f channels=… to narrow it on purpose" >&2
+                exit 3
+              fi ;;
             *) exit "$rc" ;;
           esac
 

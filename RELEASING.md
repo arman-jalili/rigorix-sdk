@@ -27,14 +27,88 @@ first, or Cargo refuses the verifier.
 
 ## Order
 
-1. `crates.io`: `rigorix-schemas`, then wait for it to be indexed, then `rigorix-verifier`
-   (its dependency resolves against the new version).
-2. Tag `vX.Y.Z` → npm, PyPI and Maven Central.
-3. Tag `go/vX.Y.Z` for the Go module (a root `vX.Y.Z` tag does **not** version a module in `go/`).
-4. `rust-vX.Y.Z` marker tag for the crates.
-5. The npm **client** (`typescript-client`) has its own tag: `client-vX.Y.Z`. A verifier tag
-   (`vX.Y.Z`) does not publish it, and does not fail on it either — the two cadences are
-   independent, and the workflow checks each against the tag that names it.
+Six steps, in the order the gate permits. **The order is load-bearing because each step
+has a check that refuses the next one done early** — that is what makes it worth writing
+down once, here, instead of in three places that drift.
+
+The order recorded here used to put the crates first, which makes the release impossible:
+`publish.yml`'s preflight runs `check-release.sh --tag`, and *that* refuses when any
+channel already serves the version (`❌ published channel(s) already serve X.Y.Z — a
+version means released content`). The order that actually produced 0.10.0 is the one
+below.
+
+### 1. State the new version in the documents that declare it
+
+```sh
+# every (channel, document) pair the release gate checks
+cat docs/published-versions.tsv
+bash scripts/check-release.sh --verify-docs --expect X.Y.Z   # exits 1 until they agree
+```
+
+*Gate:* `--verify-docs --expect <version>`, run by the preflight **before** any upload,
+reading no registry — before the upload, a registry can only answer with the previous
+version (#125). A stale document stops the release; it is not discovered afterwards.
+
+### 2. Tag `vX.Y.Z`
+
+```sh
+git tag -a vX.Y.Z -m "X.Y.Z" && git push origin vX.Y.Z
+```
+
+*Gate:* the preflight's `check-release.sh --tag vX.Y.Z` — one version across the four
+manifests, an annotated tag whose commit is that version, and nothing serving it yet. The
+push publishes npm `rigorix-verifier`, PyPI and Maven Central.
+
+### 3. Tag `go/vX.Y.Z`
+
+```sh
+git tag -a go/vX.Y.Z -m "X.Y.Z" && git push origin go/vX.Y.Z
+```
+
+*Gate:* `check-release.sh --verify-published --channels go` opens the proxy's zip and
+requires `gate/` and the pinned artifact. A root `vX.Y.Z` tag does **not** version a
+module in `go/`, so step 2 does nothing for Go.
+
+### 4. Verify the three channels this workflow publishes
+
+```sh
+bash scripts/check-release.sh --verify-published --channels pypi,npm,maven
+```
+
+The workflow does this itself in `verify-published` (exit 3 there is a pass *for that
+question only*: the set is complete for what it uploads). Run it by hand when debugging a
+red run; `complete: 3 of 3 verified (asked: …)` is the line to look for.
+
+### 5. Publish the crates **after** the tag — schema first, by hand
+
+```sh
+cargo publish -p rigorix-schemas --token "$CRATES_TOKEN"
+# wait for the index to serve it, then:
+cargo publish -p rigorix-verifier --token "$CRATES_TOKEN"
+```
+
+*Why last, and why this order:* the verifier exact-pins `rigorix-schemas` (`=X.Y.Z`), so
+`rigorix-verifier` cannot be published before the schema it pins is indexed. And it is
+after the tag because the preflight refuses a version any channel already serves — the
+old runbook had these two facts in the opposite order, which made step 2 unreachable.
+
+No `v`-tag publishes the crates: `rust-vX.Y.Z` (step 6) is a marker, and the marker
+triggers nothing. This is the step that keeps 0.10.0 at three of four channels for a day.
+
+### 6. Mark the crates, then ask the complete question
+
+```sh
+git tag -a rust-vX.Y.Z -m "X.Y.Z" && git push origin rust-vX.Y.Z
+gh workflow run publish.yml -f tag=vX.Y.Z -f channels=crates,pypi,npm,maven,go
+```
+
+*Gate:* the dispatch's `verify-published` asks all five. A dispatch with **no** `channels`
+input asks all five too — a partial answer to the default question fails the job (#134);
+narrowing it with `-f channels=…` is a deliberate act and reports a warning instead.
+
+The npm **client** (`typescript-client`) travels on its own tag, `client-vX.Y.Z`, and is
+not part of this sequence at all: no verifier tag publishes it, and no verifier tag fails
+on it.
 
 ## Why the order is load-bearing
 

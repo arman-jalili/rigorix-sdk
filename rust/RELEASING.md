@@ -16,6 +16,13 @@ There are five publication channels; `RELEASING.md` at the repository root lists
 - **Python + TypeScript (PyPI + npm)** — `rigorix-verifier` (both) and
   `rigorix-client` (npm). Published by CI on the `v<version>` tag.
 
+> **This file is the crates-internal detail, not the sequence.** The release order —
+> documents, tag, `go/` tag, verification, *then* the crates, then the marker — lives in
+> [`../RELEASING.md`](../RELEASING.md) §Order and is enforced by
+> `scripts/check-release.sh`. Do not restate it here: two copies of a six-step sequence
+> have already cost one release, because the crates-first order this file described made
+> the preflight refuse the tag that comes before it.
+
 `rust/Cargo.toml` `[workspace.package] version` is the single source for every
 workspace member (`version.workspace = true`). The **verifier** pins
 `rigorix-schemas` to the **exact** workspace version — `=` in the manifest, and no

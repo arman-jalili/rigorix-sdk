@@ -17,6 +17,11 @@ a chat log.
 | secrets in tracked files? | **no** | only the repo's own secret *patterns* in `.pi/extensions/redaction.ts` and the preflight scanners |
 | licence? | Apache-2.0 | `LICENSE`, workspace `license`, npm ×2, `pyproject.toml` — see [PUB-2](#licence-and-contribution-policy-pub-2) |
 
+**This document records measurements, not a runbook.** The release sequence — the six
+steps, in the order the gate permits, each with the check that enforces it — lives in
+[`../RELEASING.md`](../RELEASING.md) §Order (#133). Repeating it here produced two copies
+of a sequence that changed twice.
+
 ## Decision 1 — the history is accepted, not rewritten
 
 **Measured on 2026-11-11, at `dbc6ffe`.** Two scopes, because publishing exposes
