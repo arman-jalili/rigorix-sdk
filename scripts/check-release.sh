@@ -178,6 +178,16 @@ print("\n".join(zipfile.ZipFile(sys.argv[1]).namelist()))
 # Four questions about the repository, not about this script's default. #110: the
 # first version compared `$TAG` (defaulted to `v$version`) with `v$version`, which
 # cannot fail — it printed "the tag agrees" on a tree with no tag anywhere.
+#
+# Where the answers come from (#116): the **remote's advertisement**, because the
+# remote is the authority on what was released. A local tag ref is not: the harness
+# that runs this gate fetches the commit *into* `refs/tags/<tag>` with `--no-tags`,
+# so in a runner the ref points at a commit while the remote still holds the
+# annotation. Refusing there told a releaser to recreate a tag that was already
+# correct, twice. `git ls-remote --tags <remote>` with no pattern prints both the tag
+# object and its peeled commit for an annotated tag, and one line for a lightweight
+# one; with an explicit pattern git prints no peel line at all, so the pattern form
+# cannot answer this question.
 version_at() {
   local ref="$1" path="$2" kind="$3" tmp
   tmp="$(mktemp)"
@@ -190,40 +200,89 @@ version_at() {
   rm -f "$tmp"
 }
 
+# The remote's tag advertisement, once. Empty when there is no reachable remote.
+remote_tags() {
+  git -C "$TREE" ls-remote --tags origin 2>/dev/null
+}
+
+# Peeled commit for a tag according to the advertisement: empty means the remote has
+# no annotation for it (lightweight, or absent).
+remote_peeled() {
+  local listing="$1" tag="$2"
+  printf '%s\n' "$listing" | awk -v ref="refs/tags/$tag^{}" '$2 == ref { print $1 }'
+}
+
 tag_verdict() {
-  local version="$1" commit tag found
-  [ -n "$TAG" ] || TAG="v$version"
-
-  # 1. the tag exists.
-  git -C "$TREE" rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null ||
-    fail "tag $TAG does not exist — the release is tagged before it is published: git tag -a $TAG -m \"…\""
-
-  # 2. annotated, and it peels to a commit (a lightweight tag carries no tagger and
-  #    no message, so the release has no record of who made it or why).
-  [ "$(git -C "$TREE" cat-file -t "refs/tags/$TAG" 2>/dev/null)" = "tag" ] ||
-    fail "tag $TAG is lightweight — an annotated tag carries the tagger and the message a release is read from (git tag -a)"
-  commit="$(git -C "$TREE" rev-parse --verify --quiet "$TAG^{commit}")" ||
-    fail "tag $TAG does not peel to a commit"
-
+  local version="$1" listing="" have_remote=0
   local tagged="${TAG#rust-v}"; tagged="${tagged#go/v}"; tagged="${tagged#v}"
+  [ -n "$TAG" ] || TAG="v$version"
+  tagged="${TAG#rust-v}"; tagged="${tagged#go/v}"; tagged="${tagged#v}"
 
-  # 3. the four manifests *at that commit* name the version the tag names. The working tree is
-  #    not the subject: a release is the tree the tag points at.
+  if listing="$(remote_tags)"; then have_remote=1; fi
+  local remote_object remote_commit
+  remote_object="$(printf '%s\n' "$listing" | awk -v ref="refs/tags/$TAG" '$2 == ref { print $1 }')"
+  remote_commit="$(remote_peeled "$listing" "$TAG")"
+
+  local object commit source
+  if [ "$have_remote" -eq 1 ] && [ -n "$remote_object" ]; then
+    # 1 + 2 against the authority: the tag exists there, and it is annotated if the
+    # advertisement carries a peeled entry.
+    if [ -z "$remote_commit" ]; then
+      fail "tag $TAG is lightweight on the remote (one advertisement entry, no refs/tags/$TAG^{}) — an annotated tag carries the tagger and the message a release is read from (git tag -a)"
+    fi
+    object="$remote_object"; commit="$remote_commit"
+    source="remote: ${object:0:8} -> ${commit:0:8}"
+  else
+    # No remote answer for this tag: the local object is the remaining source, and the
+    # verdict says so. A local ref pointing at a commit is *reported as that* — it is
+    # what a harness rewrite looks like, and calling it "lightweight" sends the
+    # releaser to redo a correct tag.
+    local type
+    type="$(git -C "$TREE" cat-file -t "refs/tags/$TAG" 2>/dev/null)"
+    case "$type" in
+      tag)
+        object="$(git -C "$TREE" rev-parse --verify --quiet "refs/tags/$TAG")"
+        commit="$(git -C "$TREE" rev-parse --verify --quiet "$TAG^{commit}")"
+        source="local (the remote does not advertise $TAG)" ;;
+      commit)
+        fail "refs/tags/$TAG in this clone points at a commit, not at a tag object, and the remote does not advertise an annotation for it — that is a harness rewrite, not a lightweight tag. Inspect: git cat-file -t refs/tags/$TAG" ;;
+      "")
+        if [ "$have_remote" -eq 1 ]; then
+          fail "tag $TAG does not exist — neither the remote nor this repository has it: git tag -a $TAG -m \"…\""
+        fi
+        fail "tag $TAG cannot be verified: no remote could be read and no local tag object exists — git fetch --tags origin" ;;
+      *)
+        fail "refs/tags/$TAG points at an unreadable object (type: $type) — inspect: git cat-file -p refs/tags/$TAG" ;;
+    esac
+  fi
+  [ -n "$commit" ] || fail "tag $TAG does not peel to a commit"
+
+  # The manifests at that commit are the subject; the commit may not be in a shallow
+  # clone, so fetch exactly it rather than giving up.
+  if ! git -C "$TREE" cat-file -e "$commit^{commit}" 2>/dev/null; then
+    git -C "$TREE" fetch --quiet --no-tags origin "$commit" >/dev/null 2>&1 ||
+      unverified "tag $TAG peels to $commit, which is not in this clone and could not be fetched"
+  fi
+
+  # 3. the four manifests at that commit name the version the tag names.
   local pair path kind at
   for pair in "rust/Cargo.toml:toml" "python/pyproject.toml:toml" \
               "typescript/package.json:json" "java/pom.xml:xml"; do
     path="${pair%%:*}"; kind="${pair##*:}"
-    at="$(version_at "$TAG" "$path" "$kind")"
+    at="$(version_at "$commit" "$path" "$kind")"
     [ -n "$at" ] || fail "tag $TAG does not contain $path"
     [ "$at" = "$tagged" ] ||
       fail "tag $TAG points at a commit whose $path says $at, not $tagged — the tag names the release, so the tag and the manifests move together"
   done
 
-  # 4. all three tags exist: the module layout needs them, so a release missing one is
-  #    not a release this repository can consume.
-  found=0
+  # 4. all three tags exist, by the same rule: the remote first, the local object when
+  #    the remote says nothing, because a release is tagged locally and pushed after.
+  local found=0 tag peeled
   for tag in "v$version" "go/v$version" "rust-v$version"; do
-    if git -C "$TREE" rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+    peeled="$(remote_peeled "$listing" "$tag")"
+    if [ -n "$peeled" ]; then
+      found=$((found + 1))
+    elif git -C "$TREE" rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
       found=$((found + 1))
     else
       printf '❌ tag %s is missing — a release needs v%s, go/v%s and rust-v%s together\n' \
@@ -232,8 +291,8 @@ tag_verdict() {
   done
   [ "$found" -eq 3 ] || fail "only $found of 3 release tags exist"
 
-  printf '✅ tag: %s is annotated, peels to a commit, and the manifests at that commit say %s; go/v%s and rust-v%s exist too\n' \
-    "$TAG" "$version" "$version" "$version"
+  printf '✅ tag: %s is annotated (%s), peels to a commit whose manifests say %s; go/v%s and rust-v%s exist too\n' \
+    "$TAG" "$source" "$version" "$version" "$version"
 }
 
 preflight() {
@@ -283,8 +342,10 @@ self_test() {
   # The verdicts are about a git repository, so the fixtures are repositories. A text
   # fixture cannot answer "does this tag exist", which is why #110's version of this
   # test passed on a tautology.
+  # A repository *and a remote*: the verdict reads the remote's advertisement, so a
+  # fixture without an origin cannot be the subject of the questions it asks (#116).
   fixture() {  # fixture DIR VERSION [TAG_VERSION]
-    local dir="$1" version="$2" tag_version="${3:-$2}"
+    local dir="$1" version="$2" tag_version="${3:-$2}" tag
     mkdir -p "$dir/rust" "$dir/python" "$dir/typescript" "$dir/java" "$dir/fixtures"
     printf 'version = "%s"\n' "$version" >"$dir/rust/Cargo.toml"
     printf 'version = "%s"\n' "$version" >"$dir/python/pyproject.toml"
@@ -293,11 +354,21 @@ self_test() {
     git -C "$dir" init -q
     git -C "$dir" -c user.email=self@test.invalid -c user.name=selftest add -A
     git -C "$dir" -c user.email=self@test.invalid -c user.name=selftest commit -qm "fixture $version"
-    local tag
     for tag in "v$tag_version" "go/v$tag_version" "rust-v$tag_version"; do
       git -C "$dir" -c user.email=self@test.invalid -c user.name=selftest tag -a "$tag" -m "release $tag_version"
     done
+    git clone -q --bare "$dir" "$dir.origin"
+    git -C "$dir" remote add origin "$dir.origin"
   }
+  # The harness's ref shape: the commit fetched *into* the tag ref, annotation left
+  # behind in the remote. This is what `actions/checkout` produces, and what made the
+  # preflight refuse a correct tag twice.
+  harness_ref() {  # harness_ref DIR TAG
+    local commit
+    commit="$(git -C "$1" rev-parse "$2^{commit}")"
+    git -C "$1" update-ref "refs/tags/$2" "$commit"
+  }
+  remote_delete() { git -C "$1.origin" update-ref -d "refs/tags/$2"; }
   absent() {  # fixtures where no channel serves the version
     printf '{"versions": []}\n' >"$1/fixtures/crates.json"
     printf '{"releases": {}}\n' >"$1/fixtures/pypi.json"
@@ -338,13 +409,19 @@ self_test() {
   # 2. no tag anywhere
   tmp="$(mktemp -d)"
   fixture "$tmp/notag" 0.10.0; absent "$tmp/notag"
-  git -C "$tmp/notag" tag -d v0.10.0 go/v0.10.0 rust-v0.10.0 >/dev/null
+  for tag in v0.10.0 go/v0.10.0 rust-v0.10.0; do
+    git -C "$tmp/notag" tag -d "$tag" >/dev/null
+    remote_delete "$tmp/notag" "$tag"
+  done
   expect_fail "no tag" "does not exist" "$tmp/notag" "$tmp/notag/fixtures" preflight
 
   # 3. only the v tag: the two the module layout needs are named as missing
   tmp="$(mktemp -d)"
   fixture "$tmp/partial" 0.10.0; absent "$tmp/partial"
-  git -C "$tmp/partial" tag -d go/v0.10.0 rust-v0.10.0 >/dev/null
+  for tag in go/v0.10.0 rust-v0.10.0; do
+    git -C "$tmp/partial" tag -d "$tag" >/dev/null
+    remote_delete "$tmp/partial" "$tag"
+  done
   expect_fail "one of three tags" "go/v0.10.0 is missing" "$tmp/partial" "$tmp/partial/fixtures" preflight
 
   # 4. the tag names 0.10.0 but points at a commit whose manifests say 0.9.0; HEAD has
@@ -362,9 +439,39 @@ self_test() {
   # 5. a lightweight tag carries no record
   tmp="$(mktemp -d)"
   fixture "$tmp/light" 0.10.0; absent "$tmp/light"
-  git -C "$tmp/light" tag -d v0.10.0 go/v0.10.0 rust-v0.10.0 >/dev/null
-  for tag in v0.10.0 go/v0.10.0 rust-v0.10.0; do git -C "$tmp/light" tag "$tag"; done
-  expect_fail "lightweight tag" "is lightweight" "$tmp/light" "$tmp/light/fixtures" preflight
+  for tag in v0.10.0 go/v0.10.0 rust-v0.10.0; do
+    git -C "$tmp/light" tag -d "$tag" >/dev/null
+    remote_delete "$tmp/light" "$tag"
+    git -C "$tmp/light" tag "$tag"                      # lightweight, locally
+    git -C "$tmp/light" push -q origin "refs/tags/$tag" # and on the remote
+  done
+  expect_fail "lightweight tag on the remote" "is lightweight on the remote" \
+    "$tmp/light" "$tmp/light/fixtures" preflight
+
+  # The harness shape passes, naming the remote: the ref points at the commit, the
+  # remote holds the annotation, and the annotation is the authority (#116).
+  tmp="$(mktemp -d)"
+  fixture "$tmp/harness" 0.10.0; absent "$tmp/harness"
+  harness_ref "$tmp/harness" v0.10.0
+  cases=$((cases + 1))
+  if out="$(TREE="$tmp/harness" FIXTURES="$tmp/harness/fixtures" preflight 2>&1)"; then
+    case "$out" in
+      *"is annotated (remote:"*) : ;;
+      *) echo "❌ self-test [harness ref]: passed without naming the remote"
+         printf '%s\n' "$out" | tail -2; failures=$((failures + 1)) ;;
+    esac
+  else
+    echo "❌ self-test [harness ref]: refused a correctly annotated tag"
+    printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  fi
+
+  # An unreadable object is reported as unreadable, not as a lightweight tag.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/unreadable" 0.10.0; absent "$tmp/unreadable"
+  git -C "$tmp/unreadable" update-ref refs/tags/v0.10.0 "$(git -C "$tmp/unreadable" hash-object -w /dev/null)"
+  remote_delete "$tmp/unreadable" v0.10.0
+  expect_fail "unreadable object" "points at an unreadable object" \
+    "$tmp/unreadable" "$tmp/unreadable/fixtures" preflight
 
   # 6. a version already served by a channel
   tmp="$(mktemp -d)"
@@ -397,7 +504,7 @@ self_test() {
     echo "❌ check-release self-test: $failures of $cases case(s) wrong"
     return 1
   fi
-  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release passes"
+  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote"
   return 0
 }
 

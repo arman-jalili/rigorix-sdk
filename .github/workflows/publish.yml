@@ -50,6 +50,22 @@ jobs:
       - name: Can the gate refuse? (published version, wrong tag, split manifests)
         run: bash scripts/check-release.sh --self-test
 
+      # `actions/checkout` fetches the tag's commit *into* refs/tags/<tag> with
+      # --no-tags, so in a runner the local ref points at a commit while the remote
+      # holds the annotation (#116). Restoring the object is belt and braces for
+      # anything else that reads the local ref — the verdict below reads the remote's
+      # advertisement and does not depend on this succeeding.
+      - name: Restore the annotated tag ref
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          set -uo pipefail
+          git fetch --force --no-tags origin \
+            "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          type="$(git cat-file -t "refs/tags/${GITHUB_REF_NAME}" 2>/dev/null || echo unreadable)"
+          echo "refs/tags/${GITHUB_REF_NAME} -> ${type}"
+          [ "$type" = tag ] ||
+            echo "::warning::the local ref still points at a ${type}; the preflight reads the remote instead"
+
       - name: Preflight — the version is new and the tag agrees
         if: startsWith(github.ref, 'refs/tags/')
         run: bash scripts/check-release.sh --tag "${{ github.ref_name }}"
