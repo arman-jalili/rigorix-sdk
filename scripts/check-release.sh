@@ -85,6 +85,11 @@ go_module() { awk '/^module /{print $2; exit}' "$ROOT/$GO_MANIFEST" 2>/dev/null;
 # it — which is exactly how the first version of this reported "could not be read" for
 # a proxy that had answered 404.
 REASON_FILE="$(mktemp "${TMPDIR:-/tmp}/rigorix-reason.XXXXXX")"
+# The version the *tag* names, set by `tag_verdict`. `--verify-published --tag vX` must
+# ask about vX: it read the tree's version instead, so a dispatch told to check 0.9.0
+# verified 0.10.0 and printed ✅. That is the same defect as #110 — a verdict about the
+# script's default rather than about the subject it was given — one layer down.
+TAG_VERSION=""
 
 fail() { printf '❌ %s\n' "$1" >&2; exit 1; }
 # The version a channel serves *now* — not "does it serve this one". A document is
@@ -157,7 +162,13 @@ docs_mode() {
           printf '✅ %s %s:%s declares %s, and %s serves it\n' "$channel" "$file" "$line_no" "$declared" "$channel"
         fi
       done
-    done < <(grep -n '<!-- published:' "$TREE/$file" 2>/dev/null)
+    # Fenced blocks are examples, not claims: a document that *shows* the marker
+    # syntax inside a code fence would otherwise be checked as if it declared a
+    # version, which is a second copy of the fact in the same file.
+    done < <(awk '
+      /^[[:space:]]*```/ { fence = !fence; next }
+      !fence && /<!-- published:/ { print NR ": " $0 }
+    ' "$TREE/$file" 2>/dev/null)
   done <<< "$files"
   [ "$checked" -gt 0 ] || fail "no subject, not evidence: no document declares a published version, so nothing was compared"
   [ "$wrong" -eq 0 ] || fail "$wrong statement(s) about a published version are stale — a release updates the documents that state it"
@@ -403,6 +414,7 @@ tag_verdict() {
   local tagged="${TAG#rust-v}"; tagged="${tagged#go/v}"; tagged="${tagged#v}"
   [ -n "$TAG" ] || TAG="v$version"
   tagged="${TAG#rust-v}"; tagged="${tagged#go/v}"; tagged="${tagged#v}"
+  TAG_VERSION="$tagged"
 
   if listing="$(remote_tags)"; then have_remote=1; fi
   local remote_object remote_commit
@@ -478,7 +490,7 @@ tag_verdict() {
   [ "$found" -eq 3 ] || fail "only $found of 3 release tags exist"
 
   printf '✅ tag: %s is annotated (%s), peels to a commit whose manifests say %s; go/v%s and rust-v%s exist too\n' \
-    "$TAG" "$source" "$version" "$version" "$version"
+    "$TAG" "$source" "$tagged" "$version" "$version"
 }
 
 preflight() {
@@ -486,6 +498,11 @@ preflight() {
   version="$(release_version)"
   printf '✅ manifests: one version, %s (%s)\n' "$version" "$(printf '%s' "$ALL_CHANNELS" | tr ' ' ',')"
   tag_verdict "$version"
+  # Preflight's subject is the version about to be uploaded, so a tag naming a
+  # different one is not a cosmetic mismatch: the uploads would ship the tree's version
+  # under a tag for another.
+  [ "$TAG_VERSION" = "$version" ] ||
+    fail "--tag $TAG names $TAG_VERSION but the tree says $version — a release tag names the version it ships"
 
   for channel in $ALL_CHANNELS; do
     # Go cannot answer this question: `go/v<version>` is served by the proxy the
@@ -521,6 +538,13 @@ verify_published() {
   local version channel answer missing=0 verified=0 skipped="" skipped_n=0 total=0
   version="$(release_version)"
   tag_verdict "$version"
+  # The subject is the version the tag names — which is the tree's on a tag push, and
+  # the checked-out branch's otherwise, so `--tag` must decide it.
+  if [ "$TAG_VERSION" != "$version" ]; then
+    printf '✅ subject: %s names %s, so %s is what this run asks about (the tree says %s)\n' \
+      "$TAG" "$TAG_VERSION" "$TAG_VERSION" "$version"
+    version="$TAG_VERSION"
+  fi
   total="$(printf '%s\n' $ALL_CHANNELS | wc -l | tr -d ' ')"
   for channel in $ALL_CHANNELS; do
     case ",$CHANNELS," in
@@ -813,6 +837,51 @@ self_test() {
   else
     echo "❌ self-test [current document]: refused a document that agrees"
     printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  fi
+
+  # 16b. a marker inside a fenced block is an example, not a claim: it is neither
+  #      counted nor failed, so the document keeps one copy of the fact.
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/docs/fenced/fx"
+  printf '# doc\n<!-- published: pypi=0.10.0 -->\n\n```\n<!-- published: pypi=0.9.0 -->\n```\n' \
+    >"$tmp/docs/fenced/README.md"
+  for channel in crates pypi npm maven go; do printf '0.10.0\n' >"$tmp/docs/fenced/fx/latest-$channel.txt"; done
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/docs/fenced" FIXTURES="$tmp/docs/fenced/fx" docs_mode 2>&1 )"; then
+    case "$out" in
+      *"1 version statement(s) agree"*) : ;;
+      *) echo "❌ self-test [fenced example]: counted or missed a marker it should have ignored"
+         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
+  else
+    echo "❌ self-test [fenced example]: refused an example inside a code fence"
+    printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  fi
+
+  # 16c. `--verify-published --tag v0.9.0` asks about 0.9.0, not about the tree's
+  #      0.10.0: the verdict is about the subject it was given (#110, one layer down).
+  tmp="$(mktemp -d)"
+  fixture "$tmp/tagver" 0.9.0          # tagged v0.9.0, go/v0.9.0, rust-v0.9.0
+  served "$tmp/tagver" 0.9.0
+  printf '{"Version":"v0.9.0"}\n' >"$tmp/tagver/fixtures/go.info"
+  # then the tree moves to 0.10.0 and is tagged, which is what a dispatch on a branch
+  # looks like: the checked-out tree is ahead of the tag being checked.
+  printf 'version = "0.10.0"\n' >"$tmp/tagver/rust/Cargo.toml"
+  printf 'version = "0.10.0"\n' >"$tmp/tagver/python/pyproject.toml"
+  printf '{"version": "0.10.0"}\n' >"$tmp/tagver/typescript/package.json"
+  printf '<project>\n  <version>0.10.0</version>\n</project>\n' >"$tmp/tagver/java/pom.xml"
+  git -C "$tmp/tagver" -c user.email=self@test.invalid -c user.name=selftest commit -qam "bump to 0.10.0"
+  for tag in v0.10.0 go/v0.10.0 rust-v0.10.0; do
+    git -C "$tmp/tagver" -c user.email=self@test.invalid -c user.name=selftest tag -a "$tag" -m "release 0.10.0"
+  done
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/tagver" FIXTURES="$tmp/tagver/fixtures" TAG="v0.9.0" verify_published 2>&1 )"; then
+    case "$out" in
+      *"✅ pypi serves 0.9.0"*) : ;;
+      *) echo "❌ self-test [--tag decides the version]: verified something other than the tag's version"
+         printf '%s\n' "$out" | tail -4; failures=$((failures + 1)) ;; esac
+  else
+    echo "❌ self-test [--tag decides the version]: refused a published 0.9.0"
+    printf '%s\n' "$out" | tail -4; failures=$((failures + 1))
   fi
 
   # 17. a tree with no marker at all: nothing was compared, which is not a pass

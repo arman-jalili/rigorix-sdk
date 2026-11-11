@@ -261,7 +261,12 @@ reach them anyway: the preflight ran, and at that tree it fails by design, becau
 | `smoke`, `verify-published` | run | **run**, on `inputs.tag` (default: the newest `v*`) |
 
 The checks no longer inherit `needs:` from jobs a dispatch skips — a job whose needs
-are skipped is skipped too, which is how they became unreachable.
+are skipped is skipped too, which is how they became unreachable. And the tag a
+dispatch is given became the **subject**: `--verify-published --tag v0.9.0` read the
+tree's version (0.10.0) and printed `✅`, so a run told to check one release verified
+another. Same defect as #110 — a verdict about the script's default instead of about
+what it was handed — one layer down. `--tag` now decides the version, says so, and
+preflight refuses a tag that names a different version than the tree it would upload.
 
 Writing that `if:` produced a second defect of the class this file already records: a
 text substitution left a stray quote on the line
@@ -285,10 +290,13 @@ Each document now states a published version **once**, on a machine-readable lin
 to the claim:
 
 ```
-<!-- published: pypi=0.10.0 npm=0.10.0 maven=0.10.0 go=0.10.0 crates=0.10.0 -->
+<!-- published: pypi=<version> npm=<version> maven=<version> go=<version> crates=<version> -->
 ```
 
-and the prose says "the published version". `--verify-docs` reads every marker in
+and the prose says "the published version". The placeholders are deliberate: an example
+carrying real numbers would be a second copy of the fact in the same file, and
+`--verify-docs` would then check that copy too — which it did, until this line was
+changed to a placeholder. `--verify-docs` reads every marker in
 every tracked `.md`, asks each channel what it serves **now** (`registry_latest`, not
 `registry_has`: an old version is still served forever, so only the latest can see a
 stale claim), and fails with the file, the line and both versions:
