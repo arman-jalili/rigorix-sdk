@@ -1,7 +1,7 @@
 {
   "name": "rigorix-client",
-  "version": "0.9.9",
-  "description": "Protocol-only typed client for the frozen rigorix.* JSON-RPC catalog \u2014 governed flows only, no raw step execution, no engine dependency.",
+  "version": "0.8.0",
+  "description": "Protocol-only typed client for the frozen rigorix.* JSON-RPC catalog — governed flows only, no raw step execution, no engine dependency.",
   "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -11,19 +11,10 @@
       "import": "./dist/src/index.js"
     }
   },
-  "files": [
-    "dist/src",
-    "README.md"
-  ],
+  "files": ["dist/src", "README.md"],
   "license": "Apache-2.0",
   "author": "Arman Wolkenstein-Jalili and Rigorix contributors",
-  "keywords": [
-    "rigorix",
-    "jsonrpc",
-    "client",
-    "governance",
-    "sdk"
-  ],
+  "keywords": ["rigorix", "jsonrpc", "client", "governance", "sdk"],
   "repository": {
     "type": "git",
     "url": "https://github.com/arman-jalili/rigorix-sdk.git",

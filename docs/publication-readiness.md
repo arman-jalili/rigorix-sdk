@@ -372,8 +372,8 @@ version:
 
 Both are wired: `publish.yml`'s preflight runs `--expect "$(check-release.sh
 --print-version)"` beside `--tag`, and `verify-published` keeps the registry form. The
-acceptance for the first is offline — `--verify-docs --expect 0.9.0` at this tree exits 1
-naming each document that states 0.10.0.
+acceptance for the first is offline — `--verify-docs --expect <an older version>` at this
+tree exits 1 naming each document that states the current one.
 
 ### A release's definition of done contains a document (#119)
 

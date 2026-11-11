@@ -193,11 +193,18 @@ classify() {  # classify FILE
       line = $0
       if (line ~ /^[ \t]*```/) { fence = !fence; next }
       if (fence) next
+      # A marker is a *comment alone on its line*, never a mention of one. The first
+      # version matched "the line contains the string", and a paragraph that documented
+      # the syntax opened a region: everything after it was exempt until the next real
+      # end marker — the same defect as the fenced `published:` example, one level up,
+      # and found by reading the exemption list this rule prints.
+      trimmed = line
+      gsub(/^[ \t]+|[ \t]+$/, "", trimmed)
       # An explicit region runs until its own end marker, headings and all: `hlevel = 0`
       # is the sentinel for "no heading closes this", since a heading-opened region
       # always records a level of 1 or more.
-      if (line ~ /<!-- history:start -->/) { hist = 1; hlevel = 0; print "R\t" NR "\t" line; next }
-      if (line ~ /<!-- history:end -->/) { hist = 0; next }
+      if (trimmed == "<!-- history:start -->") { hist = 1; hlevel = 0; print "R\t" NR "\t" line; next }
+      if (trimmed == "<!-- history:end -->") { hist = 0; next }
       if (line ~ /^#{1,6} /) {
         match(line, /^#+/); lvl = RLENGTH
         # Two headings open a history region: one that says so, and one that is a
@@ -257,7 +264,7 @@ docs_mode() {
     # A dated record is history by nature: `<!-- history:document -->` near the top says
     # so once, instead of wrapping every paragraph of a document whose whole subject is a
     # release that already happened.
-    if head -5 "$TREE/$file" 2>/dev/null | grep -q '<!-- history:document -->'; then
+    if head -5 "$TREE/$file" 2>/dev/null | grep -qx '[[:space:]]*<!-- history:document -->[[:space:]]*'; then
       exempt="$exempt${exempt:+, }$file (whole document)"
       continue
     fi
@@ -1231,6 +1238,27 @@ self_test() {
     printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
   fi
 
+  # 16g2. a marker *mentioned* in prose is documentation, not a region: matching the
+  #       string exempted everything after the paragraph that described it.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/mention" 0.10.0
+  git -C "$tmp/mention" -c user.email=self@test.invalid -c user.name=selftest tag -a v0.9.0 -m "0.9.0"
+  cover "$tmp/mention" pypi README.md
+  served "$tmp/mention" 0.10.0
+  printf '0.10.0\n' >"$tmp/mention/fixtures/latest-pypi.txt"
+  printf '# doc\n<!-- published: pypi=0.10.0 -->\n\nWrite a region as `<!-- history:start -->` … `<!-- history:end -->`.\n\nThe channels served 0.9.0 before this.\n' \
+    >"$tmp/mention/README.md"
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/mention" FIXTURES="$tmp/mention/fixtures" docs_mode 2>&1 )"; then
+    echo "❌ self-test [marker mentioned in prose]: a documented marker exempted a real claim"
+    failures=$((failures + 1))
+  else
+    case "$out" in
+      *"README.md:6 states 0.9.0 with no marker"*) : ;;
+      *) echo "❌ self-test [marker mentioned in prose]: the claim after the mention was not refused"
+         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
+  fi
+
   # 16h. coverage is asserted, not counted (#124): deleting a marker used to shrink the
   #      subject (13 statements became 12) and every run stayed green.
   tmp="$(mktemp -d)"
@@ -1305,7 +1333,7 @@ self_test() {
     echo "❌ check-release self-test: $failures of $cases case(s) wrong"
     return 1
   fi
-  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote; a channel outside --channels is named with its remedy and exits 3 rather than printing a green total; a Go proxy 404, a module without gate/ and a wasm that is not the pinned artifact are each refused by name; a document that states a stale version, a tree with no such statement, a registry that cannot be read, a marker-less claim of a released version, a deleted marker against the coverage table and an --expect mismatch are each reported as what they are, and a claim inside a declared history region is exempted by name"
+  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote; a channel outside --channels is named with its remedy and exits 3 rather than printing a green total; a Go proxy 404, a module without gate/ and a wasm that is not the pinned artifact are each refused by name; a document that states a stale version, a tree with no such statement, a registry that cannot be read, a marker-less claim of a released version, a deleted marker against the coverage table and an --expect mismatch are each reported as what they are, and a claim inside a declared history region is exempted by name, and a marker mentioned in prose exempts nothing"
   return 0
 }
 
