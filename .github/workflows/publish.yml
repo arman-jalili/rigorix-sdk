@@ -319,8 +319,13 @@ jobs:
           # is visible but broken and fails fast. Give-up is reported as a
           # distinct propagation timeout, not a generic failure. Re-running this
           # job does not re-publish: it only installs.
+          # `rigorix-client` is an independent cadence, versioned and published on its
+          # own `client-v` tag — so `@$tag` asked npm for a version that will never
+          # exist. The client is installed at the version this tree declares, which is
+          # what "the two packages install together" actually means.
+          client_ver="$(node -p "require('$GITHUB_WORKSPACE/typescript-client/package.json').version")"
           "$GITHUB_WORKSPACE/.github/scripts/wait-for-registry.sh" npm \
-            npm install "rigorix-verifier@$tag" "rigorix-client@$tag" --no-audit --no-fund --prefer-online
+            npm install "rigorix-verifier@$tag" "rigorix-client@$client_ver" --no-audit --no-fund --prefer-online
           unset RIGORIX_SDK_SCHEMAS
           node smoke.mjs
 
@@ -337,5 +342,18 @@ jobs:
       # `binding/` package and the vendored artifact while every local gate was
       # green: the pack gate builds from the tree it just built. This reads the
       # coordinate instead, and checks the wheel for the surface the README names.
-      - name: Published surface — each coordinate serves this version
-        run: bash scripts/check-release.sh --verify-published --tag "${{ github.ref_name }}"
+      # Channels this workflow publishes. crates.io is not one of them: the crates are
+      # published by hand (`cargo publish`, marker tag `rust-vX`, nothing triggered by
+      # it), so a job that waited for 0.10.0 there would wait forever — which is what
+      # the first real release did. The omission is printed, not silent.
+      - name: Published surface — the channels this workflow publishes
+        run: |
+          bash scripts/check-release.sh --verify-published \
+            --tag "${{ github.ref_name }}" \
+            --channels pypi,npm,maven
+
+      - name: crates.io is a manual step (recorded, not gated here)
+        run: |
+          echo "::notice::crates.io is published by hand (rust/RELEASING.md):"
+          echo "  cargo publish -p rigorix-schemas && cargo publish -p rigorix-verifier"
+          echo "  then: bash scripts/check-release.sh --verify-published --channels crates"

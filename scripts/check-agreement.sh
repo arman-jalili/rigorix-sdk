@@ -84,6 +84,8 @@ normalise() {
 allow_reason() {
   local file="$1" line="$2" wanted entry rest stored reason
   wanted="$(normalise "$line")"
+  # Cheap rejection first: the stored text is compared after whitespace normalising,
+  # so a line that does not even contain its words cannot match.
   for entry in "${ALLOW[@]}"; do
     case "$entry" in "$file|"*) ;; *) continue ;; esac
     rest="${entry#*|}"
@@ -108,10 +110,11 @@ scan() {
   while IFS= read -r file; do
     [ -f "$file" ] || continue
     read_files=$((read_files + 1))
-    lineno=0
-    while IFS= read -r line; do
-      lineno=$((lineno + 1))
-      printf '%s\n' "$line" | grep -Eiq -- "$PATTERN" || continue
+    # One pass per file, not one `grep` per line: the per-line form forked twice for
+    # every line of every Markdown file (161 files, 20 485 lines), which took 56 s for
+    # a scan and 20 minutes for the self-test — the guard was the slowest thing in the
+    # gate. Only matching lines are considered, which is what the loop body wanted.
+    while IFS=: read -r lineno line; do
       if reason="$(allow_reason "$file" "$line")"; then
         allowed=$((allowed + 1))
         [ "$LIST" -eq 1 ] && printf '  allow-listed %s:%d — %s\n' "$file" "$lineno" "$reason"
@@ -120,7 +123,7 @@ scan() {
       printf '❌ %s:%d: names a contribution agreement that CONTRIBUTING.md does not\n' "$file" "$lineno"
       printf '     %s\n' "$(printf '%s' "$line" | sed 's/^[[:space:]]*//' | cut -c1-120)"
       failures=$((failures + 1))
-    done <"$file"
+    done < <(grep -niE -- "$PATTERN" "$file" 2>/dev/null)
   done < <(printf '%s\n' "$files")
 
   if [ "$failures" -gt 0 ]; then

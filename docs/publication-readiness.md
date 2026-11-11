@@ -208,6 +208,56 @@ allow-listed with a reason each: they exist to name what was replaced.
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## The 0.10.0 release: what published, and the two defects it found (2026-11-11)
+
+`v0.10.0` was pushed at `56ad028` after the tag fix (#116), and the workflow ran to
+completion for the first time in this repository's history.
+
+| job | result |
+|---|---|
+| 🔒 release identity (preflight) | **success** — `✅ tag: v0.10.0 is annotated (remote: f69d9c47 -> 56ad0283)` |
+| 🐍 PyPI | **success** — `rigorix-verifier 0.10.0` |
+| 🟦 npm `rigorix-verifier` | **success** — `0.10.0` |
+| 🟦 npm `rigorix-client` | success (no-op: independent cadence, already at 0.8.0) |
+| ☕ Maven Central | **success** — `eu.rigorix:rigorix-verifier 0.10.0` |
+| 🔎 registry install + smoke | **failure** — `rigorix-client@0.10.0` does not exist (see below) |
+| 🔎 every channel serves what the README documents | **failure** — `crates does not serve 0.10.0` (see below) |
+
+**The artifact is published and verifiable.** `bash scripts/check-release.sh
+--verify-published --channels pypi,npm,maven` passes, including the surface check:
+
+```
+✅ PyPI wheel: carries binding/ and the vendored artifact
+```
+
+That is `#102`'s acceptance, measured against the registry: `pip install
+rigorix-verifier==0.10.0` now yields `rigorix_verifier.binding` and the vendored
+`rigorix_gate_wasi.wasm`.
+
+**Two defects the run found, and neither was the artifact:**
+
+1. **The smoke asked for a version that will never exist.** It installed
+   `rigorix-client@"$tag"`, but the client has its own cadence and its own `client-v`
+   tag prefix, so on a `v0.10.0` push it published nothing and `0.10.0` is not a client
+   version. It now installs the client at the version this tree declares.
+2. **The verification waited for a channel no job publishes.** crates.io is published
+   by hand (`cargo publish`, marker tag `rust-vX`, which triggers nothing —
+   `rust/RELEASING.md`), so `--verify-published` demanding it could only ever fail.
+   The job now verifies the channels the workflow publishes
+   (`--channels pypi,npm,maven`), names the one it did not verify, and prints the
+   manual commands for crates instead of pretending to gate them.
+
+**Outstanding, and not claimed:** crates.io does not serve `0.10.0`.
+
+```bash
+cargo publish -p rigorix-schemas --token "$CRATES_TOKEN"
+cargo publish -p rigorix-verifier --token "$CRATES_TOKEN"
+bash scripts/check-release.sh --verify-published --channels crates
+```
+
+It needs the crates token, which is not available here. The three other channels have
+spent `0.10.0`, so this is a remaining step of the same release, not a new version.
+
 ## The preflight's subject is the remote's advertisement (#116)
 
 The release preflight could not pass inside the workflow that runs it, and it refused
