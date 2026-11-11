@@ -27,6 +27,11 @@ Modes:
                                 when the declared floor is behind the newest patch of
                                 its minor; never fails (nothing is opened for it)
     govulncheck.py --go-dir DIR point the scan at another module (the seeds use it)
+    govulncheck.py --scan-module apply the policy to `-scan=module` instead of `./...`:
+                                findings in packages the code does not call. Not the
+                                gate — the gate is symbol-level — but the mode the seed
+                                uses, because a planted module is by construction not
+                                called and `./...` would rightly find nothing.
 
 Usage: python3 scripts/govulncheck.py [--self-test | --check-floor]
 Exit: 0 = clean, or only findings a later minor fixes; 1 = an actionable finding;
@@ -137,7 +142,7 @@ def report(output: str, declared: tuple[int, int, int]) -> int:
     return 0
 
 
-def run() -> int:
+def run(scan_module: bool = False) -> int:
     binary = shutil.which("govulncheck")
     if binary is None:
         candidate = Path(subprocess.run(["go", "env", "GOPATH"], capture_output=True, text=True).stdout.strip() or "/nonexistent")
@@ -152,11 +157,18 @@ def run() -> int:
         ["go", "version"], cwd=GO_DIR, capture_output=True, text=True
     ).stdout.strip()
     print(f"toolchain: {toolchain}")
+    declared = floor()
+    if scan_module:
+        # The seed's mode: a planted module is never called, so `./...` is silent by
+        # design and only the graph shows it. Applying the same policy here proves the
+        # classification, not the symbol reachability.
+        result = subprocess.run([binary, "-scan=module"], cwd=GO_DIR, capture_output=True, text=True)
+        return report(result.stdout + result.stderr, declared)
+
     result = subprocess.run(
         [binary, "./..."], cwd=GO_DIR, capture_output=True, text=True
     )
     output = result.stdout + result.stderr
-    declared = floor()
     verdict = report(output, declared)
     # Uncalled advisories are reported, never swallowed.
     module = subprocess.run([binary, "-scan=module"], cwd=GO_DIR, capture_output=True, text=True)
@@ -256,7 +268,7 @@ def main() -> int:
         return self_test()
     if "--check-floor" in sys.argv[1:]:
         return check_floor()
-    return run()
+    return run(scan_module="--scan-module" in sys.argv[1:])
 
 
 if __name__ == "__main__":

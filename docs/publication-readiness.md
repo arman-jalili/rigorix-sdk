@@ -109,7 +109,50 @@ $ gh api repos/arman-jalili/rigorix-sdk/actions/runs/<id>/jobs \
 started 2026-11-10T13:47:19Z completed 2026-11-10T13:47:21Z steps 0
 ```
 
-That is an entitlement block (spending limit / billing), not a test result. So:
+**Both reasons are now recorded, because there were two.** For `ci.yml` it was the
+entitlement block (spending limit / billing) — Actions answered `steps: 0` in two
+seconds, which is not a test result. For `audit.yml` there was a second reason on top
+of it: the file did not parse, so even a funded run could not have loaded it.
+
+```
+$ python3 - <<'PY'
+import subprocess, yaml
+for rev in ('9fc7141','738cf93','3a91849','0d33a58','634277f','54b4bcd'):
+    s = subprocess.run(['git','show',f'{rev}:.github/workflows/audit.yml'],
+                       capture_output=True, text=True).stdout
+    try: yaml.safe_load(s); print(rev, 'parses')
+    except Exception: print(rev, 'does not parse')
+PY
+9fc7141 does not parse      # the secret scan (#87) and licence gate (#86) were wired here
+738cf93 does not parse
+3a91849 does not parse
+0d33a58 does not parse
+634277f does not parse
+54b4bcd parses
+```
+
+The cause was `run: "$(cmd)" args` — a quoted scalar followed by junk, added with the
+govulncheck step. Four steps were unloadable for five merges, including the secret
+scan and the licence gate. An incomplete reason is how a dead workflow survives, so
+both are stated. `scripts/check-workflows.sh` is what prevents a recurrence: it parses
+every workflow file, refuses the exact unloadable shape by name, and runs in `ci.yml`
+and in `local-ci`.
+
+**The block is gone.** The repository became public on 2026-11-11, which removed the
+entitlement block, and both workflows now execute:
+
+| workflow | run | result |
+|---|---|---|
+| `Audit` | `main` @ `f4dbf8f` | **success** — all six jobs, including `--verify-upstream` (the vendored copy equals the release asset) |
+| `CI` | `main` @ `3b4fa85` | **success** — all seven jobs |
+| `Audit` | `main` @ `3b4fa85` | **success** — the govulncheck policy's first execution anywhere |
+
+The first funded run found two defects the local runner could not see, both now fixed:
+three repo-root steps inherited `working-directory: rust` (`exit 127`), and a
+SHA-pinned `dtolnay/rust-toolchain` lost the ref that named its toolchain
+(`'toolchain' is a required input`).
+
+So:
 
 - **A green local run and an unexecuted pipeline are not the same claim.** Where
   this repository says a change is validated, the evidence is
@@ -120,8 +163,17 @@ That is an entitlement block (spending limit / billing), not a test result. So:
   seeds (`pip-audit` on a planted pin, `govulncheck` on a planted vulnerable
   module, `check-pins.py` on a planted range) have run in `local-ci`, not in
   Actions; a `pip-audit --strict` finding there is a real finding, not a flake.
-- `govulncheck` is a property of the tree, because the floor names a **patch**:
-  `go 1.26.10` in `go/go.mod`. It previously said `go 1.26`, which is a minimum
+- `govulncheck` applies a policy, not just a tool (#112), because a floor cannot chase
+  an advisory published yesterday. A finding whose fix is **inside the declared
+  minor** (or is a module version) is actionable: the step fails and names the version
+  to put in `go/go.mod`. A finding fixed only in a **later minor** is reported with
+  the version it would need and does not fail — raising a language minor is a
+  decision, not a patch. Both numbers are printed either way, an unparseable failure
+  fails closed, and the Monday run carries the stale-floor watch
+  (`python3 scripts/govulncheck.py --check-floor`), which reports and opens nothing.
+  `scripts/govulncheck.py` owns the step for `audit.yml` and `local-ci`, so the two
+  cannot drift.
+- The floor names a **patch**: `go 1.26.11` in `go/go.mod`. It previously said `go 1.26`, which is a minimum
   language version — it admitted 1.26.3, whose standard library carries 17
   advisories, so the gate failed on a host the tree called in-policy (`#98`). CI
   resolves the floor with `go-version-file` + `check-latest`; both CI and
@@ -538,5 +590,5 @@ statement, `LICENSE` for the text, `docs/CLA.md` for the agreement, and
 |---|---|---|---|
 | 1 | the tip is clean | the private-name scan over tracked files (`docs/publication-readiness.md` states the rule, not the names) | 0 findings |
 | 2 | the history decision is recorded | this file | accept, with the measurements |
-| 3 | no secret is needed | `bash .ci/local-ci.sh` on a clone, `RIGORIX_SDK_TOKEN` unset | `toolchain: go1.26.10`; `LOCAL CI: GREEN — 41 step(s) executed`; exit `0` |
+| 3 | no secret is needed | `bash .ci/local-ci.sh` on a clone, `RIGORIX_SDK_TOKEN` unset, Docker available | `toolchain: go version go1.26.11 darwin/arm64`; `LOCAL CI: GREEN — 44 step(s) executed`; exit `0`; one step skipped-by-choice (`--verify-upstream` not requested) |
 | 4 | the packaging is honest | `cargo package --list -p rigorix-schemas` | unchanged by the sweep |

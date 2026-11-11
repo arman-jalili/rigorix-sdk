@@ -373,7 +373,7 @@ job_audit() {
     # The policy, not the raw tool: a module dependency is fixable here, so it must be
     # refused and the version to name printed (#112).
     set +e
-    out="$(python3 "$OLDPWD/scripts/govulncheck.py" --go-dir "$seed/go" 2>&1)"
+    out="$(python3 "$OLDPWD/scripts/govulncheck.py" --go-dir "$seed/go" --scan-module 2>&1)"
     status=$?
     set -e
     [ "$status" -eq 1 ] ||
