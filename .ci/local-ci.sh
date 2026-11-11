@@ -291,17 +291,9 @@ job_audit() {
   # machine the tree called in-policy (#98). The floor is now `go 1.26.10`, so a
   # host that can build the module is a host where those advisories are fixed.
   # The toolchain is printed either way, so a failure is attributable.
-  run "audit: govulncheck (toolchain printed)" go '
-    set -uo pipefail
-    echo "toolchain: $(go version)"
-    go install golang.org/x/vuln/cmd/govulncheck@latest >/dev/null 2>&1
-    if ! "$(go env GOPATH)/bin/govulncheck" ./...; then
-      echo "called vulnerabilities found — the gate fails"
-      exit 1
-    fi
-    # Advisories the code does not reach are printed, not silently passed.
-    echo "--- module scope (informational: advisories the code does not call) ---"
-    "$(go env GOPATH)/bin/govulncheck" -scan=module || true
+  run "audit: govulncheck (policy: actionable fails, a later minor is reported)" go '
+    python3 ../scripts/govulncheck.py --self-test
+    python3 ../scripts/govulncheck.py
   '
 
   # The seeds. A guard that has never refused anything is a claim, and the
@@ -372,24 +364,26 @@ job_audit() {
     set -uo pipefail
     seed="$(mktemp -d)"
     cp -R go "$seed/go"
-    cp go/go.mod "$seed/go.orig"
-    cp go/go.sum "$seed/go.sum.orig"
     cd "$seed/go"
     [ -f go.mod ] || { echo "the module copy is missing; the seed would prove nothing"; exit 1; }
     go mod edit -require=golang.org/x/text@v0.14.0
     go mod tidy >/dev/null 2>&1 || true
     grep -q "golang.org/x/text v0.14.0" go.mod ||
       { echo "the plant did not take; the seed would prove nothing"; exit 1; }
+    # The policy, not the raw tool: a module dependency is fixable here, so it must be
+    # refused and the version to name printed (#112).
     set +e
-    out="$("$(go env GOPATH)/bin/govulncheck" -scan=module 2>&1)"
+    out="$(python3 "$OLDPWD/scripts/govulncheck.py" --go-dir "$seed/go" 2>&1)"
     status=$?
     set -e
-    [ "$status" -eq 3 ] ||
-      { echo "govulncheck exited $status, not 3 (findings) — refused for the wrong reason:"; printf "%s\n" "$out" | head -5; exit 1; }
+    [ "$status" -eq 1 ] ||
+      { echo "the policy exited $status, not 1 (actionable) — refused for the wrong reason:"; printf "%s\n" "$out" | head -6; exit 1; }
     printf "%s\n" "$out" | grep -q "golang.org/x/text@v0.14.0" ||
-      { echo "findings did not name the planted module"; printf "%s\n" "$out" | head -5; exit 1; }
-    printf "%s\n" "$out" | grep -E "^Vulnerability #" | head -1
-    echo "✅ a planted vulnerable module is refused, named"
+      { echo "the finding did not name the planted module"; printf "%s\n" "$out" | head -6; exit 1; }
+    printf "%s\n" "$out" | grep -q "actionable here: fix with" ||
+      { echo "the policy did not say it is actionable"; printf "%s\n" "$out" | head -6; exit 1; }
+    printf "%s\n" "$out" | grep -E "^❌ GO-" | head -1
+    echo "✅ a planted vulnerable module is refused as actionable, naming the module and the fix"
   '
 }
 
