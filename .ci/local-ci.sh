@@ -154,6 +154,11 @@ job_rust() {
   # The harness must exercise the version the tree is at, not a version it remembers:
   # its literal survived a release boundary, so its self-test builds 0.11.0 and requires
   # the tag it built to be named (#128).
+  # The tag-and-channel resolver was two byte-identical copies in `publish.yml`; it is a
+  # script now, so its harness conditions (a dispatch from a branch, a named tag missing
+  # from the clone, a clone with no tags) are testable without spending a run (#127).
+  run "release: the tag-and-channel resolver (one definition, tested offline)" . \
+    'bash scripts/resolve-release.sh --self-test'
   run "release: the tag-shape harness tracks the tree's version" . \
     'bash scripts/check-tag-shape.sh --self-test && bash scripts/check-tag-shape.sh'
   # The documents state what each channel serves, once and machine-readably; this
