@@ -53,22 +53,38 @@ pip_gate() {
 }
 
 self_test() {
-  local failed=0 tmp saved
+  local failed=0 tmp before after out
 
-  echo "▶ seed: a GPL expression in the Rust workspace"
-  saved="$(mktemp)"
-  cp "$ROOT/rust/Cargo.toml" "$saved"
-  # shellcheck disable=SC2064
-  trap "cp '$saved' '$ROOT/rust/Cargo.toml'" RETURN
-  sed -i.bak 's/^license = "Apache-2.0"/license = "GPL-3.0"/' "$ROOT/rust/Cargo.toml"
-  if cargo_gate >/dev/null 2>&1; then
+  # The property this asserts is about the *tree*, not about the seed: a self-test
+  # that writes to the repository is a defect even when it restores (#111). Captured
+  # before anything is planted, compared at the end.
+  # `--ignored` because the leftovers worth catching are exactly the ones .gitignore
+  # hides: `.gitignore` keeps a stray `.bak` out of a commit, which also keeps it out
+  # of a plain `git status`. Both halves of #111 have to hold at once.
+  before="$(git -C "$ROOT" status --porcelain --ignored)"
+
+  echo "▶ seed: a GPL expression in a workspace fixture (the tree is never the subject)"
+  # A minimal workspace in a temp directory: `[workspace]`, one member, the planted
+  # licence. `cargo deny` is pointed at our own policy, so what is proven is that the
+  # policy refuses GPL-3.0 — not that a backup file was restored.
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/member/src"
+  printf '[workspace]\nmembers = ["member"]\nresolver = "2"\n' >"$tmp/Cargo.toml"
+  printf '[package]\nname = "gpl-planted"\nversion = "0.1.0"\nedition = "2021"\nlicense = "GPL-3.0"\n' \
+    >"$tmp/member/Cargo.toml"
+  : >"$tmp/member/src/lib.rs"
+  out="$( cd "$tmp" && cargo deny check --config "$ROOT/rust/deny.toml" licenses 2>&1 )"
+  if [ $? -eq 0 ]; then
     echo "❌ rust seed: cargo deny accepted a GPL workspace licence"
     failed=1
+  elif ! printf '%s' "$out" | grep -q "GPL-3.0"; then
+    # Refused, but not for the planted reason — the same trap the DCO seed had.
+    echo "❌ rust seed: refused without naming the planted licence"
+    printf '%s\n' "$out" | tail -3
+    failed=1
   else
-    echo "✅ rust seed: cargo deny refused GPL-3.0"
+    echo "✅ rust seed: cargo deny refused GPL-3.0, naming the planted licence"
   fi
-  cp "$saved" "$ROOT/rust/Cargo.toml"
-  trap - RETURN
 
   echo "▶ seed: a GPL package in an npm tree (planted, no network)"
   tmp="$(mktemp -d)"
@@ -96,11 +112,21 @@ self_test() {
     echo "✅ python seed: pip-licenses refused GPL-2.0-or-later"
   fi
 
+  # The property, asserted rather than described: a guard that leaves the tree dirty
+  # has changed the thing it audits (#111). Restoring a file is not the same as never
+  # having touched it — an interrupt between the two leaves a GPL manifest behind.
+  after="$(git -C "$ROOT" status --porcelain --ignored)"
+  if [ "$before" != "$after" ]; then
+    echo "❌ the self-test changed the working tree — a seed must plant in a fixture"
+    diff <(printf '%s\n' "$before") <(printf '%s\n' "$after") | sed 's/^/   /' || true
+    failed=1
+  fi
+
   if [ "$failed" -ne 0 ]; then
     echo "❌ licence-gate self-test failed — a gate is inert"
     return 1
   fi
-  echo "✅ licence-gate self-test: each ecosystem refuses a planted GPL"
+  echo "✅ licence-gate self-test: each ecosystem refuses a planted GPL, and the tree is byte-identical afterwards"
   return 0
 }
 

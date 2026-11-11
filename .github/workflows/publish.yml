@@ -40,7 +40,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # `fetch-depth: 0` is required, not cosmetic: the verdict reads the tag, the
+      # commit it peels to, and the manifests *at that commit*. A shallow clone has no
+      # refs/tags, so the gate would report "does not exist" for a tag it was pushed on.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 0
 
       - name: Can the gate refuse? (published version, wrong tag, split manifests)
         run: bash scripts/check-release.sh --self-test

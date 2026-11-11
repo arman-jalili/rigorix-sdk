@@ -24,3 +24,7 @@ guardian-manifest.json
 # Agent session artifacts (plans, tracker dumps). Durable design records live
 # in docs/; the issue history is the tracker.
 .claude/
+
+# Editor/sed backups: `sed -i.bak` in a guard would leave one behind, and a stray
+# backup of a manifest is invisible to review but not to `git add -A` (#111).
+*.bak

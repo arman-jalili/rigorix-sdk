@@ -197,13 +197,23 @@ when billing clears:
 ```bash
 # 1. the gate's own evidence, offline
 bash .ci/local-ci.sh
-# 2. the release identity: unpublished everywhere, tag agrees
+# 2. the three tags, locally — a release is tagged before it is published
+git tag -a v0.10.0      -m "0.10.0" && \
+git tag -a go/v0.10.0   -m "0.10.0" && \
+git tag -a rust-v0.10.0 -m "0.10.0"
+# 3. the release identity: the tags exist and agree, nothing serves the version
 bash scripts/check-release.sh --tag v0.10.0
-# 3. tag and publish (five channels; Go and the Rust crates by tag)
-git tag v0.10.0 && git tag rust-v0.10.0 && git tag go/v0.10.0 && git push --tags
-# 4. after the uploads, from the registries
+# 4. publish (five channels; Go and the Rust crates by tag)
+git push --tags
+# 5. after the uploads, from the registries
 bash scripts/check-release.sh --verify-published --tag v0.10.0
 ```
+
+The order is the gate's, not a preference: `check-release.sh` reads
+`refs/tags/$TAG`, peels it to a commit and compares the manifests **at that commit**
+— so step 3 cannot pass before step 2. `#110` found the version that skipped step 2
+entirely: it compared `$TAG` (defaulted to `v$version`) with `v$version`, which
+cannot fail, and printed ✅ on a tree with no tag anywhere.
 
 Measured today: step 2 exits **0** (`0.10.0` is unpublished on all four channels —
 a 404 from crates.io is an answer, not a read failure, and the script treats it that
