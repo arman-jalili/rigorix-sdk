@@ -393,12 +393,19 @@ jobs:
           # old release would install a version npm does not serve, for a reason that has
           # nothing to do with the release under test (#129). Both coordinates now come
           # from the release's own tree, and the step says which.
-          client_ver="$(git show "${TAG_NAME}:typescript-client/package.json" 2>/dev/null \
-            | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).version')" || client_ver=""
-          if [ -z "$client_ver" ]; then
-            echo "❌ ${TAG_NAME}:typescript-client/package.json declares no version — the release's own tree is the subject, and it cannot be read here" >&2
+          # `git -C`, not `git`: this step already `cd`-ed into `$RUNNER_TEMP/npm`, so a
+          # bare `git show` ran outside the repository and failed for a reason that had
+          # nothing to do with the release. Found by dispatching on a branch whose client
+          # version differs from the tag's — the shape #129 was filed about.
+          client_json="$(git -C "$GITHUB_WORKSPACE" show "${TAG_NAME}:typescript-client/package.json" 2>&1)" || {
+            echo "❌ could not read ${TAG_NAME}:typescript-client/package.json — the release's own tree is the subject:" >&2
+            printf '%s\n' "$client_json" >&2
             exit 1
-          fi
+          }
+          client_ver="$(printf '%s' "$client_json" | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).version')" || {
+            echo "❌ ${TAG_NAME}:typescript-client/package.json carries no parseable version — a client coordinate with no version cannot be installed" >&2
+            exit 1
+          }
           echo "installing rigorix-verifier@$tag from tag ${TAG_NAME}; rigorix-client@${client_ver} from ${TAG_NAME}:typescript-client/package.json"
           if ! "$GITHUB_WORKSPACE/.github/scripts/wait-for-registry.sh" npm \
             npm install "rigorix-verifier@$tag" "rigorix-client@$client_ver" --no-audit --no-fund --prefer-online; then
@@ -452,9 +459,19 @@ jobs:
           TAG_NAME: ${{ steps.resolve.outputs.tag }}
           CHANNELS_IN: ${{ steps.resolve.outputs.channels }}
         run: |
-          bash scripts/check-release.sh --verify-published \
-            --tag "$TAG_NAME" \
-            --channels "$CHANNELS_IN"
+          # Exit 3 is a *partial* verdict: the channels asked about serve the version and
+          # the rest were named with the command that would settle them. A dispatch that
+          # narrows the question deliberately — `-f channels=pypi,npm` — is exactly that
+          # case, so it is a warning here and not a red run; exit 1 (a channel that does
+          # not serve it) still fails.
+          rc=0
+          out="$(bash scripts/check-release.sh --verify-published --tag "$TAG_NAME" --channels "$CHANNELS_IN" 2>&1)" || rc=$?
+          printf '%s\n' "$out"
+          case "$rc" in
+            0) ;;
+            3) echo "::warning::partial verdict — the channels this run was not asked about are named above; pass -f channels=crates,pypi,npm,maven,go to ask about all five" ;;
+            *) exit "$rc" ;;
+          esac
 
       # A release's definition of done contained no document, which is how four files
       # came to say 0.9.0 while every channel served 0.10.0 (#119). A stale document
