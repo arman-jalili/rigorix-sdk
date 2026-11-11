@@ -11,6 +11,15 @@
 # own text read as if it worked. A workflow that cannot load is not a gate; it is
 # a comment with YAML indentation.
 #
+# A file can parse as YAML and still be rejected by GitHub, which parses `if:` and
+# `${{ }}` as *expressions* — a different grammar. Wiring #121 produced
+#
+#     if: (github.event_name == 'push' || ...) && !cancelled()<stray quote>
+#
+# from a bad text substitution: valid YAML, a dispatch refused with "Unexpected
+# symbol" and a branch push that produced a zero-job failure. So a file must also carry
+# balanced quotes on every expression line, which is the defect class that costs a run.
+#
 # Usage:
 #   bash scripts/check-workflows.sh             # parse every workflow file
 #   bash scripts/check-workflows.sh --self-test # prove an invalid file is refused
@@ -37,6 +46,27 @@ if ! python3 -c 'import yaml' >/dev/null 2>&1; then
   exit 2
 fi
 
+# A single quote opens and closes a string in an expression, so an odd count on the
+# line is an unterminated literal. A doubled quote inside an expression is an escaped
+# quote (two characters) and keeps the count even: the check is about balance, not
+# style.
+expression_quotes() {
+  local dir="$1" file lineno line quotes
+  while IFS= read -r file; do
+    [ -f "$file" ] || continue
+    while IFS=: read -r lineno line; do
+      quotes="${line//[^\']/}"
+      [ $(( ${#quotes} % 2 )) -eq 0 ] || {
+        printf '❌ %s:%s has an unbalanced quote in an expression — GitHub parses these as expressions, and refuses the file\n' \
+          "${file#"$dir"/}" "$lineno"
+        printf '     %s\n' "$(printf '%s' "$line" | sed 's/^[[:space:]]*//')"
+        return 1
+      }
+    done < <(grep -n 'if:\|\${{' "$file" 2>/dev/null)
+  done < <(ls "$dir"/.github/workflows/*.yml "$dir"/.github/workflows/*.yaml 2>/dev/null)
+  return 0
+}
+
 parse() {
   local dir="$1" files count=0 file
   files="$(ls "$dir"/.github/workflows/*.yml "$dir"/.github/workflows/*.yaml 2>/dev/null)"
@@ -57,7 +87,8 @@ except yaml.YAMLError as error:
       return 1
     fi
   done < <(printf '%s\n' "$files")
-  printf '✅ workflows: %d file(s) parse (a file GitHub cannot load gates nothing)\n' "$count"
+  expression_quotes "$dir" || return 1
+  printf '✅ workflows: %d file(s) parse, and their expressions have balanced quotes (a file GitHub cannot load gates nothing)\n' "$count"
   return 0
 }
 
@@ -92,6 +123,21 @@ self_test() {
     esac
   fi
 
+  # Valid YAML, expression GitHub refuses: the shape produced while wiring #121.
+  mkdir -p "$tmp/expr/.github/workflows"
+  printf 'jobs:\n  x:\n    if: (github.event_name == %s) && !cancelled()%s\n    steps:\n      - run: echo ok\n' \
+    "'push'" "'" >"$tmp/expr/.github/workflows/unbalanced.yml"
+  if out="$(parse "$tmp/expr" 2>&1)"; then
+    echo "❌ self-test: an unbalanced expression quote was accepted"; failures=$((failures + 1))
+  else
+    case "$out" in
+      *"unbalanced quote in an expression"*) : ;;
+      *) echo "❌ self-test: refused without naming the defect"; failures=$((failures + 1)) ;; esac
+    case "$out" in
+      *"unbalanced.yml:3"*) : ;;
+      *) echo "❌ self-test: the refusal did not name the file and line ($out)"; failures=$((failures + 1)) ;; esac
+  fi
+
   # No files at all is a refusal, not a pass.
   mkdir -p "$tmp/empty/.github/workflows"
   if out="$(parse "$tmp/empty" 2>&1)"; then
@@ -105,7 +151,7 @@ self_test() {
     echo "❌ check-workflows self-test: $failures case(s) wrong"
     return 1
   fi
-  echo "✅ check-workflows self-test: the real files parse, the unloadable shape is refused by file name, an empty directory refuses"
+  echo "✅ check-workflows self-test: the real files parse, the unloadable shape is refused by file name, an unbalanced expression quote is refused by file and line, an empty directory refuses"
   return 0
 }
 

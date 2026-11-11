@@ -263,6 +263,19 @@ reach them anyway: the preflight ran, and at that tree it fails by design, becau
 The checks no longer inherit `needs:` from jobs a dispatch skips — a job whose needs
 are skipped is skipped too, which is how they became unreachable.
 
+Writing that `if:` produced a second defect of the class this file already records: a
+text substitution left a stray quote on the line
+
+```yaml
+if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !cancelled()'
+```
+
+The file parsed as YAML — `check-workflows.sh` said so — and GitHub refused it, because
+`if:` is an *expression*, a different grammar: the dispatch failed with `Unexpected
+symbol` and the branch push produced a **zero-job** failure. `check-workflows.sh` now
+requires balanced quotes on every `if:`/`${{ }}` line, refuses that exact line by file
+and line number, and the real defect was put back to watch it bite.
+
 ### A release's definition of done contains a document (#119)
 
 Four files said the registries served 0.9.0 while every one of them served 0.10.0.

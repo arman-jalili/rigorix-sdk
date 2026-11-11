@@ -302,7 +302,7 @@ jobs:
     # `!cancelled()` rather than a bare event test: the four upload jobs are skipped
     # on a dispatch, and a job whose needs are skipped is skipped too — which is how
     # these checks became unreachable (#121).
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !cancelled()'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !cancelled()
     runs-on: ubuntu-latest
     # Worst case is two propagation windows (15 min each) + setup/install.
     timeout-minutes: 40
@@ -390,7 +390,7 @@ jobs:
     # `!cancelled()` rather than a bare event test: the four upload jobs are skipped
     # on a dispatch, and a job whose needs are skipped is skipped too — which is how
     # these checks became unreachable (#121).
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !cancelled()'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
