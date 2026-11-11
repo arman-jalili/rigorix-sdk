@@ -261,7 +261,14 @@ reach them anyway: the preflight ran, and at that tree it fails by design, becau
 | `smoke`, `verify-published` | run | **run**, on `inputs.tag` (default: the newest `v*`) |
 
 The checks no longer inherit `needs:` from jobs a dispatch skips — a job whose needs
-are skipped is skipped too, which is how they became unreachable. And the tag a
+are skipped is skipped too, which is how they became unreachable.
+
+Evidence, not reading. Dispatch `43048892626` on `v0.10.0` ran the checks and nothing
+else — `preflight` and the four upload jobs appear as *skipped*, so no byte was
+uploaded — and both passed. Dispatch
+[43058208062](https://github.com/arman-jalili/rigorix-sdk/actions/runs/43058208062) on
+`v0.9.0` refused, which is the half that matters: `✅ crates/pypi/npm/maven serve 0.9.0`
+then `❌ the PyPI wheel for 0.9.0 carries no rigorix_verifier/binding/`. And the tag a
 dispatch is given became the **subject**: `--verify-published --tag v0.9.0` read the
 tree's version (0.10.0) and printed `✅`, so a run told to check one release verified
 another. Same defect as #110 — a verdict about the script's default instead of about
@@ -320,8 +327,8 @@ completion for the first time in this repository's history.
 | 🟦 npm `rigorix-verifier` | **success** — `0.10.0` |
 | 🟦 npm `rigorix-client` | success (no-op: independent cadence, already at 0.8.0) |
 | ☕ Maven Central | **success** — `eu.rigorix:rigorix-verifier 0.10.0` |
-| 🔎 registry install + smoke | **failure** — `rigorix-client@0.10.0` does not exist (see below) |
-| 🔎 every channel serves what the README documents | **failure** — `crates does not serve 0.10.0` (see below) |
+| 🔎 registry install + smoke | **failure** — `rigorix-client@0.10.0` does not exist (see below); **re-run green**: dispatch [43048892626](https://github.com/arman-jalili/rigorix-sdk/actions/runs/43048892626) |
+| 🔎 every channel serves what the README documents | **failure** — `crates does not serve 0.10.0` (see below); **re-run green**: same dispatch — `✅ published: crates,pypi,npm,maven,go serve(s) 0.10.0`, `✅ documents: 13 version statement(s) agree` |
 
 **The artifact is published and verifiable.** `bash scripts/check-release.sh
 --verify-published --channels pypi,npm,maven` passes, including the surface check:
