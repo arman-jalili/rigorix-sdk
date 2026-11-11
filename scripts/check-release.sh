@@ -62,6 +62,7 @@ while [ $# -gt 0 ]; do
     --channels) CHANNELS="$2"; shift ;;
     --expect) EXPECT="$2"; shift ;;
     --print-version) MODE="print-version" ;;
+    --print-channels) MODE="print-channels" ;;
     *) echo "check-release: unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -723,7 +724,7 @@ remedy() {
 }
 
 verify_published() {
-  local version channel answer missing=0 verified=0 skipped="" skipped_n=0 total=0
+  local version channel answer missing=0 verified=0 skipped="" skipped_n=0 total=0 asked not_asked
   version="$(release_version)"
   tag_verdict "$version"
   # The subject is the version the tag names — which is the tree's on a tag push, and
@@ -733,6 +734,7 @@ verify_published() {
       "$TAG" "$TAG_VERSION" "$TAG_VERSION" "$version"
     version="$TAG_VERSION"
   fi
+  asked="$CHANNELS"
   total="$(printf '%s\n' $ALL_CHANNELS | wc -l | tr -d ' ')"
   for channel in $ALL_CHANNELS; do
     case ",$CHANNELS," in
@@ -769,8 +771,18 @@ verify_published() {
   # others answered: exit 3, the `--allow-skips` convention, and no `✅ published:`.
   if [ "$skipped_n" -gt 0 ]; then
     printf '⚠ %d of %d verified; %d not verified (%s)\n' "$verified" "$total" "$skipped_n" "$skipped" >&2
+    # The verdict in words (#134): the `⚠` is easy to miss and a caller was turning this
+    # into a pass under a job named "every channel serves …". `asked` is the set this run
+    # was responsible for, so a reader needs no arithmetic.
+    not_asked=""
+    for channel in $ALL_CHANNELS; do
+      case ",$asked," in *",$channel,"*) ;; *) not_asked="${not_asked}${not_asked:+,}$channel" ;; esac
+    done
+    printf 'partial: %d of %d verified (asked: %s; not asked: %s)\n' \
+      "$verified" "$total" "$asked" "$not_asked"
     exit 3
   fi
+  printf 'complete: %d of %d verified (asked: %s)\n' "$total" "$total" "$asked"
   printf '✅ published: %s serve(s) %s\n' "$(printf '%s' "$ALL_CHANNELS" | tr ' ' ',')" "$version"
 }
 
@@ -1175,6 +1187,16 @@ self_test() {
   expect_exit "the preflight uses the same parser" 2 "❌ unknown channel: nmp" \
     "$tmp/chan" "$tmp/chan/fixtures" --channels nmp
 
+  # 16d2. the accepted set is readable from outside, so a caller cannot keep a second
+  #       copy of five names (#134).
+  cases=$((cases + 1))
+  if out="$( bash "$ROOT/scripts/check-release.sh" --print-channels 2>&1 )"; then
+    [ "$out" = "crates,pypi,npm,maven,go" ] ||
+      { echo "❌ self-test [print-channels]: answered \"$out\""; failures=$((failures + 1)); }
+  else
+    echo "❌ self-test [print-channels]: refused"; failures=$((failures + 1))
+  fi
+
   # 16e. duplicates collapse and the total stays "of 5": `pypi,pypi` is one channel asked
   #      about twice, not two channels.
   cases=$((cases + 1))
@@ -1183,7 +1205,7 @@ self_test() {
     echo "❌ self-test [duplicate channels]: accepted a subset as a full pass"; failures=$((failures + 1))
   else
     case "$out" in
-      *"✅ pypi serves 0.10.0"*"⚠ 1 of 5 verified"*) : ;;
+      *"⚠ 1 of 5 verified"*"partial: 1 of 5 verified (asked: pypi; not asked: crates,npm,maven,go)"*) : ;;
       *) echo "❌ self-test [duplicate channels]: did not count the duplicate once"
          printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
   fi
@@ -1333,7 +1355,7 @@ self_test() {
     echo "❌ check-release self-test: $failures of $cases case(s) wrong"
     return 1
   fi
-  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote; a channel outside --channels is named with its remedy and exits 3 rather than printing a green total; a Go proxy 404, a module without gate/ and a wasm that is not the pinned artifact are each refused by name; a document that states a stale version, a tree with no such statement, a registry that cannot be read, a marker-less claim of a released version, a deleted marker against the coverage table and an --expect mismatch are each reported as what they are, and a claim inside a declared history region is exempted by name, and a marker mentioned in prose exempts nothing"
+  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote; a channel outside --channels is named with its remedy and exits 3 rather than printing a green total; a Go proxy 404, a module without gate/ and a wasm that is not the pinned artifact are each refused by name; the accepted channel set is readable by a caller, a partial run says in words what it asked and what it did not, a document that states a stale version, a tree with no such statement, a registry that cannot be read, a marker-less claim of a released version, a deleted marker against the coverage table and an --expect mismatch are each reported as what they are, and a claim inside a declared history region is exempted by name, and a marker mentioned in prose exempts nothing"
   return 0
 }
 
@@ -1343,6 +1365,9 @@ if [ -n "$EXPECT" ] && [ "$MODE" != "docs" ]; then
 fi
 
 case "$MODE" in
+  # The accepted set, so a caller that needs it (the resolver's two default questions)
+  # reads it here instead of writing a second copy of five names (#134, #126).
+  print-channels) channel_list; echo ;;
   # One reader for the four manifests, so a harness that must track the tree's version
   # asks this rather than typing a literal (#128).
   # The exit status has to come from the reader: `printf '%s' "$(release_version)"`

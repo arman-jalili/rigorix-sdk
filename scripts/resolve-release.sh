@@ -25,6 +25,23 @@ set -uo pipefail
 # crates is `cargo publish` by hand and Go is served by the tag itself, so neither is in
 # it: a default that demanded them would be a red run for steps no job here performs.
 PUBLISHED_CHANNELS="pypi,npm,maven"
+# The five a *release* has, read from the gate rather than typed again (#134, #126).
+ALL_CHANNELS="$(bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/check-release.sh" --print-channels 2>/dev/null)"
+[ -n "$ALL_CHANNELS" ] ||
+  { echo "resolve-release: cannot read the channel set from check-release.sh --print-channels" >&2; exit 2; }
+
+# Two questions, two default sets (#134). A run must not be able to pass a partial answer
+# to a question it did not narrow:
+#   tag push  → "did the channels this workflow uploads take the version?" (crates and Go
+#               are manual/self-served, and are settled by a release dispatch)
+#   dispatch  → "is the release complete everywhere?" — all five, because that is the
+#               question the job's name claims
+default_channels() {
+  case "$1" in
+    push) printf '%s' "$PUBLISHED_CHANNELS" ;;
+    *)    printf '%s' "$ALL_CHANNELS" ;;
+  esac
+}
 
 EVENT=""
 REF_NAME=""
@@ -75,7 +92,7 @@ resolve() {
   if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
     git fetch --force --tags --quiet origin '+refs/tags/*:refs/tags/*' 2>/dev/null || true
   fi
-  channels="${INPUT_CHANNELS:-$PUBLISHED_CHANNELS}"
+  channels="${INPUT_CHANNELS:-$(default_channels "$EVENT")}"
   printf 'tag=%s\n' "$tag"
   printf 'channels=%s\n' "$channels"
   printf 'checking %s (channels: %s)\n' "$tag" "$channels"
@@ -120,9 +137,12 @@ self_test() {
   check "tag push" "tag=v0.10.0" 0 --event push --ref-name v0.10.0
   check "tag push ignores the newest" "tag=v0.9.0" 0 --event push --ref-name v0.9.0
   check "dispatch input" "tag=v0.9.0" 0 --event workflow_dispatch --input-tag v0.9.0
-  # The fallback set is the channels this workflow publishes, and nothing else.
-  check "dispatch default channels" "channels=pypi,npm,maven" 0 \
+  # Two default questions (#134): a dispatch that names nothing asks whether the release
+  # is complete everywhere; a tag push asks about the channels this workflow uploads.
+  check "dispatch default asks all five" "channels=crates,pypi,npm,maven,go" 0 \
     --event workflow_dispatch --input-tag v0.10.0 --input-channels ""
+  check "push default asks what this workflow publishes" "channels=pypi,npm,maven" 0 \
+    --event push --ref-name v0.10.0 --input-channels ""
   check "dispatch named channels" "channels=pypi,go" 0 \
     --event workflow_dispatch --input-tag v0.10.0 --input-channels pypi,go
   check "dispatch resolves the newest tag" "tag=v0.10.0" 0 --event workflow_dispatch
@@ -175,7 +195,7 @@ self_test() {
     echo "❌ resolve-release self-test: $failures of $cases case(s) wrong"
     return 1
   fi
-  echo "✅ resolve-release self-test: $cases cases — the pushed tag wins over the newest, a dispatch honours its input, the fallback set is the channels this workflow publishes, a named tag missing from the clone is fetched (the next step reads its tree), a clone with no tags refuses by name, and the two output keys are written"
+  echo "✅ resolve-release self-test: $cases cases — the pushed tag wins over the newest, a dispatch honours its input, the default is two questions — a push asks the channels this workflow publishes, a dispatch asks all five (read from the gate, not typed again), a named tag missing from the clone is fetched (the next step reads its tree), a clone with no tags refuses by name, and the two output keys are written"
   return 0
 }
 
