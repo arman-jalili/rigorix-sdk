@@ -43,6 +43,7 @@ TREE="$ROOT"
 MODE="preflight"
 TAG=""
 FIXTURES=""
+EXPECT=""
 # The channel set, in one place: both loops and `--channels` derive from it, so a
 # sixth channel cannot be added to one and forgotten in the other (#120).
 ALL_CHANNELS="crates pypi npm maven go"
@@ -59,10 +60,51 @@ while [ $# -gt 0 ]; do
     --root) TREE="$2"; shift ;;
     --fixtures) FIXTURES="$2"; shift ;;
     --channels) CHANNELS="$2"; shift ;;
+    --expect) EXPECT="$2"; shift ;;
+    --print-version) MODE="print-version" ;;
     *) echo "check-release: unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
 done
+
+# `--channels` comes from a workflow input, so it is a string a stranger types: a typo
+# used to produce a verdict about the five channels the caller did *not* ask for, and
+# exit 3 ("verified some, named the rest") for a question that was never asked (#126).
+# The request is validated before any registry is contacted: it is a property of what
+# was asked, not of what the network answers.
+# The accepted set, written once. `printf '%s,' x y` would run together, so the list is
+# built by the one function that also validates against it.
+channel_list() { printf '%s\n' $ALL_CHANNELS | tr '\n' ',' | sed 's/,$//'; }
+
+# Sets CHANNELS. Not called in a subshell: a refusal must exit 2, and an exit inside
+# `$( )` only ends the subshell — the run then continued with an empty set and reported
+# "0 of 5 verified" for a request it had just rejected.
+parse_channels() {
+  local raw="$1" name out="" seen="" IFS_save
+  [ -n "$(printf '%s' "$raw" | tr -d ' \t')" ] ||
+    { echo "❌ --channels is empty — name at least one of $(channel_list)" >&2; exit 2; }
+  IFS_save="$IFS"; IFS=','
+  for name in $raw; do
+    name="$(printf '%s' "$name" | tr -d ' \t')"
+    [ -n "$name" ] || continue
+    case " $ALL_CHANNELS " in
+      *" $name "*) ;;
+      *) IFS="$IFS_save"
+         echo "❌ unknown channel: $name — channels are $(channel_list)" >&2
+         exit 2 ;;
+    esac
+    case ",$seen," in *",$name,"*) continue ;; esac
+    seen="${seen}${seen:+,}$name"
+  done
+  IFS="$IFS_save"
+  # One order, always: a subset prints in ALL_CHANNELS order, so two runs that asked for
+  # the same set in different orders are visibly the same request.
+  for name in $ALL_CHANNELS; do
+    case ",$seen," in *",$name,"*) out="${out}${out:+,}$name" ;; esac
+  done
+  CHANNELS="$out"
+}
+parse_channels "$CHANNELS"
 
 GO_MANIFEST="go/go.mod"
 CRATES_MANIFEST="rust/Cargo.toml"
@@ -526,12 +568,27 @@ preflight() {
 }
 
 # What would settle a channel this run was not asked about, or answered "not yet".
-settle_with() {
-  case "$1" in
-    crates) echo "cargo publish" ;;
-    go)     echo "push go/v\$version" ;;
-    *)      echo "the publish workflow's $1 upload job" ;;
+#
+# Every remedy is a command a reader can run, written once per channel. The version is
+# the placeholder `@V@` — bare — and filled exactly once here (#123). The previous
+# arrangement had a template carrying `go/v$version` and a caller rewriting `$version`,
+# so the prefix was applied twice and the gate's own instruction for Go was
+# `go/vv0.10.0`: a tag nobody can push. The reason it survived is the reason it is
+# written this way now — that was the only computed remedy, and the only one the
+# self-test did not assert.
+remedy() {
+  local channel="$1" version="$2" template
+  case "$channel" in
+    crates)
+      template="${REMEDY_CRATES:-cargo publish -p rigorix-schemas --token \"\$CRATES_TOKEN\" && cargo publish -p rigorix-verifier --token \"\$CRATES_TOKEN\"}" ;;
+    go)
+      template="${REMEDY_GO:-git push origin go/@V@}" ;;
+    pypi|npm|maven)
+      template="${REMEDY_WORKFLOW:-gh workflow run publish.yml -f tag=@V@}" ;;
+    *)
+      template="${REMEDY_UNKNOWN:-nothing publishes @V@ on this channel}" ;;
   esac
+  printf '%s\n' "${template//@V@/v$version}"
 }
 
 verify_published() {
@@ -551,7 +608,7 @@ verify_published() {
       *",$channel,"*) ;;
       *)
         # Named, with the observable that would settle it, and counted.
-        skipped="$skipped${skipped:+, }$channel: $(settle_with "$channel" | sed "s/\\\$version/v$version/")"
+        skipped="$skipped${skipped:+, }$channel: $(remedy "$channel" "$version")"
         skipped_n=$((skipped_n + 1))
         continue ;;
     esac
@@ -619,6 +676,34 @@ self_test() {
     git -C "$1" update-ref "refs/tags/$2" "$commit"
   }
   remote_delete() { git -C "$1.origin" update-ref -d "refs/tags/$2"; }
+  # A refusal of the *request* happens before any mode runs, so it is asserted at the
+  # entry point rather than on a function: `expect_exit LABEL WANTED_EXIT WANTED_TEXT…`.
+  expect_exit() {
+    local label="$1" wanted_rc="$2" wanted="$3" tree="$4" fixtures="$5"; shift 5
+    local rc got
+    cases=$((cases + 1))
+    got="$( bash "$ROOT/scripts/check-release.sh" --root "$tree" --fixtures "$fixtures" "$@" 2>&1 )"
+    rc=$?
+    if [ "$rc" -ne "$wanted_rc" ]; then
+      echo "❌ self-test [$label]: exit $rc, wanted $wanted_rc"; failures=$((failures + 1)); return
+    fi
+    case "$got" in
+      *"$wanted"*) : ;;
+      *) echo "❌ self-test [$label]: refused without saying \"$wanted\""
+         printf '%s\n' "$got" | tail -3; failures=$((failures + 1)) ;; esac
+  }
+  # Nothing may be asked of a registry for a request that was just refused.
+  expect_unasked() {
+    local label="$1" tree="$2" fixtures="$3"; shift 3
+    local got
+    cases=$((cases + 1))
+    got="$( bash "$ROOT/scripts/check-release.sh" --root "$tree" --fixtures "$fixtures" "$@" 2>&1 )" || true
+    case "$got" in
+      *"of 5 verified"*)
+        echo "❌ self-test [$label]: reported on channels the caller did not ask about"
+        printf '%s\n' "$got" | tail -2; failures=$((failures + 1)) ;;
+    esac
+  }
   absent() {  # fixtures where no channel serves the version
     printf '{"versions": []}\n' >"$1/fixtures/crates.json"
     printf '{"releases": {}}\n' >"$1/fixtures/pypi.json"
@@ -771,7 +856,7 @@ self_test() {
     printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
   else
     case "$out" in
-      *"⚠ 4 of 5 verified; 1 not verified (crates: cargo publish)"*) : ;;
+      *'⚠ 4 of 5 verified; 1 not verified (crates: cargo publish -p rigorix-schemas --token "$CRATES_TOKEN"'*) : ;;
       *) echo "❌ self-test [subset run]: exit 3 without naming the channel and its remedy"
          printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
     case "$out" in
@@ -884,6 +969,79 @@ self_test() {
     printf '%s\n' "$out" | tail -4; failures=$((failures + 1))
   fi
 
+  # 16c2. every channel's remedy is the exact command, from one table — including the
+  #       computed one that printed `go/vv0.10.0` (#123).
+  remedy_table() {  # remedy_table VERSION — prints one line per wrong channel
+    local version="$1" channel want fails=0
+    for channel in crates go pypi npm maven; do
+      case "$channel" in
+        crates) want='cargo publish -p rigorix-schemas --token "$CRATES_TOKEN" && cargo publish -p rigorix-verifier --token "$CRATES_TOKEN"' ;;
+        go)     want="git push origin go/v$version" ;;
+        *)      want="gh workflow run publish.yml -f tag=v$version" ;;
+      esac
+      [ "$(remedy "$channel" "$version")" = "$want" ] || { echo "$channel says: $(remedy "$channel" "$version")"; fails=$((fails + 1)); }
+    done
+    [ "$fails" -eq 0 ]
+  }
+  cases=$((cases + 1))
+  if ! out="$(remedy_table 0.10.0)"; then
+    echo "❌ self-test [remedies]: a remedy is not the command it claims to be"
+    printf '%s\n' "$out" | head -3; failures=$((failures + 1))
+  fi
+  # The assertion must bite: plant the double prefix that shipped, and the same table
+  # has to name Go. A table that cannot fail on the defect it was written for is a
+  # paragraph, not a check.
+  cases=$((cases + 1))
+  if out="$( REMEDY_GO='git push origin go/v@V@' remedy_table 0.10.0 )"; then
+    echo "❌ self-test [remedies]: a double-prefixed tag was accepted"; failures=$((failures + 1))
+  else
+    case "$out" in
+      *"go says: git push origin go/vv0.10.0"*) : ;;
+      *) echo "❌ self-test [remedies]: the plant was refused without naming go/vv"
+         printf '%s\n' "$out" | head -3; failures=$((failures + 1)) ;; esac
+  fi
+  # And the printed refspec has to exist, or the instruction is still inert.
+  cases=$((cases + 1))
+  if ! out="$(git ls-remote --tags origin 'refs/tags/go/v0.10.0' 2>/dev/null)"; then
+    echo "⚠ self-test [remedies]: could not reach origin to check the go refspec (not counted as a failure offline)"
+  else
+    case "$out" in
+      *refs/tags/go/v0.10.0*) : ;;
+      "") echo "⚠ self-test [remedies]: origin does not advertise go/v0.10.0 here (not a failure of this tree)" ;;
+      *) echo "❌ self-test [remedies]: the go refspec does not resolve to that tag"
+         printf '%s\n' "$out" | head -2; failures=$((failures + 1)) ;; esac
+  fi
+
+  # 16d. `--channels` is a string a stranger types in a dispatch box: an unknown name is
+  #      refused with the accepted set, an empty list too, and neither asks a registry
+  #      (#126).
+  tmp="$(mktemp -d)"
+  fixture "$tmp/chan" 0.10.0
+  served "$tmp/chan" 0.10.0
+  expect_exit "unknown channel" 2 "❌ unknown channel: nmp — channels are crates,pypi,npm,maven,go" \
+    "$tmp/chan" "$tmp/chan/fixtures" --verify-published --channels pypi,nmp
+  expect_unasked "unknown channel asks nothing" "$tmp/chan" "$tmp/chan/fixtures" \
+    --verify-published --channels pypi,nmp
+  expect_exit "empty --channels" 2 "❌ --channels is empty" \
+    "$tmp/chan" "$tmp/chan/fixtures" --verify-published --channels ""
+  expect_exit "the docs mode uses the same parser" 2 "❌ unknown channel: nmp" \
+    "$tmp/chan" "$tmp/chan/fixtures" --verify-docs --channels nmp
+  expect_exit "the preflight uses the same parser" 2 "❌ unknown channel: nmp" \
+    "$tmp/chan" "$tmp/chan/fixtures" --channels nmp
+
+  # 16e. duplicates collapse and the total stays "of 5": `pypi,pypi` is one channel asked
+  #      about twice, not two channels.
+  cases=$((cases + 1))
+  if out="$( bash "$ROOT/scripts/check-release.sh" --root "$tmp/chan" --fixtures "$tmp/chan/fixtures" \
+              --verify-published --channels pypi,pypi 2>&1 )"; then
+    echo "❌ self-test [duplicate channels]: accepted a subset as a full pass"; failures=$((failures + 1))
+  else
+    case "$out" in
+      *"✅ pypi serves 0.10.0"*"⚠ 1 of 5 verified"*) : ;;
+      *) echo "❌ self-test [duplicate channels]: did not count the duplicate once"
+         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
+  fi
+
   # 17. a tree with no marker at all: nothing was compared, which is not a pass
   tmp="$(mktemp -d)"
   mkdir -p "$tmp/docs/empty/fx"
@@ -920,6 +1078,11 @@ self_test() {
 }
 
 case "$MODE" in
+  # One reader for the four manifests, so a harness that must track the tree's version
+  # asks this rather than typing a literal (#128).
+  # The exit status has to come from the reader: `printf '%s' "$(release_version)"`
+  # discards a refusal inside the substitution and prints an empty line with status 0.
+  print-version) version="$(release_version)" || exit $?; printf '%s\n' "$version" ;;
   self-test) self_test; exit $? ;;
   docs) docs_mode ;;
   verify) verify_published ;;

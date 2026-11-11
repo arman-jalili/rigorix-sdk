@@ -151,8 +151,11 @@ job_rust() {
     'bash scripts/check-spdx.sh --self-test && bash scripts/check-spdx.sh'
   run "release: the release checks can refuse (published version, wrong tag, split manifests)" . \
     'bash scripts/check-release.sh --self-test'
-  run "release: the runner's tag shape (checkout rewrites refs/tags/<tag>)" . \
-    'bash scripts/check-tag-shape.sh'
+  # The harness must exercise the version the tree is at, not a version it remembers:
+  # its literal survived a release boundary, so its self-test builds 0.11.0 and requires
+  # the tag it built to be named (#128).
+  run "release: the tag-shape harness tracks the tree's version" . \
+    'bash scripts/check-tag-shape.sh --self-test && bash scripts/check-tag-shape.sh'
   # The documents state what each channel serves, once and machine-readably; this
   # compares them against the registries. Exit 3 is "not compared" (no network), which
   # the runner reports as a skip rather than a pass.
