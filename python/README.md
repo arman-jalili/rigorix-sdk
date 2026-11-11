@@ -15,7 +15,7 @@ shelling out to Rust. No engine dependency.
 ## Install
 
 ```bash
-pip install rigorix-verifier==0.9.0   # published: verifier only (see Status below)
+pip install rigorix-verifier         # the published version — which one: see Status
 pip install .                          # or: pip install -e ".[test]" (from source)
 ```
 
@@ -51,26 +51,21 @@ plan = client.plan({"template_name": "attendance"})
 version = client.version()
 ```
 
-## Status: the gate is in this repository, not on PyPI yet
+## Status: the published wheel carries the in-process gate
 
 Read this before following the section below.
 
+<!-- published: pypi=0.10.0 -->
+
 | | version | contains the in-process gate |
 |---|---|---|
-| PyPI (published) | **0.9.0** | **no** — no `rigorix_verifier.binding`, no vendored `.wasm` |
-| this tree | **0.10.0** (unreleased) | yes |
+| PyPI (published) | the published version | **yes** — `rigorix_verifier.binding` and the vendored `.wasm` |
+| this tree | same | yes |
 
-So `pip install rigorix-verifier==0.9.0` gives the verifier and the embedded
-corpus, and **not** `rigorix_verifier.binding`. The import below fails against the
-published 0.9.0 and succeeds from a checkout:
-
-```bash
-pip install "git+https://github.com/arman-jalili/rigorix-sdk#subdirectory=python"
-```
-
-`0.10.0` is the release that carries it. Until it is published, this file documents
-a coordinate that exists in the tree — measured with `scripts/check-release.sh
---verify-published`, which opens the wheel and fails when the surface is missing.
+The published version is stated once, on the line above the table, so it is not
+retyped in prose. `bash scripts/check-release.sh --verify-docs` fails when it
+disagrees with PyPI, and `--verify-published` opens the published wheel and fails
+when the surface the section below documents is missing from it.
 
 ## In-process gate (WASI)
 

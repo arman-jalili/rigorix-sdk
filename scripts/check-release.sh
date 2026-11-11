@@ -14,12 +14,20 @@
 #   preflight          (default) manifests agree, the tag agrees, and no channel
 #                      serves this version yet. Run before the first upload.
 #   --verify-published after the uploads: every channel serves it, and the PyPI
-#                      wheel contains the package the README documents.
-#   --self-test        the three cases, from local fixtures: already published on a
-#                      channel, tag disagreeing with a manifest, clean release.
+#                      wheel contains the package the README documents. A channel the
+#                      run was not asked about is *named* and the run exits 3 — a
+#                      partial check is not a green total (#120).
+#   --verify-docs      after the uploads, and after the registry checks: every
+#                      document that states a published version states the one its
+#                      channel serves now. A release's definition of done contained no
+#                      document, which is how four documents came to say the registries
+#                      served 0.9.0 while they served 0.10.0 (#119).
+#   --self-test        the cases, from local fixtures.
 #
 # Registry facts are read from the coordinate's own metadata, never from a composed
-# download URL: crates.io API, PyPI JSON, npm packument, Maven maven-metadata.xml.
+# download URL: crates.io API, PyPI JSON, npm packument, Maven maven-metadata.xml,
+# and for Go the module proxy (`@v/<version>.info`). Go is a fifth channel: the
+# project publishes five coordinates, and the gate knew four (#120).
 #
 # Usage:
 #   bash scripts/check-release.sh [--verify-published] [--tag TAG]
@@ -27,7 +35,7 @@
 #
 # Exit: 0 = the release has an identity; 1 = it does not (message names the channel
 # or the file); 2 = not verified (no network, no curl, or a manifest that cannot be
-# read) — never 0.
+# read); 3 = verified *some* channels, and named the ones it did not — never 0.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,13 +43,17 @@ TREE="$ROOT"
 MODE="preflight"
 TAG=""
 FIXTURES=""
+# The channel set, in one place: both loops and `--channels` derive from it, so a
+# sixth channel cannot be added to one and forgotten in the other (#120).
+ALL_CHANNELS="crates pypi npm maven go"
 # Which coordinates this run is responsible for. `publish.yml` publishes PyPI, npm and
 # Maven; the crates are published by hand, so requiring them there waits forever.
-CHANNELS="crates,pypi,npm,maven"
+CHANNELS="crates,pypi,npm,maven,go"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --verify-published) MODE="verify" ;;
+    --verify-docs) MODE="docs" ;;
     --self-test) MODE="self-test" ;;
     --tag) TAG="$2"; shift ;;
     --root) TREE="$2"; shift ;;
@@ -52,6 +64,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+GO_MANIFEST="go/go.mod"
 CRATES_MANIFEST="rust/Cargo.toml"
 PY_MANIFEST="python/pyproject.toml"
 NPM_MANIFEST="typescript/package.json"
@@ -62,8 +75,103 @@ CRATES_COORDINATE="rigorix-verifier"
 PY_COORDINATE="rigorix-verifier"
 NPM_COORDINATE="rigorix-verifier"
 MAVEN_COORDINATE="eu.rigorix:rigorix-verifier"
+# The module path is read from `go/go.mod`, not typed: the coordinate is whatever the
+# module declares, so a rename cannot leave a stale literal here.
+go_module() { awk '/^module /{print $2; exit}' "$ROOT/$GO_MANIFEST" 2>/dev/null; }
+
+# Why an answer is missing, when the answer is not a plain yes/no. It travels through a
+# file because `registry_has` is called in a command substitution: a shell function
+# that sets a variable inside `$( )` sets it in a subshell, and the caller never sees
+# it — which is exactly how the first version of this reported "could not be read" for
+# a proxy that had answered 404.
+REASON_FILE="$(mktemp "${TMPDIR:-/tmp}/rigorix-reason.XXXXXX")"
 
 fail() { printf '❌ %s\n' "$1" >&2; exit 1; }
+# The version a channel serves *now* — not "does it serve this one". A document is
+# stale when the channel has moved past it, and `registry_has` cannot see that: every
+# older version is still served forever.
+registry_latest() {
+  local channel="$1" url body code file
+  if [ -n "$FIXTURES" ]; then
+    body="$(cat "$FIXTURES/latest-$channel.txt" 2>/dev/null || true)"
+    [ -n "$body" ] || {
+      printf '%s' "no fixture latest-$channel.txt — the served version cannot be read" >"$REASON_FILE"
+      return 0; }
+    printf '%s' "$body"
+    return 0
+  fi
+  case "$channel" in
+    crates) url="https://crates.io/api/v1/crates/$CRATES_COORDINATE" ;;
+    pypi)   url="https://pypi.org/pypi/$PY_COORDINATE/json" ;;
+    npm)    url="https://registry.npmjs.org/$NPM_COORDINATE" ;;
+    maven)  url="https://repo1.maven.org/maven2/eu/rigorix/rigorix-verifier/maven-metadata.xml" ;;
+    go)     url="https://proxy.golang.org/$(go_module)/@latest" ;;
+  esac
+  file="$(mktemp)"
+  code="$(curl -sS --max-time 20 -A "rigorix-sdk-release-check" -o "$file" -w '%{http_code}' "$url" 2>/dev/null)" || {
+    rm -f "$file"; printf '%s' "could not reach the $channel registry" >"$REASON_FILE"; return 0; }
+  [ "$code" = "200" ] || {
+    rm -f "$file"; printf '%s' "the $channel registry answered $code" >"$REASON_FILE"; return 0; }
+  body="$(cat "$file")"; rm -f "$file"
+  case "$channel" in
+    crates) printf '%s' "$body" | python3 -c 'import json,sys;print(json.load(sys.stdin)["crate"]["max_stable_version"])' 2>/dev/null ;;
+    pypi)   printf '%s' "$body" | python3 -c 'import json,sys;print(json.load(sys.stdin)["info"]["version"])' 2>/dev/null ;;
+    npm)    printf '%s' "$body" | python3 -c 'import json,sys;print(json.load(sys.stdin)["dist-tags"]["latest"])' 2>/dev/null ;;
+    maven)  printf '%s' "$body" | sed -n 's#.*<release>\(.*\)</release>.*#\1#p' | head -1 ;;
+    go)     printf '%s' "$body" | python3 -c 'import json,sys;print(json.load(sys.stdin)["Version"].lstrip("v"))' 2>/dev/null ;;
+  esac
+}
+
+# Every document states each published version once, on a line a machine can read:
+#   <!-- published: pypi=0.10.0 npm=0.10.0 maven=0.10.0 go=0.10.0 crates=0.10.0 -->
+# The prose around it says "the published version" instead of repeating the number, so
+# there is one copy of the fact per document and the check has one place to read.
+docs_mode() {
+  local files file line_no line marker pair channel declared served checked=0 wrong=0 unreadable=0
+  files="$(cd "$TREE" && git ls-files '*.md' 2>/dev/null)"
+  [ -n "$files" ] || files="$(cd "$TREE" && find . -name '*.md' -not -path './.git/*' | sed 's|^\./||')"
+  [ -n "$files" ] || fail "no subject, not evidence: no Markdown file could be listed under $TREE"
+  while IFS= read -r file; do
+    [ -f "$TREE/$file" ] || continue
+    while IFS=: read -r line_no line; do
+      marker="${line#*published:}"; marker="${marker%%-->*}"
+      for pair in $marker; do
+        channel="${pair%%=*}"; declared="${pair#*=}"
+        case " $ALL_CHANNELS " in
+          *" $channel "*) ;;
+          *) fail "$file:$line_no names an unknown channel '$channel' — the channels are: $(printf '%s' "$ALL_CHANNELS" | tr ' ' ',')" ;;
+        esac
+        [ -n "$declared" ] || fail "$file:$line_no states no version for $channel"
+        served="$(registry_latest "$channel")"
+        if [ -z "$served" ]; then
+          printf '⚠ %s:%s: %s declares %s, and %s could not be read (%s)\n' \
+            "$file" "$line_no" "$channel" "$declared" "$channel" "$(reason_for "$channel" "$declared")" >&2
+          unreadable=$((unreadable + 1)); continue
+        fi
+        checked=$((checked + 1))
+        if [ "$served" != "$declared" ]; then
+          printf '❌ %s:%s says %s for %s, but %s serves %s\n' \
+            "$file" "$line_no" "$declared" "$channel" "$channel" "$served" >&2
+          wrong=$((wrong + 1))
+        else
+          printf '✅ %s %s:%s declares %s, and %s serves it\n' "$channel" "$file" "$line_no" "$declared" "$channel"
+        fi
+      done
+    done < <(grep -n '<!-- published:' "$TREE/$file" 2>/dev/null)
+  done <<< "$files"
+  [ "$checked" -gt 0 ] || fail "no subject, not evidence: no document declares a published version, so nothing was compared"
+  [ "$wrong" -eq 0 ] || fail "$wrong statement(s) about a published version are stale — a release updates the documents that state it"
+  # No network: the documents were not compared, and that is not a pass.
+  [ "$unreadable" -eq 0 ] || {
+    printf '⚠ %d channel(s) could not be read; the documents were not compared against them\n' "$unreadable" >&2
+    exit 3; }
+  printf '✅ documents: %d version statement(s) agree with the registries\n' "$checked"
+}
+
+reason_for() {  # the recorded reason, or a plain one naming the channel
+  local recorded; recorded="$(cat "$REASON_FILE" 2>/dev/null)"
+  printf '%s' "${recorded:-the $1 registry could not be read for $2}"
+}
 unverified() { printf '⚠ not verified: %s\n' "$1" >&2; exit 2; }
 
 read_version() {
@@ -111,6 +219,16 @@ registry_has() {
       pypi)   body="$(cat "$FIXTURES/pypi.json" 2>/dev/null)" || return 0 ;;
       npm)    body="$(cat "$FIXTURES/npm.json" 2>/dev/null)" || return 0 ;;
       maven)  body="$(cat "$FIXTURES/maven.xml" 2>/dev/null)" || return 0 ;;
+      go)
+        body="$(cat "$FIXTURES/go.info" 2>/dev/null || true)"
+        # A fixture without `go.info` is the proxy's 404 — the case that must not be
+        # read as "not published", because the proxy conflates absence with failure.
+        if [ -z "$body" ] ||
+           ! printf '%s' "$body" | grep -q "\"Version\"[[:space:]]*:[[:space:]]*\"v$version\""; then
+          printf '%s' "the Go proxy answers 404 for $(go_module)@v$version — the proxy conflates \"no such version\" with \"cannot fetch\", so this is not evidence either way: curl https://proxy.golang.org/$(go_module)/@v/v$version.info" >"$REASON_FILE"
+          return 0
+        fi
+        echo yes; return 0 ;;
     esac
     [ -n "$body" ] || return 0
   else
@@ -119,15 +237,27 @@ registry_has() {
       pypi)   url="https://pypi.org/pypi/$PY_COORDINATE/json" ;;
       npm)    url="https://registry.npmjs.org/$NPM_COORDINATE" ;;
       maven)  url="https://repo1.maven.org/maven2/eu/rigorix/rigorix-verifier/maven-metadata.xml" ;;
+      go)     url="https://proxy.golang.org/$(go_module)/@v/v$version.info" ;;
     esac
     # A 404 is an answer ("this version is not there"), not a failure to read: a
     # preflight that reports "unverified" for every new version is useless.
     local code file
     file="$(mktemp)"
     code="$(curl -sS --max-time 20 -A "rigorix-sdk-release-check" -o "$file" \
-      -w '%{http_code}' "$url" 2>/dev/null)" || { rm -f "$file"; return 0; }
-    if [ "$code" = "404" ]; then rm -f "$file"; echo no; return 0; fi
-    [ "$code" = "200" ] || { rm -f "$file"; return 0; }
+      -w '%{http_code}' "$url" 2>/dev/null)" ||
+      { rm -f "$file"; printf '%s' "could not reach the $channel registry for $version" >"$REASON_FILE"; return 0; }
+    if [ "$code" = "404" ]; then
+      rm -f "$file"
+      # For a registry that lists versions, 404 is the answer "not published here".
+      # For the Go proxy it is not: the same 404 covers a module it cannot fetch.
+      if [ "$channel" = "go" ]; then
+        printf '%s' "the Go proxy answers 404 for $(go_module)@v$version — the proxy conflates \"no such version\" with \"cannot fetch\", so this is not evidence either way: curl https://proxy.golang.org/$(go_module)/@v/v$version.info" >"$REASON_FILE"
+        return 0
+      fi
+      echo no; return 0
+    fi
+    [ "$code" = "200" ] ||
+      { rm -f "$file"; printf '%s' "the $channel registry answered $code for $version" >"$REASON_FILE"; return 0; }
     body="$(cat "$file")"; rm -f "$file"
   fi
   case "$channel" in
@@ -143,7 +273,59 @@ data = json.load(sys.stdin)
 print("yes" if sys.argv[1] in data.get("versions", {}) else "no")
 ' "$version" ;;
     maven)  printf '%s' "$body" | grep -q "<version>$version</version>" && echo yes || echo no ;;
+    # A 200 from `@v/<version>.info` means the proxy holds that version; the body says
+    # which one, so it is compared rather than assumed.
+    go)     printf '%s' "$body" | grep -q "\"Version\"[[:space:]]*:[[:space:]]*\"v$version\"" && echo yes || echo no ;;
   esac
+}
+
+# The Go module's own surface: `gate/` present in the zip the proxy serves, and the
+# vendored wasm the pinned digest names. The pin is *read* from PROVENANCE.md so the
+# digest has one copy in this repository, not two.
+pinned_wasm_digest() {
+  sed -n 's/.*\*\*sha256:\*\* `\([0-9a-f]\{64\}\)`.*/\1/p' \
+    "$ROOT/go/gate/testdata/PROVENANCE.md" 2>/dev/null | head -1
+}
+
+go_surface() {
+  local version="$1" pin entries="" got="" work zip mod
+  pin="$(pinned_wasm_digest)"
+  [ -n "$pin" ] || unverified "no pinned wasm digest could be read from go/gate/testdata/PROVENANCE.md"
+  if [ -n "$FIXTURES" ]; then
+    entries="$(cat "$FIXTURES/go.entries" 2>/dev/null || true)"
+    got="$(cat "$FIXTURES/go.wasm-sha256" 2>/dev/null || true)"
+    [ -n "$entries" ] || return 0
+  else
+    work="$(mktemp -d)"; zip="$work/module.zip"
+    curl -fsSL --max-time 90 -o "$zip" \
+      "https://proxy.golang.org/$(go_module)/@v/v$version.zip" 2>/dev/null || {
+        rm -f "$zip"; return 0; }
+    # Every member is prefixed with `<module>@<version>/`, and the module path has
+    # slashes in it — so the prefix is stripped by its exact length, not at the first
+    # slash.
+    mod="$(go_module)"
+    read -r entries got <<EOF
+$(python3 - "$zip" "$mod@v$version/" <<'PY' 2>/dev/null
+import hashlib, sys, zipfile
+prefix = sys.argv[2]
+z = zipfile.ZipFile(sys.argv[1])
+names = [n[len(prefix):] if n.startswith(prefix) else n for n in z.namelist()]
+wasm = [n for n in z.namelist() if n.endswith("rigorix_gate_wasi.wasm")]
+digest = hashlib.sha256(z.read(wasm[0])).hexdigest() if wasm else ""
+print("\x1f".join(names), digest)
+PY
+)
+EOF
+    rm -f "$zip"
+    entries="$(printf '%s' "$entries" | tr '\037' '\n')"
+    [ -n "$entries" ] || return 0
+  fi
+  printf '%s' "$entries" | grep -q '^gate/' ||
+    fail "the Go module $(go_module)@v$version carries no gate/ — the README documents a gate the module does not contain"
+  if [ -n "$got" ] && [ "$got" != "$pin" ]; then
+    fail "the Go module's vendored wasm hashes to ${got:0:8}…, the pin in go/gate/testdata/PROVENANCE.md is ${pin:0:8}…"
+  fi
+  printf 'gate/ present, wasm %s…\n' "${pin:0:8}"
 }
 
 # The PyPI wheel must contain what the README documents — the failure mode of 0.9.0.
@@ -300,15 +482,20 @@ tag_verdict() {
 }
 
 preflight() {
-  local version channel answer published=0
+  local version channel answer published=0 asked=""
   version="$(release_version)"
-  printf '✅ manifests: one version, %s (crates, pypi, npm, maven)\n' "$version"
+  printf '✅ manifests: one version, %s (%s)\n' "$version" "$(printf '%s' "$ALL_CHANNELS" | tr ' ' ',')"
   tag_verdict "$version"
 
-  for channel in crates pypi npm maven; do
+  for channel in $ALL_CHANNELS; do
+    # Go cannot answer this question: `go/v<version>` is served by the proxy the
+    # moment the tag is pushed, i.e. before any upload, so "is it unpublished" has no
+    # answer there. It is said, not omitted (#120).
+    [ "$channel" = "go" ] && continue
+    asked="$asked${asked:+, }$channel"
     answer="$(registry_has "$channel" "$version")"
     if [ -z "$answer" ]; then
-      unverified "the $channel registry could not be read for $version"
+      unverified "$(reason_for "$channel" "$version")"
     elif [ "$answer" = "yes" ]; then
       printf '❌ %s already serves %s\n' "$channel" "$version" >&2
       published=$((published + 1))
@@ -317,39 +504,62 @@ preflight() {
   [ "$published" -eq 0 ] ||
     fail "$published channel(s) already serve $version — a version means released content, so the release needs a new one"
 
-  echo "✅ preflight: $version is unpublished on every channel, and its three tags agree"
+  printf '✅ preflight: %s is unpublished on %s (go: tag-driven, verified after upload), and its three tags agree\n' \
+    "$version" "$asked"
+}
+
+# What would settle a channel this run was not asked about, or answered "not yet".
+settle_with() {
+  case "$1" in
+    crates) echo "cargo publish" ;;
+    go)     echo "push go/v\$version" ;;
+    *)      echo "the publish workflow's $1 upload job" ;;
+  esac
 }
 
 verify_published() {
-  local version channel answer missing=0 not_verified=0
+  local version channel answer missing=0 verified=0 skipped="" skipped_n=0 total=0
   version="$(release_version)"
   tag_verdict "$version"
-  for channel in crates pypi npm maven; do
+  total="$(printf '%s\n' $ALL_CHANNELS | wc -l | tr -d ' ')"
+  for channel in $ALL_CHANNELS; do
     case ",$CHANNELS," in
       *",$channel,"*) ;;
       *)
-        printf '⚠ %s not verified by this run (not in --channels %s)\n' "$channel" "$CHANNELS"
-        not_verified=$((not_verified + 1))
+        # Named, with the observable that would settle it, and counted.
+        skipped="$skipped${skipped:+, }$channel: $(settle_with "$channel" | sed "s/\\\$version/v$version/")"
+        skipped_n=$((skipped_n + 1))
         continue ;;
     esac
     answer="$(registry_has "$channel" "$version")"
     if [ -z "$answer" ]; then
-      unverified "the $channel registry could not be read for $version"
+      unverified "$(reason_for "$channel" "$version")"
     elif [ "$answer" = "no" ]; then
       printf '❌ %s does not serve %s\n' "$channel" "$version" >&2
       missing=$((missing + 1))
+    elif [ "$channel" = "go" ]; then
+      local surface
+      surface="$(go_surface "$version")" || exit $?
+      printf '✅ go serves %s — %s\n' "$version" "$surface"
+      verified=$((verified + 1))
     else
       printf '✅ %s serves %s\n' "$channel" "$version"
+      verified=$((verified + 1))
     fi
   done
-  [ "$missing" -eq 0 ] || fail "$missing channel(s) do not serve $version — the release is partial"
+  [ "$missing" -eq 0 ] ||
+    fail "$missing channel(s) do not serve $version — the release is partial"
   case ",$CHANNELS," in
     *",pypi,"*) pypi_surface "$version" >/dev/null &&
       echo "✅ PyPI wheel: carries binding/ and the vendored artifact" ;;
   esac
-  printf '✅ published: %s serve(s) %s' "$CHANNELS" "$version"
-  [ "$not_verified" -eq 0 ] || printf ' (%d channel(s) not verified by this run)' "$not_verified"
-  printf '\n'
+  # A run that skipped a channel has not verified the release, however many of the
+  # others answered: exit 3, the `--allow-skips` convention, and no `✅ published:`.
+  if [ "$skipped_n" -gt 0 ]; then
+    printf '⚠ %d of %d verified; %d not verified (%s)\n' "$verified" "$total" "$skipped_n" "$skipped" >&2
+    exit 3
+  fi
+  printf '✅ published: %s serve(s) %s\n' "$(printf '%s' "$ALL_CHANNELS" | tr ' ' ',')" "$version"
 }
 
 self_test() {
@@ -392,6 +602,19 @@ self_test() {
     printf '<metadata><versioning><versions><version>0.1.0</version></versions></versioning></metadata>\n' \
       >"$1/fixtures/maven.xml"
   }
+  served() {  # served DIR VERSION — every channel answers, and Go carries its surface
+    local dir="$1" v="$2"
+    printf '{"num": "%s"}\n' "$v" >"$dir/fixtures/crates.json"
+    printf '{"releases": {"%s": []}}\n' "$v" >"$dir/fixtures/pypi.json"
+    printf '{"versions": {"%s": {}}}\n' "$v" >"$dir/fixtures/npm.json"
+    printf '<metadata><versioning><versions><version>%s</version></versions></versioning></metadata>\n' \
+      "$v" >"$dir/fixtures/maven.xml"
+    printf '{"Version":"v%s"}\n' "$v" >"$dir/fixtures/go.info"
+    printf 'gate/artifact.go\ngate/gate.go\nrigorix_gate_wasi.wasm\n' >"$dir/fixtures/go.entries"
+    pinned_wasm_digest >"$dir/fixtures/go.wasm-sha256"
+    printf 'rigorix_verifier/binding/__init__.py\nrigorix_verifier/_wasm/rigorix_gate_wasi.wasm\n' \
+      >"$dir/fixtures/wheel-entries.txt"
+  }
   expect_fail() {  # expect_fail LABEL WANTED_SUBSTRING TREE FIXTURES COMMAND
     # The command is a shell function, so it is invoked in command position with the
     # two variables as a temporary assignment (`TREE=… preflight`), not through `env`.
@@ -415,7 +638,7 @@ self_test() {
   fixture "$tmp/ok" 0.10.0; absent "$tmp/ok"
   cases=$((cases + 1))
   if out="$(TREE="$tmp/ok" FIXTURES="$tmp/ok/fixtures" preflight 2>&1)"; then
-    case "$out" in *"is unpublished on every channel"*) : ;;
+    case "$out" in *"is unpublished on crates, pypi, npm, maven (go: tag-driven"*) : ;;
       *) echo "❌ self-test [clean]: passed without the verdict"; failures=$((failures + 1)) ;; esac
   else
     echo "❌ self-test [clean]: a clean release was refused"; printf '%s\n' "$out" | tail -3
@@ -506,48 +729,130 @@ self_test() {
   # 8. the published wheel lacks the surface the README names (the 0.9.0 defect)
   tmp="$(mktemp -d)"
   fixture "$tmp/surface" 0.10.0; absent "$tmp/surface"
+  served "$tmp/surface" 0.10.0
   printf 'rigorix_verifier/__init__.py\nrigorix_verifier/client/__init__.py\n' \
     >"$tmp/surface/fixtures/wheel-entries.txt"
-  printf '{"releases": {"0.10.0": []}}\n' >"$tmp/surface/fixtures/pypi.json"
-  printf '{"versions": {"0.10.0": {}}}\n' >"$tmp/surface/fixtures/npm.json"
-  printf '{"num": "0.10.0"}\n' >"$tmp/surface/fixtures/crates.json"
-  printf '<metadata><versioning><versions><version>0.10.0</version></versions></versioning></metadata>\n' \
-    >"$tmp/surface/fixtures/maven.xml"
   expect_fail "wheel without binding/" "carries no rigorix_verifier/binding/" \
     "$tmp/surface" "$tmp/surface/fixtures" verify_published
 
-  # 11. a channel outside --channels is named as not verified, not counted missing.
-  #     `publish.yml` publishes three of the four; requiring crates there waited
-  #     forever on the first real release.
+  # 11. A subset run is not a green total: it names what it did not verify, with the
+  #     observable that would settle it, and exits 3 (the `--allow-skips` convention).
   tmp="$(mktemp -d)"
-  fixture "$tmp/subset" 0.10.0; absent "$tmp/subset"
-  printf '{"releases": {"0.10.0": []}}\n' >"$tmp/subset/fixtures/pypi.json"
-  printf '{"versions": {"0.10.0": {}}}\n' >"$tmp/subset/fixtures/npm.json"
-  printf '<metadata><versioning><versions><version>0.10.0</version></versions></versioning></metadata>\n' \
-    >"$tmp/subset/fixtures/maven.xml"
-  printf 'rigorix_verifier/binding/__init__.py\nrigorix_verifier/_wasm/rigorix_gate_wasi.wasm\n' \
-    >"$tmp/subset/fixtures/wheel-entries.txt"
+  fixture "$tmp/subset" 0.10.0; served "$tmp/subset" 0.10.0
   cases=$((cases + 1))
-  if out="$( TREE="$tmp/subset" FIXTURES="$tmp/subset/fixtures" CHANNELS="pypi,npm,maven" verify_published 2>&1 )"; then
-    case "$out" in
-      *"⚠ crates not verified by this run"*) : ;;
-      *) echo "❌ self-test [channel subset]: passed without naming the channel it skipped"
-         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
-  else
-    echo "❌ self-test [channel subset]: refused — crates was counted missing though it was out of scope"
+  out="$( TREE="$tmp/subset" FIXTURES="$tmp/subset/fixtures" CHANNELS="pypi,npm,maven,go" verify_published 2>&1 )"
+  rc=$?
+  if [ "$rc" -ne 3 ]; then
+    echo "❌ self-test [subset run]: exit $rc, expected 3 (a partial check is not a green total)"
     printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  else
+    case "$out" in
+      *"⚠ 4 of 5 verified; 1 not verified (crates: cargo publish)"*) : ;;
+      *) echo "❌ self-test [subset run]: exit 3 without naming the channel and its remedy"
+         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
+    case "$out" in
+      *"✅ published:"*) echo "❌ self-test [subset run]: printed a green total for a partial check"
+         failures=$((failures + 1)) ;; esac
+  fi
+
+  # 12. the Go proxy's 404 is not an answer: it covers "no such version" and "cannot
+  #     fetch" alike, so it is reported as unverified, naming the coordinate.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/go404" 0.10.0; served "$tmp/go404" 0.10.0
+  rm -f "$tmp/go404/fixtures/go.info"
+  expect_fail "go proxy 404" "$(go_module)@v0.10.0" \
+    "$tmp/go404" "$tmp/go404/fixtures" verify_published
+
+  # 13. the module is served but carries no gate/: the README documents a gate the
+  #     coordinate does not contain.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/nogatedir" 0.10.0; served "$tmp/nogatedir" 0.10.0
+  printf 'anchor.go\ncanonical.go\nrigorix_gate_wasi.wasm\n' >"$tmp/nogatedir/fixtures/go.entries"
+  expect_fail "go module without gate/" "carries no gate/" \
+    "$tmp/nogatedir" "$tmp/nogatedir/fixtures" verify_published
+
+  # 14. the module's wasm is not the pinned artifact
+  tmp="$(mktemp -d)"
+  fixture "$tmp/godigest" 0.10.0; served "$tmp/godigest" 0.10.0
+  printf '0000000000000000000000000000000000000000000000000000000000000000\n' \
+    >"$tmp/godigest/fixtures/go.wasm-sha256"
+  expect_fail "go wasm digest" "the pin in go/gate/testdata/PROVENANCE.md is" \
+    "$tmp/godigest" "$tmp/godigest/fixtures" verify_published
+
+  # 15. a document that states a version its channel has moved past. The failure mode
+  #     of #119: the registries answered 0.9.0 in four files while they served 0.10.0.
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/docs"
+  printf '# doc\n<!-- published: pypi=0.9.0 -->\nprose\n' >"$tmp/docs/README.md"
+  for channel in crates pypi npm maven go; do printf '0.10.0\n' >"$tmp/docs/fixtures-latest-$channel.txt"; done
+  mkdir -p "$tmp/docs/fx"
+  for channel in crates pypi npm maven go; do printf '0.10.0\n' >"$tmp/docs/fx/latest-$channel.txt"; done
+  cases=$((cases + 1))
+  out="$( TREE="$tmp/docs" FIXTURES="$tmp/docs/fx" docs_mode 2>&1 )"
+  rc=$?
+  if [ "$rc" -ne 1 ]; then
+    echo "❌ self-test [stale document]: exit $rc, expected 1"
+    printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  else
+    case "$out" in
+      *"README.md:2 says 0.9.0 for pypi, but pypi serves 0.10.0"*) : ;;
+      *) echo "❌ self-test [stale document]: refused without naming the file, the line and both versions"
+         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
+  fi
+
+  # 16. the same document stating what the channel serves: passes
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/docs/ok/fx"
+  printf '# doc\n<!-- published: pypi=0.10.0 go=0.10.0 -->\n' >"$tmp/docs/ok/README.md"
+  for channel in crates pypi npm maven go; do printf '0.10.0\n' >"$tmp/docs/ok/fx/latest-$channel.txt"; done
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/docs/ok" FIXTURES="$tmp/docs/ok/fx" docs_mode 2>&1 )"; then
+    case "$out" in *"2 version statement(s) agree"*) : ;;
+      *) echo "❌ self-test [current document]: passed without counting what it compared"
+         printf '%s\n' "$out" | tail -2; failures=$((failures + 1)) ;; esac
+  else
+    echo "❌ self-test [current document]: refused a document that agrees"
+    printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  fi
+
+  # 17. a tree with no marker at all: nothing was compared, which is not a pass
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/docs/empty/fx"
+  printf '# doc, no marker\n' >"$tmp/docs/empty/README.md"
+  expect_fail "no published marker" "no subject, not evidence" \
+    "$tmp/docs/empty" "$tmp/docs/empty/fx" docs_mode
+
+  # 18. a channel that cannot be read: the documents were not compared, so exit 3 —
+  #     never the green line of a check that did not happen.
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/docs/offline/fx"
+  # The marker names two channels; only one of them can be read.
+  printf '# doc\n<!-- published: pypi=0.10.0 maven=0.10.0 -->\n' >"$tmp/docs/offline/README.md"
+  printf '0.10.0\n' >"$tmp/docs/offline/fx/latest-pypi.txt"
+  cases=$((cases + 1))
+  out="$( TREE="$tmp/docs/offline" FIXTURES="$tmp/docs/offline/fx" docs_mode 2>&1 )"
+  rc=$?
+  if [ "$rc" -ne 3 ]; then
+    echo "❌ self-test [unreadable registry]: exit $rc, expected 3"
+    printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  else
+    case "$out" in
+      *"documents were not compared"*) : ;;
+      *) echo "❌ self-test [unreadable registry]: exit 3 without saying what it did not compare"
+         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
   fi
 
   if [ "$failures" -gt 0 ]; then
     echo "❌ check-release self-test: $failures of $cases case(s) wrong"
     return 1
   fi
-  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote; a channel outside --channels is named, not counted missing"
+  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote; a channel outside --channels is named with its remedy and exits 3 rather than printing a green total; a Go proxy 404, a module without gate/ and a wasm that is not the pinned artifact are each refused by name; a document that states a stale version, a tree with no such statement, and a registry that cannot be read are each reported as what they are"
   return 0
 }
 
 case "$MODE" in
   self-test) self_test; exit $? ;;
+  docs) docs_mode ;;
   verify) verify_published ;;
   *) preflight ;;
 esac

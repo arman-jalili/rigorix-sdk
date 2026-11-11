@@ -25,7 +25,19 @@ name: Publish
 on:
   push:
     tags: ["v*"]
+  # #121: the two post-release checks could not be re-run. A dispatch *skipped* them
+  # and would have *run* the uploads, so the fixes a red release found had to be
+  # proven blind. A dispatch now runs the checks and nothing else.
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to check (empty = the newest v* tag)"
+        required: false
+        default: ""
+      channels:
+        description: "Channels to verify, comma-separated"
+        required: false
+        default: "crates,pypi,npm,maven,go"
 
 permissions:
   contents: read
@@ -37,6 +49,10 @@ jobs:
   # answers come from each coordinate's own metadata, never a composed download URL.
   preflight:
     name: 🔒 release identity (manifests, tag, unpublished everywhere)
+    # Push-only. On a dispatch the version is already published, which is exactly the
+    # condition this job exists to refuse — running it would make every post-release
+    # check unrunnable (#121).
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -75,6 +91,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [preflight]
+    if: github.event_name == 'push'
     permissions:
       # Job-level `permissions` REPLACES the workflow-level block, so
       # `contents: read` must be repeated here or `actions/checkout` fails with
@@ -86,6 +103,7 @@ jobs:
         working-directory: python
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
@@ -131,6 +149,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [preflight]
+    if: github.event_name == 'push'
     defaults:
       run:
         working-directory: typescript
@@ -177,6 +196,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [preflight]
+    if: github.event_name == 'push'
     defaults:
       run:
         working-directory: typescript-client
@@ -224,6 +244,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     needs: [preflight]
+    if: github.event_name == 'push'
     defaults:
       run:
         working-directory: java
@@ -278,12 +299,42 @@ jobs:
   smoke:
     name: 🔎 registry install + anchored-fixture smoke
     needs: [python, npm-verifier, npm-client, maven]
-    if: github.event_name == 'push'
+    # `!cancelled()` rather than a bare event test: the four upload jobs are skipped
+    # on a dispatch, and a job whose needs are skipped is skipped too — which is how
+    # these checks became unreachable (#121).
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !cancelled()'
     runs-on: ubuntu-latest
     # Worst case is two propagation windows (15 min each) + setup/install.
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          # `git describe --tags` needs the tags; a shallow clone has none.
+          fetch-depth: 0
+      # On a dispatch the ref is a branch, so the tag is an input (default: the newest
+      # `v*`). On a push it is the pushed tag. The channel list is the dispatch input,
+      # or the three the workflow uploads — crates is published by hand, so requiring
+      # it on a tag push would be a red run for a step no job here performs.
+      - name: Resolve the tag and channels
+        id: resolve
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_CHANNELS: ${{ inputs.channels }}
+        run: |
+          if [ -z "$INPUT_TAG" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
+              # The pushed tag, not the newest one: `git describe` would answer with a
+              # later tag than the run was started for.
+              INPUT_TAG="$GITHUB_REF_NAME"
+            else
+              git fetch --force --tags --quiet origin '+refs/tags/*:refs/tags/*'
+              INPUT_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
+            fi
+          fi
+          echo "tag=$INPUT_TAG" >>"$GITHUB_OUTPUT"
+          echo "channels=${INPUT_CHANNELS:-pypi,npm,maven}" >>"$GITHUB_OUTPUT"
+          echo "checking $INPUT_TAG (channels: ${INPUT_CHANNELS:-pypi,npm,maven})"
+
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
           python-version: "3.12"
@@ -293,8 +344,10 @@ jobs:
           node-version: "20"
 
       - name: PyPI install → verify the anchored fixture (no env override)
+        env:
+          TAG_NAME: ${{ steps.resolve.outputs.tag }}
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${TAG_NAME#v}"
           python -m venv "$RUNNER_TEMP/py"
           # PyPI/CDN propagation can lag well past publication. Wait up to
           # 15 minutes (45 x 20s). Only "version not visible" errors are
@@ -307,8 +360,10 @@ jobs:
           "$RUNNER_TEMP/py/bin/python" "$GITHUB_WORKSPACE/python/scripts/pack_smoke.py"
 
       - name: npm install → verify the anchored fixture (no env override)
+        env:
+          TAG_NAME: ${{ steps.resolve.outputs.tag }}
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${TAG_NAME#v}"
           mkdir -p "$RUNNER_TEMP/npm"
           cp "$GITHUB_WORKSPACE/typescript/scripts/pack-smoke.mjs" "$RUNNER_TEMP/npm/smoke.mjs"
           cd "$RUNNER_TEMP/npm"
@@ -332,11 +387,40 @@ jobs:
   verify-published:
     name: 🔎 every channel serves what the README documents
     needs: [python, npm-verifier, npm-client, maven]
-    if: github.event_name == 'push'
+    # `!cancelled()` rather than a bare event test: the four upload jobs are skipped
+    # on a dispatch, and a job whose needs are skipped is skipped too — which is how
+    # these checks became unreachable (#121).
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && !cancelled()'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4
+        with:
+          fetch-depth: 0
+
+      # On a dispatch the ref is a branch, so the tag is an input (default: the newest
+      # `v*`). On a push it is the pushed tag. The channel list is the dispatch input,
+      # or the three the workflow uploads — crates is published by hand, so requiring
+      # it on a tag push would be a red run for a step no job here performs.
+      - name: Resolve the tag and channels
+        id: resolve
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_CHANNELS: ${{ inputs.channels }}
+        run: |
+          if [ -z "$INPUT_TAG" ]; then
+            if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
+              # The pushed tag, not the newest one: `git describe` would answer with a
+              # later tag than the run was started for.
+              INPUT_TAG="$GITHUB_REF_NAME"
+            else
+              git fetch --force --tags --quiet origin '+refs/tags/*:refs/tags/*'
+              INPUT_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
+            fi
+          fi
+          echo "tag=$INPUT_TAG" >>"$GITHUB_OUTPUT"
+          echo "channels=${INPUT_CHANNELS:-pypi,npm,maven}" >>"$GITHUB_OUTPUT"
+          echo "checking $INPUT_TAG (channels: ${INPUT_CHANNELS:-pypi,npm,maven})"
 
       # The jobs above upload and stop. That is how 0.9.0 reached PyPI without the
       # `binding/` package and the vendored artifact while every local gate was
@@ -346,11 +430,22 @@ jobs:
       # published by hand (`cargo publish`, marker tag `rust-vX`, nothing triggered by
       # it), so a job that waited for 0.10.0 there would wait forever — which is what
       # the first real release did. The omission is printed, not silent.
-      - name: Published surface — the channels this workflow publishes
+      - name: Published surface — the channels this run was asked about
+        env:
+          TAG_NAME: ${{ steps.resolve.outputs.tag }}
+          CHANNELS_IN: ${{ steps.resolve.outputs.channels }}
         run: |
           bash scripts/check-release.sh --verify-published \
-            --tag "${{ github.ref_name }}" \
-            --channels pypi,npm,maven
+            --tag "$TAG_NAME" \
+            --channels "$CHANNELS_IN"
+
+      # A release's definition of done contained no document, which is how four files
+      # came to say 0.9.0 while every channel served 0.10.0 (#119). A stale document
+      # is now a red run, not a discovery by a reader.
+      - name: Every document states the version its channel serves
+        env:
+          TAG_NAME: ${{ steps.resolve.outputs.tag }}
+        run: bash scripts/check-release.sh --verify-docs
 
       - name: crates.io is a manual step (recorded, not gated here)
         run: |

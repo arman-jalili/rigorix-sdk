@@ -88,7 +88,20 @@ run() {
   log="$LOG_DIR/$slug.log"
   start="$(date +%s)"
   printf '\n▶ %s\n' "$name"
-  if ( cd "$ROOT/$dir" && bash -c "$cmd" ) >"$log" 2>&1; then
+  ( cd "$ROOT/$dir" && bash -c "$cmd" ) >"$log" 2>&1
+  local rc=$?
+  if [ "$rc" -eq 3 ]; then
+    # A step's own exit 3 means "the subject was not compared" — no network, or a
+    # registry that could not be read. It is counted and named, never reported as a
+    # pass: a check that did not run is not evidence.
+    printf '⏭ %s (%ss) — NOT COMPARED (exit 3): %s\n' \
+      "$name" "$(( $(date +%s) - start ))" "$(grep -E '^⚠' "$log" | head -1)"
+    SKIPPED_STEPS="$SKIPPED_STEPS
+  - $name"
+    SKIPPED_COUNT=$(( SKIPPED_COUNT + 1 ))
+    return 0
+  fi
+  if [ "$rc" -eq 0 ]; then
     local elapsed detail=""
     elapsed="$(( $(date +%s) - start ))"
     if [ "$subject" = "pytest" ]; then
@@ -140,6 +153,11 @@ job_rust() {
     'bash scripts/check-release.sh --self-test'
   run "release: the runner's tag shape (checkout rewrites refs/tags/<tag>)" . \
     'bash scripts/check-tag-shape.sh'
+  # The documents state what each channel serves, once and machine-readably; this
+  # compares them against the registries. Exit 3 is "not compared" (no network), which
+  # the runner reports as a skip rather than a pass.
+  run "release: every document states the version its channel serves" . \
+    'bash scripts/check-release.sh --verify-docs'
   run "repo: every workflow file parses (a file GitHub cannot load gates nothing)" . \
     'bash scripts/check-workflows.sh --self-test && bash scripts/check-workflows.sh'
   run "repo: documents state the agreement in use (CLA, not DCO)" . \

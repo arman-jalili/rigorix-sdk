@@ -42,15 +42,31 @@ rigorix-governed once v0 lands (dogfood demo #2).
 - [x] ADR-017 / consequence-gating §4.3 — `rigorix.audit.authorityFacts` + `api/authority-fact-bundle.json` (SDK #44)
 - [x] SSE push channel — ADR-0002 + `events.json` + fixtures
 - [x] ADR-016 integrity contract — `api/history-slice.json`, `api/ledger-receipt.json`, `api/compaction-checkpoint.json`
-- [x] `rust/` **0.9.0** (`rigorix-schemas`, `rigorix-verifier`, `rigorix-client`) — published to crates.io, npm, PyPI and Maven Central (all four verifier channels at 0.9.0)
-- [ ] **0.10.0** — the release that carries the in-process gate: the tree is at
-  0.10.0, the channels serve 0.9.0, and `scripts/check-release.sh` reports both
-  facts. Publication is blocked on the Actions billing entitlement, so no tag
-  exists for it yet (see [docs/publication-readiness.md](docs/publication-readiness.md)).
+- [x] **0.10.0** — the release that carries the in-process gate. The tree, the three
+  tags (`v0.10.0`, `go/v0.10.0`, `rust-v0.10.0`) and every channel agree, and
+  `bash scripts/check-release.sh --verify-published` proves it against the registries
+  rather than against the tree (see [docs/publication-readiness.md](docs/publication-readiness.md)).
+
+What each coordinate serves is stated **once**, below. The prose elsewhere says "the
+published version" rather than repeating a number that a release moves:
+`bash scripts/check-release.sh --verify-docs` fails when a document here disagrees with
+the channel it describes.
+
+<!-- published: crates=0.10.0 pypi=0.10.0 npm=0.10.0 maven=0.10.0 go=0.10.0 -->
+
+| channel | coordinate | published | carries the in-process gate |
+|---|---|---|---|
+| crates.io | `rigorix-schemas`, `rigorix-verifier` | the published version | — verifier core; the gate ships in the Python and Go packages |
+| PyPI | `rigorix-verifier` | the published version | **yes** — `rigorix_verifier.binding` and a vendored `rigorix_gate_wasi.wasm` |
+| npm | `rigorix-verifier` | the published version | no (the package claims no binding) |
+| npm | `rigorix-client` | 0.8.0 | independent cadence, by design |
+| Maven Central | `eu.rigorix:rigorix-verifier` | the published version | no (by design) |
+| Go module proxy | `…/rigorix-sdk/go` | the published version | **yes** — `go/gate/`, same vendored artifact |
 - [x] Python / TypeScript / Java / Go verifiers + catalog clients — fixtures green in each language
 
-*Last verified: 2026-11-10 against `rigorix-oss` `v1.14.3` (the gate artifact the
-vendored copies hash to).*
+*Last verified: 2026-11-11 against `rigorix-oss` `v1.14.3` (the gate artifact the
+vendored copies hash to) and against every channel above, by
+`scripts/check-release.sh --verify-published` and `--verify-docs`.*
 
 ## Development
 

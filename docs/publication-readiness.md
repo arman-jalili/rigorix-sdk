@@ -8,7 +8,9 @@ a chat log.
 
 | question | answer | evidence |
 |---|---|---|
-| are the artefacts already public? | **yes** | `rigorix-schemas`, `rigorix-verifier`, `rigorix-client` on crates.io; `rigorix-verifier` 0.9.0 on npm, PyPI and Maven Central |
+| are the artefacts already public? | **yes** | `rigorix-schemas` and `rigorix-verifier` on crates.io; `rigorix-verifier` on npm, PyPI, Maven Central and the Go module proxy — the version is stated once, below |
+
+<!-- published: crates=0.10.0 pypi=0.10.0 npm=0.10.0 maven=0.10.0 go=0.10.0 -->
 | is the contract already public? | **yes** | `cargo package --list -p rigorix-schemas` publishes `schemas/api/effect-record.json`, `authority-fact-bundle.json`, `catalog.json`, `errors.json` |
 | any private dependency? | **no** | no `git =` deps, no private registry, no `.npmrc` |
 | any enterprise-only code? | **no** | one comment in `go/client/catalog.go` names an enterprise surface; the code is the public catalog |
@@ -208,6 +210,83 @@ allow-listed with a reason each: they exist to name what was replaced.
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## Five channels, and a release that leaves no document false (#119, #120, #121)
+
+The 0.10.0 run published to four coordinates and the gate never asked about the fifth.
+Three things were wrong with the *gate's* idea of the release, and all three are now
+measured rather than assumed.
+
+### The channel set is five (#120)
+
+`ALL_CHANNELS="crates pypi npm maven go"`, one definition, both loops and `--channels`
+derived from it — so a sixth channel cannot be added to one and forgotten in the other.
+Go is read from the proxy's own metadata like every other channel:
+
+```
+✅ go serves 0.10.0 — gate/ present, wasm ab77bb82…
+✅ published: crates,pypi,npm,maven,go serve(s) 0.10.0
+```
+
+The `gate/` count and the wasm digest come from the **zip the proxy serves**, and the
+expected digest is read from `go/gate/testdata/PROVENANCE.md` — one copy of the fact,
+not a second literal in the gate.
+
+Two asymmetries are stated instead of hidden:
+
+* **Preflight does not ask Go**, because `go/v<version>` is served the moment the tag
+  is pushed: the question "is it unpublished" has no answer there. It prints
+  `unpublished on crates, pypi, npm, maven (go: tag-driven, verified after upload)`.
+* **A Go 404 is not an answer.** The proxy returns the same 404 for "no such version"
+  and "cannot fetch", so it is reported as `unverified`, naming the coordinate. A
+  registry that lists versions still answers 404 as "not published here".
+
+A run that was asked about a subset is not a green total: it names each channel it did
+not verify **with the observable that would settle it**, and exits 3.
+
+```
+⚠ 4 of 5 verified; 1 not verified (crates: cargo publish)
+```
+
+### The checks can be re-run (#121)
+
+A `workflow_dispatch` used to *skip* both post-release checks and *run* the uploads —
+so the defects the first release found had to be fixed blind, and a dispatch could not
+reach them anyway: the preflight ran, and at that tree it fails by design, because
+0.10.0 is published.
+
+| job | push | dispatch |
+|---|---|---|
+| `preflight` | runs | **skipped** — its subject is a version about to be uploaded |
+| `python`, `npm-verifier`, `npm-client`, `maven` | run | **skipped** — a dispatch must never re-upload an immutable version |
+| `smoke`, `verify-published` | run | **run**, on `inputs.tag` (default: the newest `v*`) |
+
+The checks no longer inherit `needs:` from jobs a dispatch skips — a job whose needs
+are skipped is skipped too, which is how they became unreachable.
+
+### A release's definition of done contains a document (#119)
+
+Four files said the registries served 0.9.0 while every one of them served 0.10.0.
+Nothing failed, because nothing compared a document's claim with the registry's answer.
+
+Each document now states a published version **once**, on a machine-readable line next
+to the claim:
+
+```
+<!-- published: pypi=0.10.0 npm=0.10.0 maven=0.10.0 go=0.10.0 crates=0.10.0 -->
+```
+
+and the prose says "the published version". `--verify-docs` reads every marker in
+every tracked `.md`, asks each channel what it serves **now** (`registry_latest`, not
+`registry_has`: an old version is still served forever, so only the latest can see a
+stale claim), and fails with the file, the line and both versions:
+
+```
+❌ python/README.md:58 says 0.9.0 for pypi, but pypi serves 0.10.0
+```
+
+No network is exit 3 — "not compared", never a green line. `local-ci` reports a step
+that exits 3 as `⏭ NOT COMPARED` and counts it, so the gate's own verdict says so.
+
 ## The 0.10.0 release: what published, and the two defects it found (2026-11-11)
 
 `v0.10.0` was pushed at `56ad028` after the tag fix (#116), and the workflow ran to
@@ -247,7 +326,11 @@ rigorix-verifier==0.10.0` now yields `rigorix_verifier.binding` and the vendored
    (`--channels pypi,npm,maven`), names the one it did not verify, and prints the
    manual commands for crates instead of pretending to gate them.
 
-**Outstanding, and not claimed:** crates.io does not serve `0.10.0`.
+**Crates — since resolved:** the manual step was performed after that run, and
+crates.io now serves `0.10.0` for `rigorix-schemas` and `rigorix-verifier`
+(`max_stable_version`: `0.10.0`). All five channels serve 0.10.0.
+
+**Outstanding at the time of that run, and not claimed then:** crates.io did not serve `0.10.0`.
 
 ```bash
 cargo publish -p rigorix-schemas --token "$CRATES_TOKEN"
@@ -318,9 +401,12 @@ fixture remote is refused as `lightweight on the remote`.
 Nothing was published during either failure — no channel took a byte — so `0.10.0` is
 unspent and the tag did not need to be re-pushed.
 
-## The in-process gate is in the tree and on no channel (#102)
+## The in-process gate is in the tree and on no channel (#102) — history, superseded
 
-Measured against the registries, not the tree:
+Measured against the registries at the time of that issue, not the tree. **These rows
+are history**: 0.10.0 has since been published on all five channels (see the 0.10.0
+section above), and the table is kept because it is the evidence the release was
+designed against.
 
 | coordinate | serves | carries the in-process gate |
 |---|---|---|
