@@ -165,17 +165,19 @@ jobs:
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
 
-      # Symbol-level scan: a vulnerable function the code actually reaches fails
-      # the build; an advisory in an unused path does not.
-      - name: govulncheck ./... (called vulnerabilities fail the build)
+      # One owner for the policy (#112): a finding whose fix is inside the declared
+      # minor fails and names the patch; a finding fixed only in a later minor is
+      # reported with the version it needs and does not fail. A gate that is red for
+      # something the branch cannot fix teaches people to ignore it.
+      - name: govulncheck policy (self-test, then the scan)
         run: |
-          "$(go env GOPATH)/bin/govulncheck" ./...
+          python3 ../scripts/govulncheck.py --self-test
+          python3 ../scripts/govulncheck.py
 
-      # Uncalled advisories are reported, not swallowed: a change in the module
-      # graph's advisory set is visible in the log without being a red build.
-      - name: module scope (informational)
-        run: |
-          "$(go env GOPATH)/bin/govulncheck" -scan=module || true
+      # The Monday run is what keeps the floor current: a patch published since the
+      # last merge cannot be known to a pull request. It reports and opens nothing.
+      - name: stale-floor watch (reports, never fails)
+        run: python3 ../scripts/govulncheck.py --check-floor
 
       - name: the seed — a planted vulnerable dependency must fail
         run: |

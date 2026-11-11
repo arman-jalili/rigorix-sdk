@@ -50,11 +50,13 @@ jobs:
       # A release's identity, proven offline: the three cases are fixtures, so a
       # pull request does not ask four registries about a version it is not releasing.
       - name: Release checks can refuse (published version, wrong tag, split manifests)
+        working-directory: .
         run: bash scripts/check-release.sh --self-test
 
       # `audit.yml` did not parse for four merges: `run: "$(cmd)" args` is a quoted
       # scalar followed by junk. Nothing loaded the file, so nothing said so.
       - name: Every workflow file parses
+        working-directory: .
         run: |
           python3 -m pip install --quiet pyyaml
           bash scripts/check-workflows.sh --self-test
@@ -64,6 +66,7 @@ jobs:
       # "DCO sign-off" (#97). This reads the fact: the canonical agreement comes
       # from docs/CLA.md, and a document that names another one fails.
       - name: Documents state the agreement in use
+        working-directory: .
         run: |
           bash scripts/check-agreement.sh --self-test
           bash scripts/check-agreement.sh
