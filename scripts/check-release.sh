@@ -35,6 +35,9 @@ TREE="$ROOT"
 MODE="preflight"
 TAG=""
 FIXTURES=""
+# Which coordinates this run is responsible for. `publish.yml` publishes PyPI, npm and
+# Maven; the crates are published by hand, so requiring them there waits forever.
+CHANNELS="crates,pypi,npm,maven"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -43,6 +46,7 @@ while [ $# -gt 0 ]; do
     --tag) TAG="$2"; shift ;;
     --root) TREE="$2"; shift ;;
     --fixtures) FIXTURES="$2"; shift ;;
+    --channels) CHANNELS="$2"; shift ;;
     *) echo "check-release: unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -317,10 +321,17 @@ preflight() {
 }
 
 verify_published() {
-  local version channel answer missing=0
+  local version channel answer missing=0 not_verified=0
   version="$(release_version)"
   tag_verdict "$version"
   for channel in crates pypi npm maven; do
+    case ",$CHANNELS," in
+      *",$channel,"*) ;;
+      *)
+        printf '⚠ %s not verified by this run (not in --channels %s)\n' "$channel" "$CHANNELS"
+        not_verified=$((not_verified + 1))
+        continue ;;
+    esac
     answer="$(registry_has "$channel" "$version")"
     if [ -z "$answer" ]; then
       unverified "the $channel registry could not be read for $version"
@@ -332,8 +343,13 @@ verify_published() {
     fi
   done
   [ "$missing" -eq 0 ] || fail "$missing channel(s) do not serve $version — the release is partial"
-  pypi_surface "$version" >/dev/null && echo "✅ PyPI wheel: carries binding/ and the vendored artifact"
-  echo "✅ published: every channel serves $version"
+  case ",$CHANNELS," in
+    *",pypi,"*) pypi_surface "$version" >/dev/null &&
+      echo "✅ PyPI wheel: carries binding/ and the vendored artifact" ;;
+  esac
+  printf '✅ published: %s serve(s) %s' "$CHANNELS" "$version"
+  [ "$not_verified" -eq 0 ] || printf ' (%d channel(s) not verified by this run)' "$not_verified"
+  printf '\n'
 }
 
 self_test() {
@@ -500,11 +516,33 @@ self_test() {
   expect_fail "wheel without binding/" "carries no rigorix_verifier/binding/" \
     "$tmp/surface" "$tmp/surface/fixtures" verify_published
 
+  # 11. a channel outside --channels is named as not verified, not counted missing.
+  #     `publish.yml` publishes three of the four; requiring crates there waited
+  #     forever on the first real release.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/subset" 0.10.0; absent "$tmp/subset"
+  printf '{"releases": {"0.10.0": []}}\n' >"$tmp/subset/fixtures/pypi.json"
+  printf '{"versions": {"0.10.0": {}}}\n' >"$tmp/subset/fixtures/npm.json"
+  printf '<metadata><versioning><versions><version>0.10.0</version></versions></versioning></metadata>\n' \
+    >"$tmp/subset/fixtures/maven.xml"
+  printf 'rigorix_verifier/binding/__init__.py\nrigorix_verifier/_wasm/rigorix_gate_wasi.wasm\n' \
+    >"$tmp/subset/fixtures/wheel-entries.txt"
+  cases=$((cases + 1))
+  if out="$( TREE="$tmp/subset" FIXTURES="$tmp/subset/fixtures" CHANNELS="pypi,npm,maven" verify_published 2>&1 )"; then
+    case "$out" in
+      *"⚠ crates not verified by this run"*) : ;;
+      *) echo "❌ self-test [channel subset]: passed without naming the channel it skipped"
+         printf '%s\n' "$out" | tail -3; failures=$((failures + 1)) ;; esac
+  else
+    echo "❌ self-test [channel subset]: refused — crates was counted missing though it was out of scope"
+    printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+  fi
+
   if [ "$failures" -gt 0 ]; then
     echo "❌ check-release self-test: $failures of $cases case(s) wrong"
     return 1
   fi
-  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote"
+  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag on the remote, an unreadable object, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release and the harness's rewritten ref pass, naming the remote; a channel outside --channels is named, not counted missing"
   return 0
 }
 
