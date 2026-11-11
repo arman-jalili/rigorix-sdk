@@ -58,17 +58,25 @@ version, err := c.Version(context.Background()) // *VersionMismatchError for a m
 (24 methods, none invented); `AssertNoRawStepExecution` keeps the governed-flow
 invariant. `TestLiveVersion` runs when `RIGORIX_SERVER_URL` is set.
 
-## Status: the gate is in this repository, not on a tag yet
+## Status: the published module carries the gate
 
 The module is a tag-only coordinate, so what a consumer gets depends on the tag.
-`go/v0.9.0` has **no `go/gate/`**; the tree at `0.10.0` does. Until `go/v0.10.0`
-is pushed, `go get github.com/arman-jalili/rigorix-sdk/go` resolves to the tag a
-consumer already has, and the import below does not exist there. Verify with:
+The release tag carries `go/gate/`, and `go get github.com/arman-jalili/rigorix-sdk/go`
+resolves to it — the proxy's `.zip` for the published version contains twelve files
+under `gate/` and the same vendored `rigorix_gate_wasi.wasm` the other channels carry.
+Verify with:
+
+<!-- published: go=0.10.0 -->
 
 ```bash
-git ls-tree -r --name-only go/v0.9.0 | grep -c '^go/gate/'     # 0
-git ls-tree -r --name-only HEAD     | grep -c '^go/gate/'     # 12
+git ls-tree -r --name-only "$(git describe --tags --abbrev=0 --match 'go/v*')" \
+  | grep -c '^go/gate/'                                        # 12 at the release tag
+git ls-tree -r --name-only go/v0.9.0  | grep -c '^go/gate/'    # 0 — that tag predates the gate
 ```
+
+`go/v0.9.0` is named only as history: the version above the commands is the one a
+consumer gets, and `scripts/check-release.sh --verify-published` opens the proxy's
+zip and fails when `gate/` or the pinned artifact is missing from it.
 
 ## In-process gate (`go/gate`)
 

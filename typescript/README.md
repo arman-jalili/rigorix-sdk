@@ -13,8 +13,10 @@ protocol-only** verifier for Node **and the browser**. No engine dependency.
 
 ## Install
 
+<!-- published: npm=0.10.0 -->
+
 ```bash
-npm install rigorix-verifier@0.9.0   # published artifact (embedded corpus)
+npm install rigorix-verifier         # the published version (embedded corpus)
 npm install && npm run build          # from source
 ```
 
