@@ -290,6 +290,42 @@ symbol` and the branch push produced a **zero-job** failure. `check-workflows.sh
 requires balanced quotes on every `if:`/`${{ }}` line, refuses that exact line by file
 and line number, and the real defect was put back to watch it bite.
 
+### The workflow's two copies, and the smoke's two subjects (#127, #129)
+
+**The resolver was written twice.** `smoke` and `verify-published` each carried the same
+fifteen lines — which tag (`v0.10.0` on a tag push, else the newest `v*` fetched with
+`--force`), which channels (the dispatch input, else the three this workflow publishes),
+and what it prints. Three decisions, two copies, and the site of a defect the same week
+(#121). A change to one copy would have left the other asserting an older set, with both
+runs green for different reasons.
+
+It is now `scripts/resolve-release.sh`, called by both jobs, and it is a script rather
+than a composite action because every failure it has had is a harness condition: a
+dispatch from a branch, a named tag that is not in the clone, a clone with no tags at all.
+Its `--self-test` builds those three states in scratch repositories and asserts the exact
+answers (9 cases) — including that a named-but-absent tag is fetched, because the next
+step reads that tag's tree. The fallback set is one constant, `PUBLISHED_CHANNELS`,
+beside the uploads it describes; the dispatch input's default is now empty so the
+constant is what a plain dispatch gets.
+
+**The smoke's second subject was the branch.** The npm step installed
+`rigorix-verifier@$tag` (the release) next to `rigorix-client@$client_ver` read from
+`$GITHUB_WORKSPACE/typescript-client/package.json` — the *working tree*, which on a
+dispatch is a branch. Today the two coincide, so the coupling was invisible; the first
+time the client is bumped on `main` before `client-vX` is published, a dispatch verifying
+an older verifier release would install a version npm does not serve and fail for a reason
+that has nothing to do with the release under test. Same shape as the earlier lesson: the
+tree agreeing with itself is not the artifact agreeing with the contract.
+
+Both coordinates now come from the release's own tree —
+`git show "$tag:typescript-client/package.json"` — and the step prints which:
+
+    installing rigorix-verifier@<tag version> from tag <tag>;
+    rigorix-client@<that tag's client version> from <tag>:typescript-client/package.json
+
+A client version the registry cannot serve now fails naming that coordinate and both
+facts, instead of a bare `ETARGET`.
+
 ### The document gate covers what nobody opted in, and runs before the uploads (#124, #125)
 
 Two defects, both in the guard #119 added, and both of the same shape: **the guard's
@@ -336,8 +372,8 @@ version:
 
 Both are wired: `publish.yml`'s preflight runs `--expect "$(check-release.sh
 --print-version)"` beside `--tag`, and `verify-published` keeps the registry form. The
-acceptance for the first is offline — `--verify-docs --expect 0.9.0` at this tree exits 1
-naming each document that states 0.10.0.
+acceptance for the first is offline — `--verify-docs --expect <an older version>` at this
+tree exits 1 naming each document that states the current one.
 
 ### A release's definition of done contains a document (#119)
 

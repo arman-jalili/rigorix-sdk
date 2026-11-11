@@ -35,9 +35,15 @@ on:
         required: false
         default: ""
       channels:
-        description: "Channels to verify, comma-separated"
+        # Empty means "the channels this workflow publishes" — one constant in
+        # `scripts/resolve-release.sh`, next to the upload jobs it describes, so the
+        # fallback cannot drift from them (#127). crates is `cargo publish` by hand and
+        # Go is served by the tag itself, so asking about either is explicit:
+        # `-f channels=crates,pypi,npm,maven,go` (a release's definition of done covers
+        # all five; the workflow only uploads three).
+        description: "Channels to verify, comma-separated (empty = pypi,npm,maven)"
         required: false
-        default: "crates,pypi,npm,maven,go"
+        default: ""
 
 permissions:
   contents: read
@@ -324,29 +330,22 @@ jobs:
         with:
           # `git describe --tags` needs the tags; a shallow clone has none.
           fetch-depth: 0
-      # On a dispatch the ref is a branch, so the tag is an input (default: the newest
-      # `v*`). On a push it is the pushed tag. The channel list is the dispatch input,
-      # or the three the workflow uploads — crates is published by hand, so requiring
-      # it on a tag push would be a red run for a step no job here performs.
+      # Which release, and which channels — one definition, in `scripts/resolve-release.sh`
+      # (#127). It was two byte-identical copies here, whose three decisions (the tag, the
+      # channel fallback, what is printed) could diverge silently; it is a script rather
+      # than a composite action so it can be tested outside Actions.
       - name: Resolve the tag and channels
         id: resolve
         env:
           INPUT_TAG: ${{ inputs.tag }}
           INPUT_CHANNELS: ${{ inputs.channels }}
         run: |
-          if [ -z "$INPUT_TAG" ]; then
-            if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
-              # The pushed tag, not the newest one: `git describe` would answer with a
-              # later tag than the run was started for.
-              INPUT_TAG="$GITHUB_REF_NAME"
-            else
-              git fetch --force --tags --quiet origin '+refs/tags/*:refs/tags/*'
-              INPUT_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
-            fi
-          fi
-          echo "tag=$INPUT_TAG" >>"$GITHUB_OUTPUT"
-          echo "channels=${INPUT_CHANNELS:-pypi,npm,maven}" >>"$GITHUB_OUTPUT"
-          echo "checking $INPUT_TAG (channels: ${INPUT_CHANNELS:-pypi,npm,maven})"
+          bash scripts/resolve-release.sh \
+            --event "$GITHUB_EVENT_NAME" \
+            --ref-name "$GITHUB_REF_NAME" \
+            --input-tag "$INPUT_TAG" \
+            --input-channels "$INPUT_CHANNELS" \
+            --github-output "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5
         with:
@@ -389,11 +388,30 @@ jobs:
           # job does not re-publish: it only installs.
           # `rigorix-client` is an independent cadence, versioned and published on its
           # own `client-v` tag — so `@$tag` asked npm for a version that will never
-          # exist. The client is installed at the version this tree declares, which is
-          # what "the two packages install together" actually means.
-          client_ver="$(node -p "require('$GITHUB_WORKSPACE/typescript-client/package.json').version")"
-          "$GITHUB_WORKSPACE/.github/scripts/wait-for-registry.sh" npm \
-            npm install "rigorix-verifier@$tag" "rigorix-client@$client_ver" --no-audit --no-fund --prefer-online
+          # exist. The replacement was wrong in the other direction: it read the version
+          # from the *working tree*, which on a dispatch is a branch, so a check about an
+          # old release would install a version npm does not serve, for a reason that has
+          # nothing to do with the release under test (#129). Both coordinates now come
+          # from the release's own tree, and the step says which.
+          # `git -C`, not `git`: this step already `cd`-ed into `$RUNNER_TEMP/npm`, so a
+          # bare `git show` ran outside the repository and failed for a reason that had
+          # nothing to do with the release. Found by dispatching on a branch whose client
+          # version differs from the tag's — the shape #129 was filed about.
+          client_json="$(git -C "$GITHUB_WORKSPACE" show "${TAG_NAME}:typescript-client/package.json" 2>&1)" || {
+            echo "❌ could not read ${TAG_NAME}:typescript-client/package.json — the release's own tree is the subject:" >&2
+            printf '%s\n' "$client_json" >&2
+            exit 1
+          }
+          client_ver="$(printf '%s' "$client_json" | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).version')" || {
+            echo "❌ ${TAG_NAME}:typescript-client/package.json carries no parseable version — a client coordinate with no version cannot be installed" >&2
+            exit 1
+          }
+          echo "installing rigorix-verifier@$tag from tag ${TAG_NAME}; rigorix-client@${client_ver} from ${TAG_NAME}:typescript-client/package.json"
+          if ! "$GITHUB_WORKSPACE/.github/scripts/wait-for-registry.sh" npm \
+            npm install "rigorix-verifier@$tag" "rigorix-client@$client_ver" --no-audit --no-fund --prefer-online; then
+            echo "❌ npm could not serve rigorix-client@${client_ver}, which is what ${TAG_NAME}:typescript-client/package.json declares — the release and the registry disagree about this coordinate, or the client has not been published at that version" >&2
+            exit 1
+          fi
           unset RIGORIX_SDK_SCHEMAS
           node smoke.mjs
 
@@ -411,29 +429,22 @@ jobs:
         with:
           fetch-depth: 0
 
-      # On a dispatch the ref is a branch, so the tag is an input (default: the newest
-      # `v*`). On a push it is the pushed tag. The channel list is the dispatch input,
-      # or the three the workflow uploads — crates is published by hand, so requiring
-      # it on a tag push would be a red run for a step no job here performs.
+      # Which release, and which channels — one definition, in `scripts/resolve-release.sh`
+      # (#127). It was two byte-identical copies here, whose three decisions (the tag, the
+      # channel fallback, what is printed) could diverge silently; it is a script rather
+      # than a composite action so it can be tested outside Actions.
       - name: Resolve the tag and channels
         id: resolve
         env:
           INPUT_TAG: ${{ inputs.tag }}
           INPUT_CHANNELS: ${{ inputs.channels }}
         run: |
-          if [ -z "$INPUT_TAG" ]; then
-            if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
-              # The pushed tag, not the newest one: `git describe` would answer with a
-              # later tag than the run was started for.
-              INPUT_TAG="$GITHUB_REF_NAME"
-            else
-              git fetch --force --tags --quiet origin '+refs/tags/*:refs/tags/*'
-              INPUT_TAG="$(git describe --tags --abbrev=0 --match 'v[0-9]*')"
-            fi
-          fi
-          echo "tag=$INPUT_TAG" >>"$GITHUB_OUTPUT"
-          echo "channels=${INPUT_CHANNELS:-pypi,npm,maven}" >>"$GITHUB_OUTPUT"
-          echo "checking $INPUT_TAG (channels: ${INPUT_CHANNELS:-pypi,npm,maven})"
+          bash scripts/resolve-release.sh \
+            --event "$GITHUB_EVENT_NAME" \
+            --ref-name "$GITHUB_REF_NAME" \
+            --input-tag "$INPUT_TAG" \
+            --input-channels "$INPUT_CHANNELS" \
+            --github-output "$GITHUB_OUTPUT"
 
       # The jobs above upload and stop. That is how 0.9.0 reached PyPI without the
       # `binding/` package and the vendored artifact while every local gate was
@@ -448,9 +459,19 @@ jobs:
           TAG_NAME: ${{ steps.resolve.outputs.tag }}
           CHANNELS_IN: ${{ steps.resolve.outputs.channels }}
         run: |
-          bash scripts/check-release.sh --verify-published \
-            --tag "$TAG_NAME" \
-            --channels "$CHANNELS_IN"
+          # Exit 3 is a *partial* verdict: the channels asked about serve the version and
+          # the rest were named with the command that would settle them. A dispatch that
+          # narrows the question deliberately — `-f channels=pypi,npm` — is exactly that
+          # case, so it is a warning here and not a red run; exit 1 (a channel that does
+          # not serve it) still fails.
+          rc=0
+          out="$(bash scripts/check-release.sh --verify-published --tag "$TAG_NAME" --channels "$CHANNELS_IN" 2>&1)" || rc=$?
+          printf '%s\n' "$out"
+          case "$rc" in
+            0) ;;
+            3) echo "::warning::partial verdict — the channels this run was not asked about are named above; pass -f channels=crates,pypi,npm,maven,go to ask about all five" ;;
+            *) exit "$rc" ;;
+          esac
 
       # A release's definition of done contained no document, which is how four files
       # came to say 0.9.0 while every channel served 0.10.0 (#119). A stale document
