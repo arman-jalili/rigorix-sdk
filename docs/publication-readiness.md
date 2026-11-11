@@ -208,6 +208,66 @@ allow-listed with a reason each: they exist to name what was replaced.
 with the header removed. The set is fixed in the script rather than discovered: a
 guard that infers its own subject can shrink with a refactor and still pass.
 
+## The preflight's subject is the remote's advertisement (#116)
+
+The release preflight could not pass inside the workflow that runs it, and it refused
+twice on a tag that was correctly annotated:
+
+```
+✅ manifests: one version, 0.10.0
+❌ tag v0.10.0 is lightweight — an annotated tag carries the tagger and the message …
+```
+
+The remote says otherwise:
+
+```
+$ git ls-remote --tags origin | grep 'v0.10.0$\|v0.10.0\^{}'
+e626544d…  refs/tags/v0.10.0
+ada4d6d3…  refs/tags/v0.10.0^{}
+```
+
+`actions/checkout` fetches the tag's **commit** into `refs/tags/<tag>` with `--no-tags`,
+so in the runner `git cat-file -t refs/tags/v0.10.0` is `commit`. Reproduced locally
+on a fresh clone — the annotation is only ever absent when the ref was created from
+the commit:
+
+```
+$ git clone --no-tags --depth 1 … /tmp/shape && cd /tmp/shape
+$ git fetch --no-tags origin +ada4d6d3…:refs/tags/v0.10.0
+$ git cat-file -t refs/tags/v0.10.0
+commit
+```
+
+Same class as #114: **the shape the workflow produces was never part of the subject**,
+because `.ci/local-ci.sh` runs against the refs the author pushed.
+
+Three changes follow, and one of them is about the message:
+
+| | before | now |
+|---|---|---|
+| the verdict's source | the local ref | the **remote's advertisement**; the local object is the fallback when the remote says nothing, and the verdict names which answered |
+| a ref pointing at a commit | reported as `lightweight` | reported as *a harness rewrite* when the remote holds the annotation (passes), and as that when it does not |
+| an unreadable object | reported as `lightweight` | reported as *unreadable*, with the command to inspect it |
+
+The misattribution is what cost two runs: `2>/dev/null` collapsed "the ref points at a
+commit" and "the object cannot be read" into one sentence that told the releaser to
+recreate a tag that was already right.
+
+`git ls-remote --tags <remote>` with **no pattern** prints the tag object and its
+peeled commit for an annotated tag, and one line for a lightweight one. With an
+explicit pattern git prints no peel line at all, so the pattern form cannot answer the
+question — measured, which is why the script reads the full list.
+
+`publish.yml` also restores the ref (`git fetch --force --no-tags origin
++refs/tags/<tag>:refs/tags/<tag>`) as belt and braces for anything else reading the
+local ref; the verdict does not depend on it. `scripts/check-tag-shape.sh` builds the
+runner's shape offline and runs as a `local-ci` step, so the class can be seen locally:
+the rewritten ref passes naming the remote, and a genuinely lightweight tag on the
+fixture remote is refused as `lightweight on the remote`.
+
+Nothing was published during either failure — no channel took a byte — so `0.10.0` is
+unspent and the tag did not need to be re-pushed.
+
 ## The in-process gate is in the tree and on no channel (#102)
 
 Measured against the registries, not the tree:

@@ -138,6 +138,8 @@ job_rust() {
     'bash scripts/check-spdx.sh --self-test && bash scripts/check-spdx.sh'
   run "release: the release checks can refuse (published version, wrong tag, split manifests)" . \
     'bash scripts/check-release.sh --self-test'
+  run "release: the runner's tag shape (checkout rewrites refs/tags/<tag>)" . \
+    'bash scripts/check-tag-shape.sh'
   run "repo: every workflow file parses (a file GitHub cannot load gates nothing)" . \
     'bash scripts/check-workflows.sh --self-test && bash scripts/check-workflows.sh'
   run "repo: documents state the agreement in use (CLA, not DCO)" . \
