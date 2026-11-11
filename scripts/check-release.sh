@@ -175,16 +175,65 @@ print("\n".join(zipfile.ZipFile(sys.argv[1]).namelist()))
   echo yes
 }
 
+# Four questions about the repository, not about this script's default. #110: the
+# first version compared `$TAG` (defaulted to `v$version`) with `v$version`, which
+# cannot fail — it printed "the tag agrees" on a tree with no tag anywhere.
+version_at() {
+  local ref="$1" path="$2" kind="$3" tmp
+  tmp="$(mktemp)"
+  if ! git -C "$TREE" show "$ref:$path" >"$tmp" 2>/dev/null; then
+    rm -f "$tmp"
+    echo ""
+    return 0
+  fi
+  read_version "$tmp" "$kind"
+  rm -f "$tmp"
+}
+
 tag_verdict() {
-  local version="$1"
+  local version="$1" commit tag found
   [ -n "$TAG" ] || TAG="v$version"
-  case "$TAG" in
-    "v$version") : ;;
-    *) fail "tag $TAG disagrees with the manifests ($version, $CRATES_MANIFEST) — the tag names the release, so it must be v$version" ;;
-  esac
-  printf '✅ tag: %s names the manifest version %s (' "$TAG" "$version"
-  printf '%s' "$CRATES_MANIFEST"
-  printf ')\n'
+
+  # 1. the tag exists.
+  git -C "$TREE" rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null ||
+    fail "tag $TAG does not exist — the release is tagged before it is published: git tag -a $TAG -m \"…\""
+
+  # 2. annotated, and it peels to a commit (a lightweight tag carries no tagger and
+  #    no message, so the release has no record of who made it or why).
+  [ "$(git -C "$TREE" cat-file -t "refs/tags/$TAG" 2>/dev/null)" = "tag" ] ||
+    fail "tag $TAG is lightweight — an annotated tag carries the tagger and the message a release is read from (git tag -a)"
+  commit="$(git -C "$TREE" rev-parse --verify --quiet "$TAG^{commit}")" ||
+    fail "tag $TAG does not peel to a commit"
+
+  local tagged="${TAG#rust-v}"; tagged="${tagged#go/v}"; tagged="${tagged#v}"
+
+  # 3. the four manifests *at that commit* name the version the tag names. The working tree is
+  #    not the subject: a release is the tree the tag points at.
+  local pair path kind at
+  for pair in "rust/Cargo.toml:toml" "python/pyproject.toml:toml" \
+              "typescript/package.json:json" "java/pom.xml:xml"; do
+    path="${pair%%:*}"; kind="${pair##*:}"
+    at="$(version_at "$TAG" "$path" "$kind")"
+    [ -n "$at" ] || fail "tag $TAG does not contain $path"
+    [ "$at" = "$tagged" ] ||
+      fail "tag $TAG points at a commit whose $path says $at, not $tagged — the tag names the release, so the tag and the manifests move together"
+  done
+
+  # 4. all three tags exist: the module layout needs them, so a release missing one is
+  #    not a release this repository can consume.
+  found=0
+  for tag in "v$version" "go/v$version" "rust-v$version"; do
+    if git -C "$TREE" rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+      found=$((found + 1))
+    else
+      printf '❌ tag %s is missing — a release needs v%s, go/v%s and rust-v%s together\n' \
+        "$tag" "$version" "$version" "$version" >&2
+    fi
+  done
+  [ "$found" -eq 3 ] || fail "only $found of 3 release tags exist"
+
+  printf '✅ tag: %s is annotated, peels to a commit, and the manifests at that commit say %s; go/v%s and rust-v%s exist too\n' \
+    "$TAG" "$version" "$version" "$version"
 }
 
 preflight() {
@@ -205,8 +254,7 @@ preflight() {
   [ "$published" -eq 0 ] ||
     fail "$published channel(s) already serve $version — a version means released content, so the release needs a new one"
 
-  echo "✅ preflight: $version is unpublished on every channel, and the tag agrees"
-  echo "   next: tag v$version, go/v$version and rust-v$version, then publish"
+  echo "✅ preflight: $version is unpublished on every channel, and its three tags agree"
 }
 
 verify_published() {
@@ -230,66 +278,111 @@ verify_published() {
 }
 
 self_test() {
-  local tmp failures=0 out version
-  tmp="$(mktemp -d)"
-  # shellcheck disable=SC2064
-  trap "rm -rf '$tmp' >/dev/null 2>&1 || true" EXIT
+  local tmp failures=0 cases=0 out before after
 
-  tree() {  # a clean tree at $1, version $2
-    mkdir -p "$1/rust" "$1/python" "$1/typescript" "$1/java" "$1/fixtures"
-    printf 'version = "%s"\n' "$2" >"$1/rust/Cargo.toml"
-    printf 'version = "%s"\n' "$2" >"$1/python/pyproject.toml"
-    printf '{"version": "%s"}\n' "$2" >"$1/typescript/package.json"
-    printf '<project>\n  <version>%s</version>\n</project>\n' "$2" >"$1/java/pom.xml"
+  # The verdicts are about a git repository, so the fixtures are repositories. A text
+  # fixture cannot answer "does this tag exist", which is why #110's version of this
+  # test passed on a tautology.
+  fixture() {  # fixture DIR VERSION [TAG_VERSION]
+    local dir="$1" version="$2" tag_version="${3:-$2}"
+    mkdir -p "$dir/rust" "$dir/python" "$dir/typescript" "$dir/java" "$dir/fixtures"
+    printf 'version = "%s"\n' "$version" >"$dir/rust/Cargo.toml"
+    printf 'version = "%s"\n' "$version" >"$dir/python/pyproject.toml"
+    printf '{"version": "%s"}\n' "$version" >"$dir/typescript/package.json"
+    printf '<project>\n  <version>%s</version>\n</project>\n' "$version" >"$dir/java/pom.xml"
+    git -C "$dir" init -q
+    git -C "$dir" -c user.email=self@test.invalid -c user.name=selftest add -A
+    git -C "$dir" -c user.email=self@test.invalid -c user.name=selftest commit -qm "fixture $version"
+    local tag
+    for tag in "v$tag_version" "go/v$tag_version" "rust-v$tag_version"; do
+      git -C "$dir" -c user.email=self@test.invalid -c user.name=selftest tag -a "$tag" -m "release $tag_version"
+    done
   }
-  absent() {  # fixtures where nothing serves the version
+  absent() {  # fixtures where no channel serves the version
     printf '{"versions": []}\n' >"$1/fixtures/crates.json"
     printf '{"releases": {}}\n' >"$1/fixtures/pypi.json"
     printf '{"versions": {}}\n' >"$1/fixtures/npm.json"
     printf '<metadata><versioning><versions><version>0.1.0</version></versions></versioning></metadata>\n' \
       >"$1/fixtures/maven.xml"
   }
+  expect_fail() {  # expect_fail LABEL WANTED_SUBSTRING TREE FIXTURES COMMAND
+    # The command is a shell function, so it is invoked in command position with the
+    # two variables as a temporary assignment (`TREE=… preflight`), not through `env`.
+    local label="$1" wanted="$2" tree="$3" fixtures="$4" command="$5"
+    cases=$((cases + 1))
+    if out="$( TREE="$tree" FIXTURES="$fixtures" "$command" 2>&1 )"; then
+      echo "❌ self-test [$label]: accepted"
+      failures=$((failures + 1))
+      return
+    fi
+    case "$out" in
+      *"$wanted"*) ;;
+      *) echo "❌ self-test [$label]: refused without naming it"
+         printf '%s\n' "$out" | tail -3
+         failures=$((failures + 1)) ;;
+    esac
+  }
 
-  # 1. a clean release passes
-  tree "$tmp/clean" 0.10.0; absent "$tmp/clean"
-  if out="$(TREE="$tmp/clean" FIXTURES="$tmp/clean/fixtures" preflight 2>&1)"; then
+  # 1. three annotated tags, a clean tree, nothing published: passes
+  tmp="$(mktemp -d)"
+  fixture "$tmp/ok" 0.10.0; absent "$tmp/ok"
+  cases=$((cases + 1))
+  if out="$(TREE="$tmp/ok" FIXTURES="$tmp/ok/fixtures" preflight 2>&1)"; then
     case "$out" in *"is unpublished on every channel"*) : ;;
-      *) echo "❌ self-test: the clean release passed without the verdict"; failures=$((failures + 1)) ;; esac
+      *) echo "❌ self-test [clean]: passed without the verdict"; failures=$((failures + 1)) ;; esac
   else
-    echo "❌ self-test: a clean release was refused"; printf '%s\n' "$out" | tail -3; failures=$((failures + 1))
+    echo "❌ self-test [clean]: a clean release was refused"; printf '%s\n' "$out" | tail -3
+    failures=$((failures + 1))
   fi
 
-  # 2. a version already on a channel fails, naming the channel
-  tree "$tmp/published" 0.10.0; absent "$tmp/published"
-  printf '{"releases": {"0.10.0": []}}\n' >"$tmp/published/fixtures/pypi.json"
-  if out="$(TREE="$tmp/published" FIXTURES="$tmp/published/fixtures" preflight 2>&1)"; then
-    echo "❌ self-test: an already-published version was accepted"; failures=$((failures + 1))
-  else
-    case "$out" in *"pypi already serves 0.10.0"*) : ;;
-      *) echo "❌ self-test: refused without naming the channel"; failures=$((failures + 1)) ;; esac
-  fi
+  # 2. no tag anywhere
+  tmp="$(mktemp -d)"
+  fixture "$tmp/notag" 0.10.0; absent "$tmp/notag"
+  git -C "$tmp/notag" tag -d v0.10.0 go/v0.10.0 rust-v0.10.0 >/dev/null
+  expect_fail "no tag" "does not exist" "$tmp/notag" "$tmp/notag/fixtures" preflight
 
-  # 3. a tag that disagrees with a manifest fails, naming both
-  tree "$tmp/tag" 0.10.0; absent "$tmp/tag"
-  if out="$(TREE="$tmp/tag" FIXTURES="$tmp/tag/fixtures" TAG=v0.9.0 preflight 2>&1)"; then
-    echo "❌ self-test: a tag that disagrees with the manifest was accepted"; failures=$((failures + 1))
-  else
-    case "$out" in *"tag v0.9.0 disagrees with the manifests (0.10.0"*) : ;;
-      *) echo "❌ self-test: the tag refusal did not name both"; printf '%s\n' "$out" | head -2; failures=$((failures + 1)) ;; esac
-  fi
+  # 3. only the v tag: the two the module layout needs are named as missing
+  tmp="$(mktemp -d)"
+  fixture "$tmp/partial" 0.10.0; absent "$tmp/partial"
+  git -C "$tmp/partial" tag -d go/v0.10.0 rust-v0.10.0 >/dev/null
+  expect_fail "one of three tags" "go/v0.10.0 is missing" "$tmp/partial" "$tmp/partial/fixtures" preflight
 
-  # 4. manifests that disagree fail, naming both files
-  tree "$tmp/split" 0.10.0
+  # 4. the tag names 0.10.0 but points at a commit whose manifests say 0.9.0; HEAD has
+  #    since moved to 0.10.0, so only the at-commit check can see it.
+  tmp="$(mktemp -d)"
+  fixture "$tmp/moved" 0.9.0 0.10.0; absent "$tmp/moved"
+  printf 'version = "0.10.0"\n' >"$tmp/moved/rust/Cargo.toml"
+  printf 'version = "0.10.0"\n' >"$tmp/moved/python/pyproject.toml"
+  printf '{"version": "0.10.0"}\n' >"$tmp/moved/typescript/package.json"
+  printf '<project>\n  <version>0.10.0</version>\n</project>\n' >"$tmp/moved/java/pom.xml"
+  git -C "$tmp/moved" -c user.email=self@test.invalid -c user.name=selftest commit -qam "bump to 0.10.0"
+  expect_fail "tag on another version" "says 0.9.0, not 0.10.0" \
+    "$tmp/moved" "$tmp/moved/fixtures" preflight
+
+  # 5. a lightweight tag carries no record
+  tmp="$(mktemp -d)"
+  fixture "$tmp/light" 0.10.0; absent "$tmp/light"
+  git -C "$tmp/light" tag -d v0.10.0 go/v0.10.0 rust-v0.10.0 >/dev/null
+  for tag in v0.10.0 go/v0.10.0 rust-v0.10.0; do git -C "$tmp/light" tag "$tag"; done
+  expect_fail "lightweight tag" "is lightweight" "$tmp/light" "$tmp/light/fixtures" preflight
+
+  # 6. a version already served by a channel
+  tmp="$(mktemp -d)"
+  fixture "$tmp/pub" 0.10.0; absent "$tmp/pub"
+  printf '{"releases": {"0.10.0": []}}\n' >"$tmp/pub/fixtures/pypi.json"
+  expect_fail "already published" "pypi already serves 0.10.0" \
+    "$tmp/pub" "$tmp/pub/fixtures" preflight
+
+  # 7. manifests that disagree with each other
+  tmp="$(mktemp -d)"
+  fixture "$tmp/split" 0.10.0; absent "$tmp/split"
   printf 'version = "0.9.0"\n' >"$tmp/split/python/pyproject.toml"
-  if out="$(TREE="$tmp/split" FIXTURES="$tmp/split/fixtures" preflight 2>&1)"; then
-    echo "❌ self-test: disagreeing manifests were accepted"; failures=$((failures + 1))
-  else
-    case "$out" in *"python/pyproject.toml"*) : ;;
-      *) echo "❌ self-test: the manifest refusal did not name the file"; failures=$((failures + 1)) ;; esac
-  fi
+  expect_fail "split manifests" "python/pyproject.toml" \
+    "$tmp/split" "$tmp/split/fixtures" preflight
 
-  # 5. the PyPI surface check catches the 0.9.0 defect: a wheel with no binding/
-  tree "$tmp/surface" 0.10.0; absent "$tmp/surface"
+  # 8. the published wheel lacks the surface the README names (the 0.9.0 defect)
+  tmp="$(mktemp -d)"
+  fixture "$tmp/surface" 0.10.0; absent "$tmp/surface"
   printf 'rigorix_verifier/__init__.py\nrigorix_verifier/client/__init__.py\n' \
     >"$tmp/surface/fixtures/wheel-entries.txt"
   printf '{"releases": {"0.10.0": []}}\n' >"$tmp/surface/fixtures/pypi.json"
@@ -297,18 +390,14 @@ self_test() {
   printf '{"num": "0.10.0"}\n' >"$tmp/surface/fixtures/crates.json"
   printf '<metadata><versioning><versions><version>0.10.0</version></versions></versioning></metadata>\n' \
     >"$tmp/surface/fixtures/maven.xml"
-  if out="$(TREE="$tmp/surface" FIXTURES="$tmp/surface/fixtures" verify_published 2>&1)"; then
-    echo "❌ self-test: a wheel without binding/ passed the published check"; failures=$((failures + 1))
-  else
-    case "$out" in *"carries no rigorix_verifier/binding/"*) : ;;
-      *) echo "❌ self-test: the surface refusal did not name the missing package"; printf '%s\n' "$out" | tail -2; failures=$((failures + 1)) ;; esac
-  fi
+  expect_fail "wheel without binding/" "carries no rigorix_verifier/binding/" \
+    "$tmp/surface" "$tmp/surface/fixtures" verify_published
 
   if [ "$failures" -gt 0 ]; then
-    echo "❌ check-release self-test: $failures case(s) wrong"
+    echo "❌ check-release self-test: $failures of $cases case(s) wrong"
     return 1
   fi
-  echo "✅ check-release self-test: a published version and a disagreeing tag are refused by name, a split manifest and a wheel without binding/ too, and a clean release passes"
+  echo "✅ check-release self-test: $cases cases — missing tag, partial tags, a tag on another version, a lightweight tag, an already-served version, split manifests, a wheel without binding/ — each refused by name; a clean release passes"
   return 0
 }
 
