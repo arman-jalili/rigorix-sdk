@@ -22,6 +22,30 @@ steps, in the order the gate permits, each with the check that enforces it — l
 [`../RELEASING.md`](../RELEASING.md) §Order (#133). Repeating it here produced two copies
 of a sequence that changed twice.
 
+The order is **checked**, not asserted: `scripts/walk-release.sh` walks the six steps
+against fixtures and a scratch bare remote, offline, and `.ci/local-ci.sh` runs it
+(#136). It also walks the order the runbook used to state, which the same gate refuses:
+
+```
+$ bash scripts/walk-release.sh --version 0.11.0
+▶ 1. documents state 0.11.0 …     ✅ refused before the documents are bumped → ✅ pass after
+▶ 2. tag v0.11.0 …                ✅ refused before the tag exists → ✅ preflight passes
+▶ 3. tag go/v0.11.0 …             ✅ advertised; ✅ the proxy's zip carries gate/
+▶ 4. the three channels …         ✅ exit 3 — partial by construction, and it says so
+▶ 5. crates, by hand, last …      ✅ refuses while unpublished → ✅ serves 0.11.0
+▶ 6. the complete question …      ✅ complete: 5 of 5 verified
+nothing reached the subject: origin still at v0.10.0/go/v0.10.0/rust-v0.10.0 (56ad028)
+
+$ bash scripts/walk-release.sh --order crates-first
+✅ refused, naming the channel: this is why §Order was reversed      (exit 1)
+```
+
+The last line is a guard, not a courtesy: the walk-through's first version left the
+clone's `origin` pointing at this repository and pushed three tags at it. The script's
+`origin` is a bare repository in its own temp directory, and an `EXIT` trap compares this
+repository's tags — locally, and on the real remote when it is reachable — before and
+after, on success and on failure. A planted tag makes it exit 1 naming the tag.
+
 ## Decision 1 — the history is accepted, not rewritten
 
 **Measured on 2026-11-11, at `dbc6ffe`.** Two scopes, because publishing exposes
