@@ -159,6 +159,14 @@ job_rust() {
   # from the clone, a clone with no tags) are testable without spending a run (#127).
   run "release: the tag-and-channel resolver (one definition, tested offline)" . \
     'bash scripts/resolve-release.sh --self-test'
+  # #133's acceptance was a walk-through that existed only as a transcript, and the
+  # transcript was produced by a harness that pushed three tags at this repository
+  # (#136). It is a script now: six steps against fixtures and a scratch bare remote,
+  # with a trap that compares this repository's tags before and after. The crates-first
+  # order is walked too, and must be refused — that is the test for the runbook's
+  # reversal.
+  run "release: the six-step order is executable, and the old order is refused" . \
+    'bash scripts/walk-release.sh && bash scripts/walk-release.sh --order crates-first --expect-refusal'
   run "release: the tag-shape harness tracks the tree's version" . \
     'bash scripts/check-tag-shape.sh --self-test && bash scripts/check-tag-shape.sh'
   # The documents state what each channel serves, once and machine-readably; this
