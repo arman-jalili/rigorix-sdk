@@ -606,6 +606,7 @@
     },
     "planTemplate": {
       "type": "object",
+      "description": "A plan template as a client SENDS it (rigorix.template.create / validate). `created_at` and `updated_at` are not request fields: the server stamps them on create, as the TOML path already does. The stored shape, with both timestamps required, is $defs/templateGetResult. Field sets are checked against the engine's type by rust/rigorix-verifier's `template_create_covers_engine_accepted_fields` (#138).",
       "required": [
         "name",
         "description",
@@ -617,6 +618,17 @@
         },
         "description": {
           "type": "string"
+        },
+        "version": {
+          "type": "string",
+          "description": "Template version (semver recommended). The engine defaults it to the empty string, so it is optional here."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Tags for categorisation and filtering. The engine defaults it to empty, so it is optional here."
         },
         "steps": {
           "type": "array",

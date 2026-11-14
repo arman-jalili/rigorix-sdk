@@ -1967,6 +1967,109 @@ mod tests {
         );
     }
 
+    // ─── Template create: the schema must be able to describe a payload ───
+    //
+    // #138: `$defs/planTemplate` set `additionalProperties: false` and omitted
+    // `version`, `tags` and the two timestamps. The engine accepts the first two
+    // and requires the last two, so *no* payload satisfied both — and every guard
+    // in this repository passed, because compiling a schema is not the same as
+    // agreeing with the type it describes.
+    //
+    // The subject here is the engine's own property sets, captured from the type
+    // at a dated commit (`schemas/fixtures/template/engine-accepted-shape.json`
+    // and its PROVENANCE). A `$ref` resolver cannot answer this: both documents
+    // were well-formed throughout.
+    #[test]
+    fn template_create_covers_engine_accepted_fields() {
+        let catalog: serde_json::Value =
+            serde_json::from_str(&schema_text("api/catalog.json").expect("catalog.json"))
+                .expect("catalog parses");
+        let shape: serde_json::Value =
+            serde_json::from_str(&fixture_text("template/engine-accepted-shape.json"))
+                .expect("engine-accepted-shape parses");
+        let defs = catalog["$defs"].as_object().expect("$defs object");
+        let captured = shape["engine_commit"].as_str().expect("engine_commit");
+
+        // (1) Every field the engine's request path accepts is declarable here.
+        //     `server_stamped` is the exception, and it is checked the other way
+        //     round in (2): the request type accepts them, the request schema must
+        //     not offer them.
+        for (def, node) in [("planTemplate", "plan"), ("stepDefinition", "step")] {
+            let props = defs[def]["properties"]
+                .as_object()
+                .unwrap_or_else(|| panic!("$defs/{def} has no properties"));
+            let accepted = shape[node]["accepted"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{node}.accepted"));
+            for field in accepted {
+                let field = field.as_str().expect("string");
+                assert!(
+                    props.contains_key(field),
+                    "$defs/{def} does not declare `{field}`, which the engine's type accepts \
+                     at {captured}: a client cannot send it (rigorix-sdk#138)"
+                );
+            }
+            for field in shape[node]["server_stamped"]
+                .as_array()
+                .expect("server_stamped")
+            {
+                let field = field.as_str().expect("string");
+                assert!(
+                    !props.contains_key(field),
+                    "$defs/{def} offers `{field}` as a request field, but the server stamps it \
+                     (rigorix-oss#1563): the schema would promise a field nobody reads"
+                );
+                assert!(
+                    !defs[def]["required"]
+                        .as_array()
+                        .expect("required")
+                        .iter()
+                        .any(|r| r.as_str() == Some(field)),
+                    "$defs/{def} requires the server-stamped `{field}`"
+                );
+            }
+        }
+
+        // (2) The fixture is a payload the documented schema accepts — built from
+        //     `$defs/templateCreateParams`, not from the response shape.
+        let payload = fixture_text("template/create-request.json");
+        let mut wrapper = serde_json::Map::new();
+        wrapper.insert("$defs".into(), catalog["$defs"].clone());
+        wrapper.insert(
+            "$ref".into(),
+            serde_json::json!("#/$defs/templateCreateParams"),
+        );
+        // Built through the same helper as every other schema test, so the `$defs`
+        // graph's cross-file `$ref`s (claims.json) resolve offline.
+        let compiled = build_validator("api/catalog.json", &serde_json::Value::Object(wrapper))
+            .expect("templateCreateParams compiles");
+        let instance: serde_json::Value = serde_json::from_str(&payload).expect("fixture parses");
+        let errors: Vec<String> = compiled
+            .iter_errors(&instance)
+            .map(|e| e.to_string())
+            .collect();
+        assert!(
+            errors.is_empty(),
+            "the documented create payload does not validate against \
+             $defs/templateCreateParams: {errors:?}"
+        );
+
+        // (3) The step level stays in sync too, and the fixture exercises it:
+        //     every step carries both booleans the engine requires.
+        let steps = instance["plan"]["steps"].as_array().expect("steps");
+        assert!(
+            steps.len() >= 2,
+            "the fixture should exercise more than one step"
+        );
+        for step in steps {
+            assert!(
+                step["requires_approval"].is_boolean(),
+                "step needs requires_approval"
+            );
+            assert!(step["description"].is_string(), "step needs description");
+        }
+    }
+
     // The error taxonomy and its code mapping must stay in sync: every
     // `data.type` has a code and vice versa (ADR-0001 D6).
     #[test]

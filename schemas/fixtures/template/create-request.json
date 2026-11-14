@@ -1,0 +1,46 @@
+{
+  "name": "sdk-contract-probe",
+  "overwrite": false,
+  "plan": {
+    "name": "sdk-contract-probe",
+    "description": "The payload this repository documents for rigorix.template.create, used to check $defs/planTemplate against the engine's request path (#138).",
+    "version": "1.0.0",
+    "tags": [
+      "contract-probe",
+      "sdk"
+    ],
+    "steps": [
+      {
+        "name": "read-version",
+        "tool": "rigorix_version",
+        "parameters": {},
+        "requires_approval": false,
+        "description": "Read the engine version; takes no arguments.",
+        "timeout_secs": 10
+      },
+      {
+        "name": "validate-template",
+        "tool": "rigorix_template_validate",
+        "parameters": {
+          "plan": {
+            "name": "nested-probe",
+            "description": "The step-level parameters are opaque JSON; only their presence is contractual.",
+            "steps": []
+          }
+        },
+        "requires_approval": true,
+        "description": "A step that pauses for approval \u2014 the fixture carries both booleans so the step level is exercised too."
+      }
+    ],
+    "metadata": {
+      "source": "sdk-contract-fixture"
+    },
+    "constraints": {
+      "max_tool_calls": 32,
+      "max_duration_secs": 600,
+      "blocked_tools": [
+        "rigorix_usage_guide"
+      ]
+    }
+  }
+}
