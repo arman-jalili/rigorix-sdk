@@ -1,0 +1,38 @@
+{
+  "captured_at": "2026-11-14T02:22:00Z",
+  "engine_commit": "214d53b31eec704cbf13b51189bb307fc125d60f",
+  "engine_crate": "rigorix-mcp v1.14.3",
+  "engine_types": [
+    "mcp/src/template_tools/domain/value.rs::PlanTemplate",
+    "mcp/src/template_tools/domain/value.rs::StepDefinition"
+  ],
+  "captured_with": "serde_json::to_value(&PlanTemplate) after from_json of fixtures/template/create-request.json with the two timestamps supplied — the serialised key set is the accepted key set, with serde field names",
+  "plan": {
+    "accepted": [
+      "constraints",
+      "description",
+      "metadata",
+      "name",
+      "steps",
+      "tags",
+      "version"
+    ],
+    "server_stamped": [
+      "created_at",
+      "updated_at"
+    ]
+  },
+  "step": {
+    "accepted": [
+      "description",
+      "evaluate_score",
+      "name",
+      "parameters",
+      "require_identity",
+      "requires_approval",
+      "timeout_secs",
+      "tool"
+    ],
+    "server_stamped": []
+  }
+}
