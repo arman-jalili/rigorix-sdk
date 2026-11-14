@@ -410,3 +410,144 @@ func wasmWithImport(module, field string) []byte {
 	buf.Write(payload)
 	return buf.Bytes()
 }
+
+// ─── compiled-module cache (#142) ───────────────────────────────────────────
+
+// openSession opens the first committed vector's session, without registering a
+// cleanup: the close-semantics tests close gates in a deliberate order.
+func openSession(t *testing.T, ctx context.Context) *Gate {
+	t.Helper()
+	gate, err := Open(ctx, World{
+		Scenario: loadVector(t, "vec-fixture-0001").Scenario,
+		Fixtures: loadVector(t, "vec-fixture-0001").Fixtures,
+		Clock:    loadVector(t, "vec-fixture-0001").Clock,
+		Seed:     loadVector(t, "vec-fixture-0001").Seed,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return gate
+}
+
+// TestOpenCompilesOnce is #142's subject: compiling the 1.9 MB artifact measured
+// 393-425 ms with wazero, against ~0.04 ms for the decision. Compilation is a
+// pure function of the bytes, so two opens must share one compile — asserted as
+// entry identity, because "it got faster" is not a criterion.
+func TestOpenCompilesOnce(t *testing.T) {
+	ctx := context.Background()
+	resetCompiledCache(ctx)
+	t.Cleanup(func() { resetCompiledCache(ctx) })
+
+	first := openSession(t, ctx)
+	defer first.Close(ctx)
+	second := openSession(t, ctx)
+	defer second.Close(ctx)
+
+	if first.entry == nil || second.entry == nil {
+		t.Fatal("an open gate has no compiled entry")
+	}
+	if first.entry != second.entry {
+		t.Fatal("two opens compiled the same bytes twice")
+	}
+	if first.entry.compiled != second.entry.compiled {
+		t.Fatal("two opens hold different compiled modules")
+	}
+	if first.instanceName == second.instanceName {
+		t.Fatalf("two gates share the instance name %q", first.instanceName)
+	}
+
+	// And a third open after both are closed still reuses the compile: an entry
+	// is kept while the cache has room, which is the point of keeping it.
+	key := digestOf(artifact)
+	first.Close(ctx)
+	second.Close(ctx)
+	third := openSession(t, ctx)
+	defer third.Close(ctx)
+	if cache[key] == nil {
+		t.Fatal("closing every gate dropped the compiled artifact")
+	}
+}
+
+// TestCloseDoesNotInvalidateAnotherGate: closing one gate must not close the
+// shared Runtime underneath another (#142's acceptance).
+func TestCloseDoesNotInvalidateAnotherGate(t *testing.T) {
+	ctx := context.Background()
+	first := openSession(t, ctx)
+	second := openSession(t, ctx)
+	defer second.Close(ctx)
+
+	if err := first.Close(ctx); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	action := actionOf(t, loadVector(t, "vec-fixture-0001"))
+	if _, err := second.Attempt(ctx, action); err != nil {
+		t.Fatalf("the surviving gate could not decide after its sibling closed: %v", err)
+	}
+	// Closing twice is not an error, and it does not release twice.
+	if err := first.Close(ctx); err != nil {
+		t.Fatalf("second close: %v", err)
+	}
+}
+
+// TestCountersArePerInstance: a shared Runtime shares the host module, so the
+// counters must be found by instance name. Without the table, one gate's reads
+// would be reported as another's — or, as before this change, by nobody.
+func TestCountersArePerInstance(t *testing.T) {
+	ctx := context.Background()
+	first := openSession(t, ctx)
+	second := openSession(t, ctx)
+	defer second.Close(ctx)
+
+	first.entry.counters.add(first.instanceName, func(c *Counters) { c.FDWriteBytes += 7 })
+	if got := first.Counters().FDWriteBytes; got != 7 {
+		t.Fatalf("the gate reported %d bytes, wanted 7", got)
+	}
+	if got := second.Counters().FDWriteBytes; got != 0 {
+		t.Fatalf("a sibling gate reported %d bytes of another gate's stdout", got)
+	}
+	if !first.entry.counters.has(second.instanceName) {
+		t.Fatal("the second gate is not registered in the counter table")
+	}
+
+	first.Close(ctx)
+	if first.entry.counters.has(first.instanceName) {
+		t.Fatal("a closed gate is still registered in the counter table")
+	}
+	if !first.entry.counters.has(second.instanceName) {
+		t.Fatal("closing one gate unregistered another")
+	}
+}
+
+// TestCompiledCacheIsBounded: `OpenUnverified` accepts caller bytes, so the cache
+// must not grow without a bound — and must never evict a live entry to honour it.
+func TestCompiledCacheIsBounded(t *testing.T) {
+	ctx := context.Background()
+	resetCompiledCache(ctx)
+	t.Cleanup(func() { resetCompiledCache(ctx) })
+
+	cacheMu.Lock()
+	for i := 0; i < maxCompiled+2; i++ {
+		cache[fmt.Sprintf("fake-%d", i)] = &compiledEntry{}
+	}
+	evictIdleLocked(ctx)
+	size := len(cache)
+	cacheMu.Unlock()
+	if size != maxCompiled {
+		t.Fatalf("the cache kept %d entries, wanted %d", size, maxCompiled)
+	}
+
+	// A live entry is not evicted: the bound yields to an open gate.
+	cacheMu.Lock()
+	for key := range cache {
+		delete(cache, key)
+	}
+	for i := 0; i < maxCompiled+2; i++ {
+		cache[fmt.Sprintf("live-%d", i)] = &compiledEntry{refs: 1}
+	}
+	evictIdleLocked(ctx)
+	size = len(cache)
+	cacheMu.Unlock()
+	if size != maxCompiled+2 {
+		t.Fatalf("the cache dropped live entries: %d left, wanted %d", size, maxCompiled+2)
+	}
+}
