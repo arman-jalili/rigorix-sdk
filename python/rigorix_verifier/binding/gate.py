@@ -9,13 +9,70 @@ lives here.
 from __future__ import annotations
 
 import json
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import wasmtime
 
 from . import loader
 from .errors import GateClosed, GateError, GateTrap, NotWASIArtifact
+
+# ─── compiled-module cache ────────────────────────────────────────────────────
+#
+# Compiling the artifact dominates `Gate.open`: 253 ms warm / 355 ms cold for
+# the 1.9 MB module on an 8-core aarch64 host, against ~0.04 ms for the
+# decision it enables (#140). Compilation is a pure function of the bytes and
+# the engine configuration, so it belongs to the process, not to the open.
+#
+# The cache holds (engine, module) because a `wasmtime.Module` is bound to the
+# engine that compiled it; reusing the module means reusing the engine and
+# creating a fresh `Store` per open. Default engine configuration is the only
+# one this wrapper builds, and the key names it so a future non-default engine
+# cannot silently inherit an incompatible module.
+_ENGINE_CONFIGURATION = "default"
+
+#: Bounded, because `open_unverified` accepts arbitrary bytes (tests, tooling):
+#: an unbounded cache keyed by digest would be a leak with a friendly name.
+_MAX_COMPILED = 4
+
+_compiled: "OrderedDict[str, Tuple[wasmtime.Engine, wasmtime.Module]]" = OrderedDict()
+_compiled_lock = threading.Lock()
+
+
+def _compiled_module(wasm: bytes, digest: str) -> Tuple["wasmtime.Engine", "wasmtime.Module"]:
+    """The compiled module for these bytes, compiling at most once per process.
+
+    The import/export check runs here — once per compile, next to the compile it
+    describes. It does not need to run per instantiation: `validate_module`
+    reads the module's own import/export sections, which cannot change between
+    stores, and the bytes behind a digest cannot either.
+    """
+    key = f"{_ENGINE_CONFIGURATION}:{digest}"
+    with _compiled_lock:
+        cached = _compiled.get(key)
+        if cached is not None:
+            _compiled.move_to_end(key)
+            return cached
+
+        engine = wasmtime.Engine()
+        try:
+            module = wasmtime.Module(engine, wasm)
+        except wasmtime.WasmtimeError as exc:
+            raise NotWASIArtifact(f"not a WebAssembly module: {exc}") from exc
+
+        loader.validate_module(module)
+        _compiled[key] = (engine, module)
+        while len(_compiled) > _MAX_COMPILED:
+            _compiled.popitem(last=False)
+        return engine, module
+
+
+def _reset_compiled_modules() -> None:
+    """Drop the compiled-module cache. For tests; a decision does not call it."""
+    with _compiled_lock:
+        _compiled.clear()
 
 
 @dataclass
@@ -130,10 +187,19 @@ class Gate:
         A digest mismatch is an `ArtifactDigestMismatch` naming both digests:
         the installed package is not the artifact that was built, and the gate
         refuses rather than deciding differently.
+
+        What the caller pays: the first open in a process compiles the 1.9 MB
+        module (~0.25 s measured); every later open pays one instantiation and
+        one session (sub-millisecond), because the compiled module is cached per
+        artifact digest and engine configuration. The digest and import/export
+        checks run once per compile, not once per open — a module compiled from
+        bytes verified in this process does not become different bytes later.
         """
         wasm = loader.artifact_bytes()
-        loader.verify_artifact(wasm)
-        return cls._open_bytes(wasm, scenario=scenario, fixtures=fixtures, clock=clock, seed=seed)
+        digest = loader.verify_artifact(wasm)
+        return cls._open_bytes(
+            wasm, digest=digest, scenario=scenario, fixtures=fixtures, clock=clock, seed=seed
+        )
 
     @classmethod
     def open_unverified(
@@ -157,18 +223,15 @@ class Gate:
         cls,
         wasm: bytes,
         *,
+        digest: Optional[str] = None,
         scenario: Any,
         fixtures: Any,
         clock: Any,
         seed: Any,
     ) -> "Gate":
-        engine = wasmtime.Engine()
-        try:
-            module = wasmtime.Module(engine, wasm)
-        except wasmtime.WasmtimeError as exc:
-            raise NotWASIArtifact(f"not a WebAssembly module: {exc}") from exc
-
-        loader.validate_module(module)
+        engine, module = _compiled_module(
+            wasm, digest if digest is not None else loader.artifact_digest(wasm)
+        )
         store = wasmtime.Store(engine)
         counters = Counters()
         linker = wasmtime.Linker(engine)

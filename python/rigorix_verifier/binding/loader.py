@@ -36,16 +36,25 @@ def artifact_bytes() -> bytes:
     )
 
 
-def verify_artifact(raw: bytes) -> None:
-    """Refuse bytes that are not the recorded artifact.
+def artifact_digest(raw: bytes) -> str:
+    """The digest these bytes have, whether or not they are the recorded ones."""
+    return hashlib.sha256(raw).hexdigest()
+
+
+def verify_artifact(raw: bytes) -> str:
+    """Refuse bytes that are not the recorded artifact, and return their digest.
 
     The import table is cheap to reproduce in a hostile module; the digest is
     not. `Gate.open` calls this before the bytes are compiled, so an installed
     package that was tampered with is a load error, not a different decision.
+
+    The digest is returned because the caller has already paid for it: it is the
+    key the compiled module is cached under (#140), and hashing 1.9 MB twice to
+    save a tuple would be the same mistake in miniature.
     """
-    actual = hashlib.sha256(raw).hexdigest()
+    actual = artifact_digest(raw)
     if len(raw) == ARTIFACT_SIZE and actual == ARTIFACT_SHA256:
-        return
+        return actual
     raise ArtifactDigestMismatch(ARTIFACT_SHA256, actual, ARTIFACT_SIZE, len(raw))
 
 
