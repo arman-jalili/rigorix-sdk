@@ -64,6 +64,64 @@ def _matches(outcome: dict, expected: dict) -> bool:
     )
 
 
+def test_open_compiles_the_artifact_once(monkeypatch):
+    """#140: compilation and the import/export check belong to the process.
+
+    `wasmtime.Module` costs ~0.25 s for this artifact, while a decision costs
+    ~0.04 ms. Compiling per open made every decision pay for it; the module is
+    now cached per artifact digest, so two opens compile once and validate the
+    shape once, and only the store/session is per open.
+    """
+    import wasmtime
+
+    from rigorix_verifier.binding import gate as gate_module
+
+    vector = _vector("vec-fixture-0001")
+    gate_module._reset_compiled_modules()
+
+    compiles = []
+    validations = []
+    real_module = wasmtime.Module
+    real_validate = gate_module.loader.validate_module
+
+    def counting_module(engine, wasm, *args, **kwargs):
+        compiles.append(len(wasm))
+        return real_module(engine, wasm, *args, **kwargs)
+
+    def counting_validate(module):
+        validations.append(1)
+        return real_validate(module)
+
+    monkeypatch.setattr(gate_module.wasmtime, "Module", counting_module)
+    monkeypatch.setattr(gate_module.loader, "validate_module", counting_validate)
+
+    first = _open(vector)
+    second = _open(vector)
+    try:
+        assert compiles == [ARTIFACT_SIZE], (
+            f"compiled {len(compiles)} time(s) for two opens: the cache missed"
+        )
+        assert len(validations) == 1, (
+            f"validated the import/export shape {len(validations)} time(s) for two opens"
+        )
+        # The cache shares the module, never the session.
+        assert first is not second
+        assert first.attempt(vector["scenario"]["action"]) is not None
+        assert second.attempt(vector["scenario"]["action"]) is not None
+    finally:
+        first.close()
+        second.close()
+
+    # The unverified path is keyed the same way: same bytes, same compiled
+    # module — the digest is what the key is made of, so nothing unverified can
+    # inherit an entry compiled from other bytes.
+    third = _open(vector, artifact=artifact_bytes())
+    try:
+        assert compiles == [ARTIFACT_SIZE], "the unverified path recompiled identical bytes"
+    finally:
+        third.close()
+
+
 def test_all_five_vectors():
     paths = sorted(VECTORS.glob("*.json"))
     assert len(paths) == 5, "the artifact claims five vectors"

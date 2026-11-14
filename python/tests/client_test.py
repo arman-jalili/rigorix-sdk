@@ -8,6 +8,7 @@ import os
 import re
 import socket
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -194,17 +195,44 @@ def test_client_adds_no_dependency():
 
 @pytest.fixture
 def rpc_server():
+    """HTTP/1.1 with keep-alive, a connection count, and optional misbehaviour.
+
+    `handler.connections` counts accepted connections, which is how the tests
+    tell "the pool reused a socket" from "the pool opened another one".
+    """
+
     class Handler(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
         status = 200
         body = _version_body()
+        close_after_response = False
+        hang_seconds = 0.0
+        connections = 0
+
+        def setup(self):  # noqa: D401 (http.server hook)
+            super().setup()
+            type(self).connections += 1
 
         def do_POST(self):  # noqa: N802 (http.server naming)
             length = int(self.headers.get("content-length", "0"))
-            self.rfile.read(length)
+            request = json.loads(self.rfile.read(length) or b"{}")
+            if self.hang_seconds:
+                time.sleep(self.hang_seconds)
+            # Echo the request id: the client is entitled to reject a mismatch,
+            # and two pooled calls carry different ids.
+            body = self.body
+            if self.status == 200 and self.body == _version_body():
+                body = _version_body(request_id=request.get("id"))
+            payload = body.encode("utf-8")
             self.send_response(self.status)
             self.send_header("content-type", "application/json")
+            self.send_header("content-length", str(len(payload)))
+            if self.close_after_response:
+                self.send_header("connection", "close")
             self.end_headers()
-            self.wfile.write(self.body.encode("utf-8"))
+            self.wfile.write(payload)
+            if self.close_after_response:
+                self.close_connection = True
 
         def log_message(self, *args):  # noqa: ARG002
             pass
@@ -225,6 +253,102 @@ def test_http_transport(rpc_server):
     url = f"http://127.0.0.1:{server.server_port}/rpc"
     version = Client(HTTPTransport(url)).version()
     assert version["api_version"] == "1.0.0"
+
+
+def test_http_transport_reuses_one_connection(rpc_server):
+    """Two calls, one socket: the point of the change (#140).
+
+    A fresh connection per call cost ~0.18 ms over a reusable one — 2× the
+    whole client call on localhost, where connection setup is the entire cost.
+    """
+    server, handler = rpc_server
+    url = f"http://127.0.0.1:{server.server_port}/rpc"
+    transport = HTTPTransport(url)
+    client = Client(transport)
+    try:
+        client.version()
+        client.version()
+        assert handler.connections == 1, (
+            f"the transport opened {handler.connections} connections for 2 calls"
+        )
+    finally:
+        transport.close()
+
+
+def test_http_transport_reconnects_after_an_idle_close(rpc_server):
+    """A server may close a keep-alive connection; that is not an answer."""
+    server, handler = rpc_server
+    handler.close_after_response = True
+    url = f"http://127.0.0.1:{server.server_port}/rpc"
+    transport = HTTPTransport(url)
+    try:
+        client = Client(transport)
+        client.version()
+        # The server closed the socket after answering; the second call must
+        # notice, reconnect and still answer rather than raising.
+        client.version()
+        assert handler.connections == 2
+    finally:
+        transport.close()
+
+
+def test_http_transport_is_safe_across_threads(rpc_server):
+    """One socket, many callers: the pool serialises, it does not interleave.
+
+    `urlopen` per call was incidentally thread-safe. A shared connection is
+    not, unless the request/response pair is atomic — and a JSON-RPC body
+    interleaved with another call's is a corrupt request, not a slow one.
+    """
+    server, handler = rpc_server
+    url = f"http://127.0.0.1:{server.server_port}/rpc"
+    transport = HTTPTransport(url)
+    client = Client(transport)
+    errors = []
+
+    def worker():
+        try:
+            for _ in range(5):
+                assert client.version()["api_version"] == "1.0.0"
+        except Exception as exc:  # noqa: BLE001 - the failure is the assertion
+            errors.append(exc)
+
+    threads = [threading.Thread(target=worker) for _ in range(4)]
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+    finally:
+        transport.close()
+
+    assert not errors, errors
+    # 20 calls: the pool may have reconnected, but it must not have opened a
+    # connection per call.
+    assert handler.connections < 20, f"{handler.connections} connections for 20 calls"
+
+
+def test_http_transport_timeout_still_bounds_the_read(rpc_server):
+    """Pooling must not lose the per-call bound a hung server needs.
+
+    `urlopen(timeout=…)` bounded the read, not just the connect; a pooled
+    connection that only bounded the connect would hang here forever.
+    """
+    server, handler = rpc_server
+    handler.hang_seconds = 0.6
+    url = f"http://127.0.0.1:{server.server_port}/rpc"
+    transport = HTTPTransport(url, timeout=0.1)
+    try:
+        with pytest.raises(TransportError, match="timeout"):
+            Client(transport).version()
+    finally:
+        transport.close()
+
+
+def test_http_transport_rejects_a_url_it_cannot_pool():
+    with pytest.raises(ValueError, match="not http"):
+        HTTPTransport("tcp://127.0.0.1:9000/rpc")
+    with pytest.raises(ValueError, match="no host"):
+        HTTPTransport("http:///rpc")
 
 
 def test_http_transport_non_2xx_is_a_transport_error(rpc_server):

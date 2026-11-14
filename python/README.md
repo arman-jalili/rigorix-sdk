@@ -39,9 +39,14 @@ verify_chain(chain)                                    # ADR-016 local chain
 ## Protocol client
 
 `rigorix_verifier.client` speaks JSON-RPC 2.0 over the frozen catalog with
-`urllib.request` (no new dependency). It exposes the same 18 typed methods as
-the TypeScript client; `version()` refuses an `api_version` major other than 1,
-and a transport timeout is a `TransportError`, not an `RpcError`.
+`http.client` (stdlib; no new dependency) and **one keep-alive connection per
+transport** — a fresh connection per call cost ~0.18 ms against ~0.175 ms of
+server work, so the pool is the difference between 1× and 2× on localhost. A
+server that closes an idle connection is reconnected once, on the same call; a
+timeout is never retried, because a hung server is not a stale socket. It
+exposes the same 18 typed methods as the TypeScript client; `version()` refuses
+an `api_version` major other than 1, and a transport timeout is a
+`TransportError`, not an `RpcError`.
 
 ```python
 from rigorix_verifier.client import Client, HTTPTransport
@@ -77,6 +82,12 @@ digests, when the installed package is not the artifact that was built;
 `Gate.open_unverified(artifact=...)` is the opt-out for caller-supplied bytes
 and says so in its name. The six WASI prologue imports are answered with
 constants and counted, and any other import is a load-time refusal.
+
+**What an open costs:** the first open in a process compiles the 1.9 MB module
+(~200 ms measured in CI's Linux image; the digest and import/export checks run
+once, next to the compile); every later open is an instantiation and a session
+(~1.3–1.9 ms measured, same host). A decision inside the session is ~0.04 ms, so
+compile-per-open put a 0.2 s bill on a 0.04 ms decision.
 
 The engine is **`wasmtime==50.0.1`**, an exact pin guarded by
 `scripts/check-pins.py`. `binding.runtime_version()` reports the installed
