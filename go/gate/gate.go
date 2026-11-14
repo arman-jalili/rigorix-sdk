@@ -70,24 +70,33 @@ type GateTrap struct {
 func (e *GateTrap) Error() string { return "gate trap: " + e.Message }
 
 // Gate is one opened session over the artifact.
+//
+// The compiled module and its Runtime are process-wide (see cache.go); a Gate
+// owns only its instantiation, and closing it releases a reference — it cannot
+// invalidate another open gate, and it does not recompile the next one.
 type Gate struct {
-	runtime       wazero.Runtime
-	compiled      wazero.CompiledModule
-	instance      api.Module
-	memory        api.Memory
-	alloc         api.Function
-	callFn        api.Function
-	free          api.Function
-	handle        any
-	counters      Counters
-	sealed        bool
-	runtimeClosed bool
-	mu            sync.Mutex
+	entry        *compiledEntry
+	instanceName string
+	instance     api.Module
+	memory       api.Memory
+	alloc        api.Function
+	callFn       api.Function
+	free         api.Function
+	handle       any
+	sealed       bool
+	closed       bool
+	mu           sync.Mutex
 }
 
 // Open verifies the embedded artifact's digest and size, then opens a replay
 // session. Bytes that are not the recorded artifact are refused with an
 // *ArtifactDigestError naming both digests.
+//
+// What the caller pays: the first open in a process compiles the 1.9 MB module
+// (~430 ms with wazero measured on the machine that filed #142); every later
+// open instantiates it into the same Runtime (~1 ms measured), because the
+// compiled module is cached per artifact digest. The digest and shape checks
+// run once per compile, not once per open.
 func Open(ctx context.Context, world World) (*Gate, error) {
 	if err := verifyArtifact(artifact); err != nil {
 		return nil, err
@@ -98,6 +107,10 @@ func Open(ctx context.Context, world World) (*Gate, error) {
 // OpenUnverified is Open over caller-supplied WebAssembly bytes, for tests and
 // tooling. It checks the import/export shape but NOT the digest: the gate has
 // not been checked against the recorded artifact, and the name says so.
+//
+// Caller bytes are cached by their own digest, so they never inherit the entry
+// compiled from the vendored artifact, and identical bytes compile once per
+// process however many opens they serve.
 func OpenUnverified(ctx context.Context, wasm []byte, world World) (*Gate, error) {
 	return openBytes(ctx, wasm, world)
 }
@@ -110,29 +123,22 @@ func openBytes(ctx context.Context, wasm []byte, world World) (g *Gate, err erro
 		}
 	}()
 
-	runtime := wazero.NewRuntime(ctx)
-	compiled, err := runtime.CompileModule(ctx, wasm)
+	entry, err := acquire(ctx, wasm)
 	if err != nil {
-		_ = runtime.Close(ctx)
-		return nil, fmt.Errorf("%w: %v", ErrNotWASIArtifact, err)
-	}
-	if err := validateCompiled(compiled); err != nil {
-		_ = compiled.Close(ctx)
-		_ = runtime.Close(ctx)
 		return nil, err
 	}
 
-	counters := &Counters{}
-	if _, err := hostModule(ctx, runtime, counters); err != nil {
-		_ = compiled.Close(ctx)
-		_ = runtime.Close(ctx)
-		return nil, fmt.Errorf("gate: host imports: %w", err)
-	}
-
-	instance, err := runtime.InstantiateModule(ctx, compiled, wazero.NewModuleConfig())
+	// One host module per Runtime, one instantiation per open: the counters are
+	// registered under this instance's name, which is how the shared host
+	// functions find the gate whose call they are answering.
+	instanceName := entry.nextInstanceName()
+	entry.counters.put(instanceName, &Counters{})
+	instance, err := entry.runtime.InstantiateModule(
+		ctx, entry.compiled, wazero.NewModuleConfig().WithName(instanceName),
+	)
 	if err != nil {
-		_ = compiled.Close(ctx)
-		_ = runtime.Close(ctx)
+		entry.counters.remove(instanceName)
+		entry.release(ctx)
 		return nil, fmt.Errorf("gate: instantiate: %w", err)
 	}
 
@@ -141,19 +147,20 @@ func openBytes(ctx context.Context, wasm []byte, world World) (g *Gate, err erro
 	callFn := instance.ExportedFunction("rigx_call")
 	free := instance.ExportedFunction("rigx_free")
 	if memory == nil || alloc == nil || callFn == nil || free == nil {
-		_ = compiled.Close(ctx)
-		_ = runtime.Close(ctx)
+		entry.counters.remove(instanceName)
+		_ = instance.Close(ctx)
+		entry.release(ctx)
 		return nil, fmt.Errorf("%w: missing memory or rigx_* export", ErrNotWASIArtifact)
 	}
 
 	gate := &Gate{
-		runtime:  runtime,
-		compiled: compiled,
-		instance: instance,
-		memory:   memory,
-		alloc:    alloc,
-		callFn:   callFn,
-		free:     free,
+		entry:        entry,
+		instanceName: instanceName,
+		instance:     instance,
+		memory:       memory,
+		alloc:        alloc,
+		callFn:       callFn,
+		free:         free,
 	}
 
 	opened := map[string]any{}
@@ -233,32 +240,38 @@ func (g *Gate) ContractVersion(ctx context.Context) (map[string]any, error) {
 	return out, nil
 }
 
-// Counters returns a copy of the host-answer counters.
+// Counters returns a copy of this gate's host-answer counters.
+//
+// They are per instance, not per process: a shared Runtime must not let one
+// gate's clock reads be reported as another's (#142).
 func (g *Gate) Counters() Counters {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.counters
+	if g.entry == nil || g.entry.counters == nil {
+		return Counters{}
+	}
+	return g.entry.counters.snapshot(g.instanceName)
 }
 
-// Close releases the runtime and compiled module. It is safe to call twice.
+// Close releases this gate's instance and its reference to the compiled module.
+// It is safe to call twice, and it never closes a Runtime another gate is using.
 func (g *Gate) Close(ctx context.Context) error {
 	g.mu.Lock()
-	if g.runtimeClosed {
+	if g.closed {
 		g.mu.Unlock()
 		return nil
 	}
-	g.runtimeClosed = true
+	g.closed = true
 	g.sealed = true
 	g.mu.Unlock()
 
 	var first error
-	if g.compiled != nil {
-		if err := g.compiled.Close(ctx); err != nil {
+	if g.instance != nil {
+		if err := g.instance.Close(ctx); err != nil {
 			first = err
 		}
 	}
-	if err := g.runtime.Close(ctx); err != nil && first == nil {
-		first = err
+	if g.entry != nil {
+		g.entry.counters.remove(g.instanceName)
+		g.entry.release(ctx)
 	}
 	return first
 }

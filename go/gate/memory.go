@@ -23,7 +23,7 @@ func (g *Gate) callRaw(ctx context.Context, request []byte) (raw []byte, err err
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.runtimeClosed {
+	if g.closed {
 		return nil, ErrGateClosed
 	}
 

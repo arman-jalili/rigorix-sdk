@@ -63,7 +63,11 @@ func validateCompiled(compiled wazero.CompiledModule) error {
 // hostModule defines the six constants. The clock is counted and zeroed
 // (#1477); randomness is left zeroed; stdout is discarded and counted;
 // proc_exit becomes a typed trap, never the caller's process exit.
-func hostModule(ctx context.Context, runtime wazero.Runtime, counters *Counters) (api.Module, error) {
+//
+// The counters arrive through the table, keyed by the calling instance's name:
+// one Runtime is shared by every gate compiled from the same bytes (#142), so a
+// closure per open would be answered to whichever gate defined it last.
+func hostModule(ctx context.Context, runtime wazero.Runtime, counters *counterTable) (api.Module, error) {
 	builder := runtime.NewHostModuleBuilder("wasi_snapshot_preview1")
 
 	builder.NewFunctionBuilder().WithFunc(
@@ -87,14 +91,14 @@ func hostModule(ctx context.Context, runtime wazero.Runtime, counters *Counters)
 			if memory := module.Memory(); memory != nil {
 				memory.WriteUint64Le(timePtr, 0)
 			}
-			counters.ClockTimeGetCalls++
+			counters.add(module.Name(), func(c *Counters) { c.ClockTimeGetCalls++ })
 			return 0
 		},
 	).Export("clock_time_get")
 
 	builder.NewFunctionBuilder().WithFunc(
-		func(_ context.Context, _ api.Module, bufPtr, bufLen uint32) uint32 {
-			counters.RandomGetCalls++
+		func(_ context.Context, module api.Module, bufPtr, bufLen uint32) uint32 {
+			counters.add(module.Name(), func(c *Counters) { c.RandomGetCalls++ })
 			return 0
 		},
 	).Export("random_get")
@@ -113,7 +117,7 @@ func hostModule(ctx context.Context, runtime wazero.Runtime, counters *Counters)
 				}
 				total += int64(binary.LittleEndian.Uint32(raw[4:8]))
 			}
-			counters.FDWriteBytes += total
+			counters.add(module.Name(), func(c *Counters) { c.FDWriteBytes += total })
 			memory.WriteUint32Le(nwritten, 0)
 			return 0
 		},

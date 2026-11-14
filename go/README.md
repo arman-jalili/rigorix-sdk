@@ -88,6 +88,15 @@ prologue imports are answered with constants; the clock must stay zero (#1477),
 while randomness/stdout are counted. Any other import is refused at load, by
 name.
 
+**What an open costs:** the first open in a process compiles the 1.9 MB module
+(~430 ms with wazero, measured on the machine that filed #142); every later open
+instantiates into the same `Runtime` (~1 ms). The compiled module is cached per
+artifact digest and reference-counted, so closing one gate never closes a
+`Runtime` another gate is deciding on, and the digest and import/export checks
+run once per compile rather than once per open. Caller bytes under
+`OpenUnverified` get their own entries, so they inherit nothing from the
+vendored artifact.
+
 The engine is **wazero v1.12.0**, pinned exactly in `go.mod` — no range, so the
 version in a report is a fact. `scripts/check-pins.py` fails on a range, and
 `.github/workflows/audit.yml` runs `govulncheck ./...` on every pull request and
