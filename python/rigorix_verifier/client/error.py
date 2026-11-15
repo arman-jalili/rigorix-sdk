@@ -15,7 +15,34 @@ class ClientError(Exception):
 
 
 class TransportError(ClientError):
-    """The transport failed: network/IO, timeout, or a non-2xx response."""
+    """The transport failed: network/IO, timeout, or a non-2xx response.
+
+    ``may_have_executed`` is ``False`` here and ``True`` on
+    :class:`CommandMayHaveExecuted`: one flag to test, rather than an
+    ``isinstance`` ladder at every call site.
+    """
+
+    may_have_executed = False
+
+
+class CommandMayHaveExecuted(TransportError):
+    """A command's request may have reached the server before the failure.
+
+    Raised **instead of a retry** for a call the caller did not declare
+    idempotent (``rigorix.run``, ``rigorix.execute``, ``rigorix.approve`` and
+    every other writing method). A transport cannot tell "closed before the
+    body arrived" from "closed after the run completed", so retrying would risk
+    a second execution — and two envelopes for one call is the property the
+    engine exists to prevent.
+
+    What to do with it: reconcile, do not resend. Supply ``execution_id`` in
+    ``RunParams`` so the attempt is identifiable, read ``rigorix.audit.read``
+    for it, and send again only when no envelope exists. A bare
+    ``TransportError`` means nothing was sent (a fresh connection failed) and
+    resending is safe.
+    """
+
+    may_have_executed = True
 
 
 class ProtocolError(ClientError):

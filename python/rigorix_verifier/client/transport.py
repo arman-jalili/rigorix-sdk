@@ -13,13 +13,21 @@ import threading
 from typing import Dict, List, Optional, Protocol
 from urllib.parse import urlsplit
 
-from .error import TransportError
+from .error import CommandMayHaveExecuted, TransportError
 
 
 class Transport(Protocol):
-    """POST a JSON-RPC body and return the raw response body."""
+    """POST a JSON-RPC body and return the raw response body.
 
-    def post(self, body: str) -> str: ...
+    ``idempotent`` is the caller's declaration that sending the same body twice
+    cannot produce a second effect. It defaults to ``False``, so a transport
+    that ignores the keyword — or one written before it existed — is treated as
+    non-retryable, which is the safe answer. A transport that does not accept
+    the keyword is still usable: :class:`Client` passes it only to transports
+    that declare it.
+    """
+
+    def post(self, body: str, *, idempotent: bool = False) -> str: ...
 
 
 class HTTPTransport:
@@ -44,13 +52,23 @@ class HTTPTransport:
     Reconnect: a server is free to close an idle keep-alive connection, and
     "closed between calls" is not an answer. When a connection this transport
     has already used fails before a response line arrives, the connection is
-    dropped and the request is sent once on a fresh one. The caveat is real and
-    is stated rather than hidden: the body of the first attempt may have
-    reached the server, so a retried *command* could in principle run twice.
-    It is limited to exactly that case — a connection that had already served a
-    call — because retrying a fresh connection's failure would hide a server
-    that is genuinely refusing. A timeout is never retried: a hung server is
-    not a stale socket.
+    dropped and the request is sent once on a fresh one. It is limited to
+    exactly that case — a connection that had already served a call — because
+    retrying a fresh connection's failure would hide a server that is genuinely
+    refusing. A timeout is never retried: a hung server is not a stale socket.
+
+    **Retry is a property of the call, not of the connection** (#144). The body
+    of the first attempt may have reached the server, so a re-send of
+    ``rigorix.run`` could execute a command twice — and two envelopes for one
+    call is what the engine exists to prevent. The caller therefore declares
+    ``idempotent=True`` per call, and only a declared call is retried. For a
+    call that is not, the same failure raises
+    :class:`~.error.CommandMayHaveExecuted` instead: the request is sent once,
+    and the caller reconciles against the audit trail rather than hoping.
+
+    ``connect()`` is called explicitly before the request so "nothing was sent"
+    is a fact rather than an inference: a failure there is a plain
+    ``TransportError`` even for a command, because no byte of the body has left.
     """
 
     def __init__(
@@ -115,15 +133,25 @@ class HTTPTransport:
 
     # ── the seam ───────────────────────────────────────────────────────────
 
-    def post(self, body: str) -> str:
+    def post(self, body: str, *, idempotent: bool = False) -> str:
         payload = body.encode("utf-8")
         headers = {"content-type": "application/json", **self.headers}
         with self._lock:
-            return self._post_locked(payload, headers)
+            return self._post_locked(payload, headers, idempotent)
 
-    def _post_locked(self, payload: bytes, headers: Dict[str, str]) -> str:
+    def _post_locked(self, payload: bytes, headers: Dict[str, str], idempotent: bool) -> str:
         connection = self._connect()
         reusable = self._used
+        if connection.sock is None:
+            # `connect()` is not a no-op when already connected — it replaces the
+            # socket — so it is called only when there is none, which keeps the
+            # pooled connection and makes "nothing was sent" a fact: a failure
+            # here is before the first byte of the body, whatever the call is.
+            try:
+                connection.connect()
+            except OSError as exc:
+                self._drop()
+                raise TransportError(f"transport: {exc}") from exc
         try:
             connection.request("POST", self._path, body=payload, headers=headers)
             response = connection.getresponse()
@@ -136,6 +164,8 @@ class HTTPTransport:
             BrokenPipeError,
         ) as exc:
             self._drop()
+            if not idempotent:
+                raise self._maybe_executed(exc, reused=reusable) from exc
             if reusable:
                 # The stale keep-alive case this class exists for: retry once,
                 # on a connection the server has not closed yet.
@@ -143,9 +173,13 @@ class HTTPTransport:
             raise TransportError(f"transport: {exc}") from exc
         except (socket.timeout, TimeoutError) as exc:
             self._drop()
+            if not idempotent:
+                raise self._maybe_executed(exc, timeout=True) from exc
             raise TransportError(f"transport: timeout after {self.timeout}s: {exc}") from exc
         except OSError as exc:
             self._drop()
+            if not idempotent:
+                raise self._maybe_executed(exc, reused=reusable) from exc
             raise TransportError(f"transport: {exc}") from exc
 
         self._used = True
@@ -153,6 +187,26 @@ class HTTPTransport:
             # The host refused at the HTTP layer; it did not answer JSON-RPC.
             raise TransportError(f"transport: HTTP {status}")
         return raw.decode("utf-8")
+
+    def _maybe_executed(
+        self, exc: BaseException, reused: bool = False, timeout: bool = False
+    ) -> TransportError:
+        """The failure a non-idempotent call gets instead of a retry (#144)."""
+        if timeout:
+            what = f"the answer did not arrive within {self.timeout}s ({exc})"
+        elif reused:
+            what = (
+                f"{exc} — the connection had already served a call and was closed"
+                " under this one"
+            )
+        else:
+            what = f"{exc} — the request was written and the answer never arrived"
+        return CommandMayHaveExecuted(
+            f"transport: {what}; this call is not declared idempotent, so it was"
+            " sent once and not retried: the command may have executed. Reconcile"
+            " before resending: pass RunParams.execution_id, read"
+            " rigorix.audit.read for it, and resend only if no envelope exists."
+        )
 
     def _post_once(self, payload: bytes, headers: Dict[str, str]) -> str:
         """One attempt on a fresh connection, with no second retry."""
@@ -181,9 +235,12 @@ class MockTransport:
     def __init__(self, responses: Optional[List[str]] = None) -> None:
         self.requests: List[str] = []
         self.responses: List[str] = list(responses or [])
+        #: The declaration each recorded request carried (#144).
+        self.idempotent_flags: List[bool] = []
 
-    def post(self, body: str) -> str:
+    def post(self, body: str, *, idempotent: bool = False) -> str:
         self.requests.append(body)
+        self.idempotent_flags.append(idempotent)
         if not self.responses:
             raise TransportError("mock transport: no queued response")
         return self.responses.pop(0)
