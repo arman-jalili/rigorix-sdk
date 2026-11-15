@@ -17,13 +17,15 @@ every non-stamped field in `engine-accepted-shape.json` is *declarable* here.
 ## Why the two files disagree about timestamps
 
 `$defs/planTemplate` describes the **request**; `created_at`/`updated_at` are
-stamped by the server on create (`engine_template_parser.rs:78-94` for the TOML
-path; the JSON path is the subject of rigorix-oss#1563). `$defs/templateGetResult`
-describes the **response**, and it has required both timestamps since it was
-written from the type — which is why the two `$defs` used to disagree about the
-same object, and why only the request was wrong (#138).
+stamped by the server on create, on both paths (`rigorix-oss` `b606e33e`: the
+create door stamps with the host clock and overwrites any value that arrives).
+`$defs/templateGetResult` describes the **response**, and it has required both
+timestamps since it was written from the type — which is why the two `$defs` used
+to disagree about the same object, and why only the request was wrong (#138).
 
-Until the engine stamps on create, a payload from this schema is refused with
-`missing field created_at` — a defect in the engine, named there rather than
-worked around here: a client that invents timestamps writes the host's clock into
-the engine's record.
+A payload built from this schema succeeded against `rigorix-server` at
+`rigorix-oss` `b606e33e`, captured in `engine-accepted-shape.json` and
+`create-request.json`: the response carried both timestamps, stamped with the
+host's clock, identical across two reads two seconds apart. A client must not
+invent them — the engine overwrites what it is given, so an invented clock never
+reaches the record, and the round trip would only hide whose clock wrote it.

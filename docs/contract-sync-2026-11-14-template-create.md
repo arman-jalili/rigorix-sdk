@@ -82,3 +82,17 @@ end-to-end; the fixture and its dated capture are already in place for that.
   `PROVENANCE.md`, `README.md`
 - `rust/rigorix-verifier/src/lib.rs` — `template_create_covers_engine_accepted_fields`
 - `go/internal/corpus/corpus_gen.go` — regenerated (`go generate ./...`)
+
+## Status: closed
+
+Both halves shipped and this document's defect list is historical.
+
+- Engine: `rigorix-oss` `b606e33e` — the create door stamps both timestamps with the host clock and overwrites supplied
+  values; `385c81dd` — a legacy document read back keeps its own timestamps.
+- Measured: the payload in `schemas/fixtures/template/create-request.json`, unmodified, succeeded against a server built at
+  `1b425d51`; the response carried both timestamps and they were stable across two reads. Recorded in
+  `schemas/fixtures/template/PROVENANCE.md` ("Second capture").
+- This repository: `planTemplate` still forbids the two fields, which is now the *engine's* rule stated on the request side
+  rather than a workaround.
+
+`rigorix-sdk#138` is closed on that evidence.

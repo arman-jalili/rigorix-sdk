@@ -49,3 +49,21 @@ file, so the next drift — a field the engine gains and this catalog never hear
 about — fails a test rather than shipping. Re-running the probe at a newer commit
 and updating this file is how the record is advanced; the JSON is not edited from
 memory.
+
+## Second capture, 2026-11-15: the documented payload is accepted
+
+The probe above measured the refusal. This capture measures the fix, against a server built from
+`rigorix-oss` `1b425d51` (`b606e33e` is the create door; `385c81dd` is the read door):
+
+```
+POST /rpc rigorix.template.create   {"name":"sdk138-e2e","plan":<create-request.json's plan>}
+  → {"name":"sdk138-e2e","path":".rigorix/templates/sdk138-e2e.toml","status":"created"}
+
+POST /rpc rigorix.template.get      {"name":"sdk138-e2e"}
+  → created_at 2026-11-15T18:05:37.823134Z   updated_at 2026-11-15T18:05:37.823134Z
+  (two seconds later, identical)             ← the host's stamp, stable across reads
+```
+
+The payload carries no timestamps — it is `create-request.json` unchanged — and the response carries both. A run against the
+same plan with `created_at`/`updated_at` set to `2000-01-01` also returned the host's clock, not the supplied value: the create
+door overwrites rather than filling only, so a client-invented clock never reaches the record.
