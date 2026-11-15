@@ -92,8 +92,10 @@ name.
 (~430 ms with wazero, measured on the machine that filed #142); every later open
 instantiates into the same `Runtime` (~1 ms). The compiled module is cached per
 artifact digest and reference-counted, so closing one gate never closes a
-`Runtime` another gate is deciding on, and the digest and import/export checks
-run once per compile rather than once per open. Caller bytes under
+`Runtime` another gate is deciding on. The import/export check runs once per
+compile; **the digest check does not** — `Open` re-hashes the 1.9 MB artifact on
+every call (0.93 ms median, measured) because that hash is what proves the bytes
+in the cache are still the bytes in the binary. Caller bytes under
 `OpenUnverified` get their own entries, so they inherit nothing from the
 vendored artifact.
 

@@ -189,11 +189,13 @@ class Gate:
         refuses rather than deciding differently.
 
         What the caller pays: the first open in a process compiles the 1.9 MB
-        module (~0.25 s measured); every later open pays one instantiation and
-        one session (sub-millisecond), because the compiled module is cached per
-        artifact digest and engine configuration. The digest and import/export
-        checks run once per compile, not once per open — a module compiled from
-        bytes verified in this process does not become different bytes later.
+        module (~0.25 s measured); every later open pays one instantiation, one
+        session, and — because the installed file is read and hashed each time —
+        a digest check that measured a 0.95 ms median per open, the largest
+        remaining term. The import/export check runs once per compile, next to
+        the compile, not once per open; the digest check does not, and is not
+        cached: it is what proves the bytes in the cache are still the bytes on
+        disk.
         """
         wasm = loader.artifact_bytes()
         digest = loader.verify_artifact(wasm)

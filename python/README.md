@@ -41,12 +41,40 @@ verify_chain(chain)                                    # ADR-016 local chain
 `rigorix_verifier.client` speaks JSON-RPC 2.0 over the frozen catalog with
 `http.client` (stdlib; no new dependency) and **one keep-alive connection per
 transport** — a fresh connection per call cost ~0.18 ms against ~0.175 ms of
-server work, so the pool is the difference between 1× and 2× on localhost. A
-server that closes an idle connection is reconnected once, on the same call; a
-timeout is never retried, because a hung server is not a stale socket. It
+server work, so the pool is the difference between 1× and 2× on localhost. It
 exposes the same 18 typed methods as the TypeScript client; `version()` refuses
 an `api_version` major other than 1, and a transport timeout is a
 `TransportError`, not an `RpcError`.
+
+**Retry is a property of the call, not of the connection** (#144). A stale
+keep-alive connection is not an answer, so a *read* — `version()`,
+`audit_read()`, `template_get()` and the other nine — is re-sent once on a fresh
+connection. `run()`, `execute()`, `approve()`, `template_create()`,
+`auth_login()`/`auth_logout()` and `plan()` are not: a re-send could be a second
+execution, and two envelopes for one call is what the engine exists to prevent.
+For those the same failure raises `CommandMayHaveExecuted` (a `TransportError`
+subclass with `may_have_executed = True`) instead of retrying, and a failure
+before any byte was sent — a refused connection — stays a plain `TransportError`
+with `may_have_executed = False`.
+
+```python
+from rigorix_verifier.client import Client, CommandMayHaveExecuted, HTTPTransport
+
+client = Client(HTTPTransport("http://127.0.0.1:3001/rpc"))
+try:
+    result = client.run({"template_name": "attendance", "execution_id": "exec-7"})
+except CommandMayHaveExecuted:
+    # The run may have completed. Do not resend: reconcile first.
+    if not client.audit_read({"execution_id": "exec-7"}).get("envelope"):
+        result = client.run({"template_name": "attendance", "execution_id": "exec-7"})
+```
+
+`execution_id` is optional in `RunParams`; supplying it is what makes that
+reconciliation possible, which is why the error tells you to. Whether a second
+`run` with the same id refuses or resumes is a server property this client does
+not assume. A transport written before the keyword existed still works: the
+client passes `idempotent=` only to a `post` that accepts it, and an undeclared
+method is treated as a command.
 
 ```python
 from rigorix_verifier.client import Client, HTTPTransport
