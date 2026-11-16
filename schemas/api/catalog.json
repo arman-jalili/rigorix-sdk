@@ -893,7 +893,7 @@
         },
         "author": {
           "type": "string",
-          "description": "Display-only (D5)."
+          "description": "Signed, not display-only (D5): inside the envelope HMAC and stored as evidence. Supplied by the caller; when omitted the engine derives it from the workspace's git identity, so a null is a deployment without one rather than a lost value."
         }
       },
       "additionalProperties": false
@@ -916,7 +916,7 @@
         },
         "author": {
           "type": "string",
-          "description": "Display-only (D5)."
+          "description": "Signed, not display-only (D5): inside the envelope HMAC and stored as evidence. Supplied by the caller; when omitted the engine derives it from the workspace's git identity, so a null is a deployment without one rather than a lost value."
         }
       },
       "additionalProperties": false
